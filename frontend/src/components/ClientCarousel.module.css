@@ -1,0 +1,146 @@
+@import '../styles/variables.css';
+
+.carouselContainer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  gap: 0.5rem;
+  margin: 2rem 0 1.5rem 0;
+  outline: none;
+}
+
+.carousel {
+  display: flex;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  gap: 1.5rem;
+  padding: 1rem 0;
+  width: 90vw;
+  max-width: 900px;
+  align-items: stretch;
+}
+
+.card,
+.cardAdd {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 2px 24px rgba(56, 16, 138, 0.10), 0 1.5px 3px #ccc;
+  min-width: 220px;
+  max-width: 270px;
+  margin: 0.5rem 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.3rem 1rem 1rem 1rem;
+  outline: none;
+  transition: box-shadow 0.2s, transform 0.2s;
+  justify-content: center;
+}
+
+.card:focus, .card:hover, .cardAdd:focus, .cardAdd:hover {
+  box-shadow: 0 4px 30px #7b3aff44;
+  transform: translateY(-3px) scale(1.04);
+  border: 1.5px solid #7200ff;
+}
+
+.logoWrap {
+  width: 70px;
+  height: 70px;
+  background: #f6f7fa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  margin-bottom: 0.8rem;
+  overflow: hidden;
+}
+
+.logo {
+  max-width: 68px;
+  max-height: 68px;
+  object-fit: contain;
+}
+
+.logoFallback {
+  color: #aaa;
+  font-size: 1.1rem;
+}
+
+.clientName {
+  font-weight: 600;
+  font-size: 1.1rem;
+  margin-bottom: 0.7rem;
+  text-align: center;
+  color: #242232;
+  word-break: break-word;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  width: 100%;
+  justify-content: center;
+}
+
+.viewBtn, .editBtn, .deleteBtn {
+  border: none;
+  background: #7200ff;
+  color: #fff;
+  border-radius: 6px;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.99rem;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-weight: 500;
+}
+.viewBtn { background: #7200ff; }
+.viewBtn:hover, .viewBtn:focus { background: #a16eff; }
+.editBtn { background: #6bbf52; }
+.editBtn:hover, .editBtn:focus { background: #98db7c; }
+.deleteBtn { background: #e84b50; }
+.deleteBtn:hover, .deleteBtn:focus { background: #ff6262; }
+
+.arrow {
+  background: #fff;
+  border-radius: 50%;
+  border: 1.5px solid #ccc;
+  width: 40px;
+  height: 40px;
+  color: #6b34f4;
+  font-size: 1.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 0 10px #0001;
+  transition: background 0.15s, border-color 0.15s;
+}
+.arrow:focus, .arrow:hover {
+  background: #f5f1ff;
+  border-color: #a16eff;
+}
+.arrow:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.cardAdd {
+  border: 2px dashed #a16eff;
+  color: #7200ff;
+  min-width: 180px;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+}
+.plus {
+  font-size: 2.6rem;
+  font-weight: 700;
+}
+.addText {
+  font-weight: 600;
+  margin-top: 0.4rem;
+  font-size: 1.06rem;
+}
+@media (max-width: 600px) {
+  .carousel { width: 99vw; max-width: 99vw; gap: 0.6rem; }
+  .card, .cardAdd { min-width: 75vw; max-width: 86vw; padding: 0.8rem 0.6rem 1rem 0.6rem; }
+}
