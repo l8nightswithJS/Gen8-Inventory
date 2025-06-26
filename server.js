@@ -3,9 +3,19 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
 const fs = require('fs');
+const dotenv = require('dotenv');
+
+// Load .env variables
+dotenv.config();
+
+const { PORT } = require('./config');
+
 const inventoryRoutes = require('./routes/inventory');
 const authRoutes = require('./routes/authRoutes');
 const clientsRoutes = require('./routes/clients');
+const usersRoutes = require('./routes/users');
+
+
 
 const app = express();
 app.use(cors());
@@ -27,6 +37,7 @@ app.use('/uploads', express.static(uploadDir));
 app.use('/api/items', inventoryRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/clients', clientsRoutes);
+app.use('/api/users', usersRoutes);
 
-const PORT = 8000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// Start server
+app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));

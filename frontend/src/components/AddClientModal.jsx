@@ -29,7 +29,6 @@ export default function AddClientModal({ onSuccess, onClose }) {
 
     let logo_url = '';
     try {
-      // Upload logo if selected
       if (logoFile) {
         const formData = new FormData();
         formData.append('logo', logoFile);
@@ -50,36 +49,31 @@ export default function AddClientModal({ onSuccess, onClose }) {
   };
 
   return (
-    <div className={styles.backdrop} onClick={onClose} tabIndex={-1}>
-      <form
-        className={styles.modal}
-        onSubmit={handleSubmit}
-        onClick={e => e.stopPropagation()}
-        aria-modal="true"
-        role="dialog"
-      >
+    <div className={styles.modalBackdrop}>
+      <div className={styles.modal}>
         <h2>Add New Client</h2>
-        {error && <div className={styles.error}>{error}</div>}
-
-        <input
-          value={name}
-          onChange={e => setName(e.target.value)}
-          placeholder="Client Name"
-          className={styles.input}
-          required
-        />
-        <div>
-          <label className={styles.label}>Logo:</label>
-          {logoPreview && <img src={logoPreview} alt="Preview" className={styles.logoPreview} />}
-          <input type="file" accept="image/*" onChange={handleLogoChange} />
-        </div>
-        <div className={styles.actions}>
-          <button type="button" onClick={onClose} className={styles.cancel}>Cancel</button>
-          <button type="submit" className={styles.save} disabled={loading}>
-            {loading ? 'Saving...' : 'Add'}
-          </button>
-        </div>
-      </form>
+        <form onSubmit={handleSubmit}>
+          <input
+            type="text"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="Client Name"
+            required
+          />
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleLogoChange}
+          />
+          {logoPreview && <img src={logoPreview} alt="Preview" style={{ maxWidth: '100px', margin: '1rem 0' }} />}
+          {error && <div style={{ color: 'red' }}>{error}</div>}
+          <div className={styles.buttons}>
+            <button type="submit" disabled={loading}>Add Client</button>
+            <button type="button" onClick={onClose} className={styles.cancel}>Cancel</button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
+// This code defines a modal component for adding a new client, allowing users to input a client name and upload a logo image.

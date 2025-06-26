@@ -1,35 +1,35 @@
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
-const controller = require('../controllers/clientsController');
-
+const fs = require('fs');
 const router = express.Router();
+const clientsController = require('../controllers/clientsController');
 
-// Configure multer
+// Ensure uploads folder exists
+const uploadDir = path.join(__dirname, '..', 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, path.join(__dirname, '..', 'uploads'));
-  },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + '_' + file.originalname);
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const name = `${Date.now()}-${file.fieldname}${ext}`;
+    cb(null, name);
   }
 });
 const upload = multer({ storage });
 
-// -- DO NOT add expressApp here --
-// Serve /uploads in server.js/app.js (see above)
-
-// Upload logo endpoint
 router.post('/upload-logo', upload.single('logo'), (req, res) => {
-  if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
-  // Build accessible URL for client frontend
   const url = `/uploads/${req.file.filename}`;
   res.json({ url });
 });
 
-router.get('/', controller.getAllClients);
-router.get('/:id', controller.getClientById);
-router.post('/', controller.createClient);
-router.put('/:id', controller.updateClient);
+router.get('/', clientsController.getAllClients);
+router.get('/:id', clientsController.getClientById);
+router.post('/', clientsController.createClient);
+router.put('/:id', clientsController.updateClient);
+router.delete('/:id', clientsController.deleteClient);
 
 module.exports = router;

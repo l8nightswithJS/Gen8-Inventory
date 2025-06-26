@@ -1,17 +1,21 @@
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const db = require('../models/db');
 const { JWT_SECRET } = require('../config');
-
-const USERS = [
-  { username: 'admin', password: 'admin123', role: 'admin' },
-  { username: 'staff', password: 'staff123', role: 'viewer' }
-];
 
 exports.login = (req, res) => {
   const { username, password } = req.body;
-  const user = USERS.find(u => u.username === username && u.password === password);
 
-  if (!user) return res.status(401).json({ message: 'Invalid credentials' });
+  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+  if (!user || !bcrypt.compareSync(password, user.password)) {
+    return res.status(401).json({ message: 'Invalid username or password' });
+  }
 
-  const token = jwt.sign({ username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '1h' });
-  res.json({ token, role: user.role });
+  const token = jwt.sign(
+    { id: user.id, role: user.role, username: user.username },
+    JWT_SECRET,
+    { expiresIn: '8h' }
+  );
+
+  res.json({ token, role: user.role, username: user.username });
 };

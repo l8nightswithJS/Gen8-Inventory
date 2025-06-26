@@ -1,5 +1,3 @@
-// backend/controllers/clientsController.js
-
 const db = require('../models/db');
 
 exports.getAllClients = (req, res) => {
@@ -24,7 +22,6 @@ exports.createClient = (req, res) => {
   }
 };
 
-// FULL UPDATE ENDPOINT
 exports.updateClient = (req, res) => {
   const { name, logo_url } = req.body;
   try {
@@ -40,4 +37,12 @@ exports.updateClient = (req, res) => {
     }
     res.status(500).json({ message: 'Server error' });
   }
+};
+
+exports.deleteClient = (req, res) => {
+  const result = db.prepare('DELETE FROM clients WHERE id = ?').run(req.params.id);
+  if (result.changes === 0) {
+    return res.status(404).json({ message: 'Client not found' });
+  }
+  res.json({ message: 'Client deleted' });
 };

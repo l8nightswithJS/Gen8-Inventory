@@ -9,6 +9,7 @@ export default function Navbar() {
     localStorage.clear();
     navigate('/login');
   };
+  const role = localStorage.getItem('role');
 
   // Hide navbar on login
   if (location.pathname === '/login') return null;
@@ -26,6 +27,11 @@ export default function Navbar() {
       <button onClick={handleLogout} style={{ background: '#f55', color: '#fff', border: 'none', borderRadius: 4, padding: '0.5rem 1rem' }}>
         Logout
       </button>
+      {role === 'admin' && (
+        <button onClick={() => navigate('/users')} style={{ marginRight: 16 }}>
+        Manage Users
+        </button>
+      )}
     </nav>
   );
 }

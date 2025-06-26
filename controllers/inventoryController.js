@@ -1,20 +1,32 @@
 const db = require('../models/db');
+const fs = require('fs');
+const path = require('path');
+const csvWriter = require('fast-csv');
 
-// GET all items for a specific client
+// GET all items with optional search
 exports.getAllItems = (req, res) => {
   const client_id = parseInt(req.query.client_id, 10);
+  const q = req.query.q || '';
   if (!client_id) return res.status(400).json({ message: 'client_id is required' });
 
   let page = parseInt(req.query.page, 10) || 1;
   let limit = parseInt(req.query.limit, 10) || 10;
   if (page < 1) page = 1;
   if (limit < 1) limit = 10;
-
   const offset = (page - 1) * limit;
 
-  // Only count items for this client
-  const total = db.prepare('SELECT COUNT(*) as count FROM items WHERE client_id = ?').get(client_id).count;
-  const items = db.prepare('SELECT * FROM items WHERE client_id = ? ORDER BY id DESC LIMIT ? OFFSET ?').all(client_id, limit, offset);
+  const queryFilter = q.trim() ? `AND (name LIKE ? OR part_number LIKE ?)` : '';
+  const params = q.trim()
+    ? [client_id, `%${q}%`, `%${q}%`, limit, offset]
+    : [client_id, limit, offset];
+
+  const items = db.prepare(
+    `SELECT * FROM items WHERE client_id = ? ${queryFilter} ORDER BY id DESC LIMIT ? OFFSET ?`
+  ).all(...params);
+
+  const total = db.prepare(
+    `SELECT COUNT(*) as count FROM items WHERE client_id = ? ${queryFilter}`
+  ).get(...(q.trim() ? [client_id, `%${q}%`, `%${q}%`] : [client_id])).count;
 
   res.json({
     items,
@@ -31,7 +43,6 @@ exports.getItemById = (req, res) => {
   res.json(item);
 };
 
-// CREATE item for specific client
 exports.createItem = (req, res) => {
   try {
     let { client_id, name, part_number, description, lot_number, quantity, location } = req.body;
@@ -74,7 +85,6 @@ exports.deleteItem = (req, res) => {
   res.json({ message: 'Item deleted' });
 };
 
-// BULK IMPORT SUPPORT (now requires client_id for each item or for the whole batch)
 exports.bulkImportItems = (req, res) => {
   let client_id = parseInt(req.body.client_id, 10);
   const items = req.body.items;
@@ -85,7 +95,6 @@ exports.bulkImportItems = (req, res) => {
 
   items.forEach(item => {
     try {
-      // allow per-item client_id or fallback to batch client_id
       const cid = item.client_id ? parseInt(item.client_id, 10) : client_id;
       if (!cid) throw new Error('No client_id');
       db.prepare(
@@ -106,4 +115,23 @@ exports.bulkImportItems = (req, res) => {
   });
 
   res.json({ successCount, failCount });
+};
+
+// CSV export support
+exports.exportCSV = (req, res) => {
+  const client_id = parseInt(req.query.client_id, 10);
+  if (!client_id) return res.status(400).json({ message: 'client_id is required' });
+
+  const rows = db.prepare('SELECT * FROM items WHERE client_id = ?').all(client_id);
+  const tempPath = path.join(__dirname, '..', 'tmp');
+  const fileName = `items-export-${Date.now()}.csv`;
+  const fullPath = path.join(tempPath, fileName);
+
+  fs.mkdirSync(tempPath, { recursive: true });
+  const ws = fs.createWriteStream(fullPath);
+
+  csvWriter
+    .write(rows, { headers: true })
+    .pipe(ws)
+    .on('finish', () => res.download(fullPath, fileName, () => fs.unlinkSync(fullPath)));
 };

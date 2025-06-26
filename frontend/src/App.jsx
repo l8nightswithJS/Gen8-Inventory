@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import ClientPage from './pages/ClientPage';
 import Login from './pages/Login';
 import PrivateRoute from './components/PrivateRoute';
+import UsersPage from './pages/UsersPage';
 
 export default function App() {
   return (
@@ -27,6 +28,14 @@ export default function App() {
           element={
             <PrivateRoute>
               <ClientPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/users"
+          element={
+            <PrivateRoute>
+              <UsersPage />
             </PrivateRoute>
           }
         />
