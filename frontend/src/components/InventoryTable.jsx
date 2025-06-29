@@ -1,8 +1,11 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 
-export default function InventoryTable({ items, refresh, role, page, totalPages, onPageChange, clientId }) {
+export default function InventoryTable({ items, page, totalPages, onPage, refresh }) {
   const navigate = useNavigate();
+  const role = localStorage.getItem('role');
+
+  const clientId = new URLSearchParams(window.location.search).get('client_id');
 
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure?')) {
@@ -17,53 +20,64 @@ export default function InventoryTable({ items, refresh, role, page, totalPages,
   };
 
   return (
-    <div style={{ overflowX: 'auto', margin: '2rem auto', maxWidth: '90%' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Segoe UI, sans-serif', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-        <thead style={{ backgroundColor: '#2e2e2e', color: 'white' }}>
+    <div className="overflow-x-auto mt-6">
+      <table className="w-full border text-left">
+        <thead className="bg-gray-100">
           <tr>
-            <th style={{ padding: '12px' }}>Name</th>
-            <th style={{ padding: '12px' }}>Part #</th>
-            <th style={{ padding: '12px' }}>Description</th>
-            <th style={{ padding: '12px' }}>Lot #</th>
-            <th style={{ padding: '12px' }}>Quantity</th>
-            <th style={{ padding: '12px' }}>Location</th>
-            {role === 'admin' && <th style={{ padding: '12px' }}>Actions</th>}
+            <th className="p-2 border">Name</th>
+            <th className="p-2 border">Description</th>
+            {role === 'admin' && <th className="p-2 border text-center">Actions</th>}
           </tr>
         </thead>
         <tbody>
-          {items.map(item => (
-            <tr key={item.id} style={{ borderBottom: '1px solid #eee', backgroundColor: '#fff', transition: 'background-color 0.3s' }}>
-              <td style={{ padding: '10px' }}>{item.name}</td>
-              <td style={{ padding: '10px' }}>{item.part_number}</td>
-              <td style={{ padding: '10px' }}>{item.description}</td>
-              <td style={{ padding: '10px' }}>{item.lot_number}</td>
-              <td style={{ padding: '10px' }}>{item.quantity}</td>
-              <td style={{ padding: '10px' }}>{item.location}</td>
+          {items
+            .filter(item => item.name?.trim() && item.description?.trim()) // 👈 filter out blanks
+            .map((item) => (
+            <tr key={item.id} className="hover:bg-gray-50">
+              <td className="p-2 border">{item.name}</td>
+              <td className="p-2 border">{item.description}</td>
               {role === 'admin' && (
-                <td style={{ padding: '10px' }}>
-                  <button onClick={() => navigate(`/edit/${item.id}?client_id=${clientId}`)} style={{ backgroundColor: '#333', color: 'white', border: 'none', borderRadius: '5px', padding: '6px 12px', marginRight: '0.5rem', cursor: 'pointer' }}>Edit</button>
-                  <button onClick={() => handleDelete(item.id)} style={{ backgroundColor: '#ff4d4d', color: 'white', border: 'none', borderRadius: '5px', padding: '6px 12px', cursor: 'pointer' }}>Delete</button>
+                <td className="p-2 border text-center space-x-2">
+                  <button
+                    className="text-blue-600 hover:underline"
+                    onClick={() => navigate(`/edit/${item.id}?client_id=${clientId}`)}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    className="text-red-600 hover:underline"
+                    onClick={() => handleDelete(item.id)}
+                  >
+                    Delete
+                  </button>
                 </td>
               )}
             </tr>
           ))}
+          {items.length === 0 && (
+            <tr>
+              <td colSpan={role === 'admin' ? 3 : 2} className="p-4 text-center text-gray-500">
+                No items found.
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
 
       {/* Pagination Controls */}
-      <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1rem', gap: '1rem' }}>
+      <div className="flex justify-center mt-4 space-x-4">
         <button
+          onClick={() => onPage(page - 1)}
           disabled={page <= 1}
-          onClick={() => onPageChange(page - 1)}
+          className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50"
         >
           Prev
         </button>
-        <span>
-          Page {page} of {totalPages}
-        </span>
+        <span className="self-center">Page {page} of {totalPages}</span>
         <button
+          onClick={() => onPage(page + 1)}
           disabled={page >= totalPages}
-          onClick={() => onPageChange(page + 1)}
+          className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50"
         >
           Next
         </button>

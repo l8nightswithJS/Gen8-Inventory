@@ -4,7 +4,7 @@ const controller = require('../controllers/userController');
 const authenticate = require('../middleware/authMiddleware');
 const requireRole = require('../middleware/requireRole');
 
-// All routes below are admin-only
+// Secure all user routes: must be authenticated and admin
 router.use(authenticate);
 router.use(requireRole('admin'));
 

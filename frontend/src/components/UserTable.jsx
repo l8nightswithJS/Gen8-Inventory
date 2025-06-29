@@ -1,6 +1,8 @@
 import React from 'react';
 
 export default function UserTable({ users, onEdit, onDelete }) {
+  const isAdmin = localStorage.getItem('role') === 'admin';
+
   return (
     <table border="1" cellPadding="8" style={{ marginTop: '1rem', width: '100%' }}>
       <thead>
@@ -20,8 +22,14 @@ export default function UserTable({ users, onEdit, onDelete }) {
             <td>{u.role}</td>
             <td>{new Date(u.created_at).toLocaleString()}</td>
             <td>
-              <button onClick={() => onEdit(u)}>✏️</button>
-              <button onClick={() => onDelete(u)} style={{ marginLeft: 8 }}>🗑️</button>
+              {isAdmin ? (
+                <>
+                  <button onClick={() => onEdit(u)}>✏️</button>
+                  <button onClick={() => onDelete(u)} style={{ marginLeft: 8 }}>🗑️</button>
+                </>
+              ) : (
+                <span style={{ color: '#888' }}>No access</span>
+              )}
             </td>
           </tr>
         ))}
