@@ -45,13 +45,14 @@ exports.getItemById = (req, res) => {
 
 exports.createItem = (req, res) => {
   try {
-    let { client_id, name, part_number, description, lot_number, quantity, location } = req.body;
+    let { client_id, name, part_number, description, lot_number, quantity, location, has_lot = 1 } = req.body;
     if (!client_id) return res.status(400).json({ message: 'client_id is required' });
     quantity = parseInt(quantity);
+    has_lot = has_lot ? 1 : 0;
 
     const result = db.prepare(
-      'INSERT INTO items (client_id, name, part_number, description, lot_number, quantity, location) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).run(client_id, name, part_number, description, lot_number, quantity, location);
+      'INSERT INTO items (client_id, name, part_number, description, lot_number, quantity, location, has_lot) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(client_id, name, part_number, description, lot_number, quantity, location, has_lot);
 
     res.status(201).json({ id: result.lastInsertRowid });
   } catch (error) {
@@ -64,10 +65,10 @@ exports.createItem = (req, res) => {
 
 exports.updateItem = (req, res) => {
   try {
-    const { name, part_number, description, lot_number, quantity, location } = req.body;
+    const { name, part_number, description, lot_number, quantity, location, has_lot = 1 } = req.body;
     const result = db.prepare(
-      'UPDATE items SET name = ?, part_number = ?, description = ?, lot_number = ?, quantity = ?, location = ?, last_updated = CURRENT_TIMESTAMP WHERE id = ?'
-    ).run(name, part_number, description, lot_number, quantity, location, req.params.id);
+      'UPDATE items SET name = ?, part_number = ?, description = ?, lot_number = ?, quantity = ?, location = ?, has_lot = ?, last_updated = CURRENT_TIMESTAMP WHERE id = ?'
+    ).run(name, part_number, description, lot_number, quantity, location, has_lot ? 1 : 0, req.params.id);
 
     if (result.changes === 0) return res.status(404).json({ message: 'Item not found' });
     res.json({ message: 'Item updated' });
@@ -97,8 +98,9 @@ exports.bulkImportItems = (req, res) => {
     try {
       const cid = item.client_id ? parseInt(item.client_id, 10) : client_id;
       if (!cid) throw new Error('No client_id');
+      const hasLot = item.has_lot ? 1 : 0;
       db.prepare(
-        'INSERT INTO items (client_id, name, part_number, description, lot_number, quantity, location) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO items (client_id, name, part_number, description, lot_number, quantity, location, has_lot) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
       ).run(
         cid,
         item.name,
@@ -106,7 +108,8 @@ exports.bulkImportItems = (req, res) => {
         item.description,
         item.lot_number,
         parseInt(item.quantity, 10) || 0,
-        item.location
+        item.location,
+        hasLot
       );
       successCount++;
     } catch (error) {
@@ -117,7 +120,6 @@ exports.bulkImportItems = (req, res) => {
   res.json({ successCount, failCount });
 };
 
-// CSV export support
 exports.exportCSV = (req, res) => {
   const client_id = parseInt(req.query.client_id, 10);
   if (!client_id) return res.status(400).json({ message: 'client_id is required' });
@@ -131,7 +133,7 @@ exports.exportCSV = (req, res) => {
   const ws = fs.createWriteStream(fullPath);
 
   csvWriter
-    .write(rows, { headers: true })
+    .write(rows.map(r => ({ ...r, has_lot: r.has_lot ? 1 : 0 })), { headers: true })
     .pipe(ws)
     .on('finish', () => res.download(fullPath, fileName, () => fs.unlinkSync(fullPath)));
 };

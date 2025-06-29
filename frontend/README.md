@@ -1,70 +1,141 @@
-# Getting Started with Create React App
+# Gen8-Inventory
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+**Gen8-Inventory** is a full-stack inventory management system designed to be simple, secure, and highly customizable for manufacturing and logistics workflows. It supports client-based item tracking, lot number control, CSV import/export, and role-based access control.
 
-## Available Scripts
+## 🔧 Features
 
-In the project directory, you can run:
+- 📦 **Client-Specific Inventory** – Manage inventory tied to unique clients
+- 🔐 **Role-Based Access** – Admins manage users/items; Staff can view & search
+- 🔄 **Bulk Import/Export** – Upload and export inventory with CSV support
+- 🔍 **Search and Pagination** – Find items by name or part number
+- 🔢 **Lot Number Toggle** – Enable/disable lot tracking per item
+- 🖥️ **Modern UI** – Responsive React frontend styled with Tailwind
+- ⚙️ **Local SQLite DB** – Simple storage for fast setup and testing
 
-### `npm start`
+## 🛠️ Tech Stack
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+| Layer        | Tech                        |
+| ------------ | --------------------------- |
+| Frontend     | React, Tailwind CSS         |
+| Backend      | Node.js, Express            |
+| Database     | SQLite (via better-sqlite3) |
+| Auth         | JWT-based with role support |
+| File Parsing | PapaParse (CSV import)      |
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## 🚀 Getting Started
 
-### `npm test`
+### 1. Clone the Repository
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+```bash
+git clone https://github.com/l8nightswithJS/Gen8-Inventory.git
+cd Gen8-Inventory
+```
 
-### `npm run build`
+### 2. Install Dependencies
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+#### Backend
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+```bash
+cd backend
+npm install
+```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+#### Frontend
 
-### `npm run eject`
+```bash
+cd frontend
+npm install
+```
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+### 3. Run the App
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+Open **two terminals**:
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+#### Terminal 1 – Backend (Port 8000)
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+```bash
+cd backend
+npm start
+```
 
-## Learn More
+#### Terminal 2 – Frontend (Port 3000)
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+```bash
+cd frontend
+npm start
+```
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+## 📁 Project Structure
 
-### Code Splitting
+```
+Gen8-Inventory/
+├── backend/
+│   ├── models/            # SQLite DB access
+│   ├── controllers/       # Express route handlers
+│   ├── routes/            # API routes (clients, items, users)
+│   └── server.js          # Main Express entry point
+│
+├── frontend/
+│   ├── src/
+│   │   ├── components/    # React components
+│   │   ├── pages/         # Views (Dashboard, Inventory, etc.)
+│   │   └── App.jsx        # App entry and routing
+│
+└── README.md
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+## 🔐 Access & Roles
 
-### Analyzing the Bundle Size
+| Role  | Permissions                        |
+| ----- | ---------------------------------- |
+| Admin | Full CRUD, User Management, Import |
+| Staff | Read/Search Only                   |
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+## 📦 CSV Format for Bulk Import
 
-### Making a Progressive Web App
+Your CSV must include the following **headers**:
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+```
+name, part_number, description, lot_number, quantity, location, has_lot
+```
 
-### Advanced Configuration
+- `has_lot` should be `1` (true) or `0` (false)
+- Omit `lot_number` for non-lot items
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+## 🛡️ Security & Compliance
 
-### Deployment
+- All endpoints protected by JWT
+- Inputs validated server-side
+- Accessibility-friendly UI design
+- Passwords hashed using bcrypt
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+## 🧭 Roadmap
 
-### `npm run build` fails to minify
+- [x] Item CRUD + Search
+- [x] Role-based Access
+- [x] Bulk CSV Import/Export
+- [x] Per-item Lot Control
+- [ ] Work Order Digitization
+- [ ] Audit Trail Logging
+- [ ] REST → GraphQL optional support
+- [ ] SSO/LDAP Integration
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+## 🧪 Testing
+
+Basic tests can be run manually with seed data. Jest/unit test integration is a planned improvement.
+
+## 🤝 Contributing
+
+Pull requests welcome. Please:
+
+- Fork the repo
+- Use descriptive commit messages
+- Follow existing code structure
+
+## 📄 License
+
+MIT License
+
+## 🧠 Credits
+
+Developed by [Eduardo Jimenez](https://github.com/l8nightswithJS) for use in production logistics environments such as **Gener8**.

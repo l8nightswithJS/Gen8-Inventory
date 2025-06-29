@@ -1,59 +1,71 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
+import Papa from 'papaparse';
 import axios from '../utils/axiosConfig';
 
-export default function BulkImport({ refresh, clientId }) {
-  const fileRef = useRef();
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+export default function BulkImport({ clientId, refresh }) {
+  const [file, setFile] = useState(null);
+  const [status, setStatus] = useState('');
 
-  const handleFileChange = async (e) => {
-    setError('');
-    setSuccess('');
-    const file = e.target.files[0];
-    if (!file) return;
+  const handleFileChange = (e) => {
+    setFile(e.target.files[0]);
+    setStatus('');
+  };
 
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const lines = evt.target.result.split('\n').filter(Boolean);
-        const items = lines.slice(1).map(line => {
-          const cols = line.split(',');
+  const handleUpload = async () => {
+    if (!file) {
+      setStatus('Please select a CSV file.');
+      return;
+    }
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        const rawItems = results.data;
+        const cleanedItems = rawItems.map((item) => {
           return {
-            name: cols[0]?.trim(),
-            part_number: cols[1]?.trim(),
-            description: cols[2]?.trim(),
-            lot_number: cols[3]?.trim(),
-            quantity: cols[4]?.trim(),
-            location: cols[5]?.trim()
+            name: item.name?.trim() || '',
+            part_number: item.part_number?.trim() || '',
+            description: item.description?.trim() || '',
+            lot_number: item.lot_number?.trim() || '',
+            quantity: parseInt(item.quantity, 10) || 0,
+            location: item.location?.trim() || '',
+            has_lot: item.has_lot?.toLowerCase() === 'false' ? 0 : 1,
+            client_id: clientId,
           };
         });
-        const res = await axios.post('http://localhost:8000/api/items/bulk', { items, client_id: clientId });
-        setSuccess(`${res.data.successCount} imported, ${res.data.failCount} failed.`);
-        refresh();
-      } catch (err) {
-        setError(err.response?.data?.message || 'Bulk import failed');
-      }
-    };
-    reader.readAsText(file);
+
+        try {
+          const res = await axios.post('/api/items/bulk', {
+            client_id: clientId,
+            items: cleanedItems,
+          });
+          setStatus(`Imported: ${res.data.successCount}, Failed: ${res.data.failCount}`);
+          if (refresh) refresh();
+        } catch (err) {
+          console.error('Bulk import error:', err);
+          setStatus('Failed to upload items.');
+        }
+      },
+    });
   };
 
   return (
-    <div style={{ marginBottom: '2rem' }}>
-      <label>
-        <b>Bulk Import CSV</b>{' '}
-        <input
-          type="file"
-          accept=".csv"
-          ref={fileRef}
-          onChange={handleFileChange}
-          style={{ marginLeft: '1rem' }}
-        />
-      </label>
-      {error && <div style={{ color: 'red' }}>{error}</div>}
-      {success && <div style={{ color: 'green' }}>{success}</div>}
-      <div style={{ fontSize: '0.9rem', color: '#666', marginTop: '0.5rem' }}>
-        Format: name,part_number,description,lot_number,quantity,location
-      </div>
+    <div className="bg-white shadow-md rounded-lg p-4 mt-6">
+      <h3 className="text-lg font-semibold mb-2">Bulk Import Items</h3>
+      <input
+        type="file"
+        accept=".csv"
+        onChange={handleFileChange}
+        className="mb-2"
+      />
+      <button
+        onClick={handleUpload}
+        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-1 px-4 rounded"
+      >
+        Upload
+      </button>
+      {status && <p className="mt-2 text-sm text-gray-700">{status}</p>}
     </div>
   );
 }
