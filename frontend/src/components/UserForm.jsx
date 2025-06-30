@@ -1,61 +1,45 @@
 import React, { useState } from 'react';
 import axios from '../utils/axiosConfig';
 
-export default function UserForm({ user, onClose, onSuccess }) {
-  const [username, setUsername] = useState(user?.username || '');
+export default function UserForm({ onSuccess }) {
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState('viewer');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState(user?.role || 'staff');
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-
-    if (!username.trim()) return setError('Username required.');
-    if (!user && !password.trim()) return setError('Password required.');
-
+  const handleAdd = async () => {
+    if (!email || !password) return setError('Email and password required');
     try {
-      if (user) {
-        await axios.put(`/api/users/${user.id}`, { username, password, role });
-      } else {
-        await axios.post('/api/users', { username, password, role });
-      }
+      await axios.post(
+        '/api/users',
+        { email, role, password },
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`
+          }
+        }
+      );
       onSuccess();
-      onClose();
+      setEmail('');
+      setRole('viewer');
+      setPassword('');
+      setError('');
     } catch (err) {
-      setError(err.response?.data?.message || 'Save failed.');
+      setError('Failed to add user.');
     }
   };
 
   return (
-    <div style={{ background: '#fff', padding: 20, border: '1px solid #ccc', marginTop: 16 }}>
-      <h3>{user ? 'Edit User' : 'Add User'}</h3>
-      {error && <div style={{ color: 'red' }}>{error}</div>}
-      <form onSubmit={handleSubmit}>
-        <input
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          placeholder="Username"
-          style={{ display: 'block', marginBottom: 10 }}
-        />
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder={user ? '(Leave blank to keep existing password)' : 'Password'}
-          style={{ display: 'block', marginBottom: 10 }}
-        />
-        <select value={role} onChange={(e) => setRole(e.target.value)}>
-          <option value="staff">Staff</option>
-          <option value="admin">Admin</option>
-        </select>
-        <div style={{ marginTop: 12 }}>
-          <button type="submit">Save</button>
-          <button type="button" onClick={onClose} style={{ marginLeft: 8 }}>
-            Cancel
-          </button>
-        </div>
-      </form>
+    <div className="bg-white p-4 rounded shadow">
+      <h3 className="font-semibold mb-2">Add New User</h3>
+      {error && <p className="text-red-600">{error}</p>}
+      <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />
+      <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" />
+      <select value={role} onChange={(e) => setRole(e.target.value)}>
+        <option value="viewer">Viewer</option>
+        <option value="admin">Admin</option>
+      </select>
+      <button onClick={handleAdd} className="mt-2">Add User</button>
     </div>
   );
 }

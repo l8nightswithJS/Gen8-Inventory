@@ -1,22 +1,17 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from '../utils/axiosConfig';
 
 export default function InventoryTable({ items, refresh, role = 'viewer', page, totalPages, onPage }) {
   const navigate = useNavigate();
 
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure?')) {
-      await fetch(`http://localhost:8000/api/items/${id}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      await axios.delete(`/api/items/${id}`);
       if (refresh) refresh();
     }
   };
 
-  // Dynamically gather unique attribute keys across all items
   const attributeKeys = Array.from(
     new Set(items.flatMap(item => Object.keys(item.attributes || {})))
   );

@@ -36,21 +36,19 @@ export default function Dashboard() {
 
   return (
     <div style={{ padding: '2rem' }}>
-      <h1>Select a Client</h1>
-      {error && <div style={{ color: 'red' }}>{error}</div>}
-      <ClientCarousel
-        clients={clients}
-        onClientUpdated={fetchClients}
-        onClientDeleted={handleDelete}
-        onAddClient={handleAddClient}
-      />
+      <div className="flex justify-between mb-6">
+        <h2 className="text-2xl font-semibold">Client Dashboard</h2>
+        <button onClick={handleAddClient} className="bg-blue-600 text-white px-4 py-2 rounded">+ Add Client</button>
+      </div>
+
+      {error && <p className="text-red-500 mb-4">{error}</p>}
+
+      <ClientCarousel clients={clients} onDelete={handleDelete} />
+
       {showAddModal && (
         <AddClientModal
           onClose={() => setShowAddModal(false)}
-          onSuccess={() => {
-            fetchClients();
-            setShowAddModal(false);
-          }}
+          onSuccess={fetchClients}
         />
       )}
     </div>

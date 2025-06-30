@@ -16,7 +16,15 @@ export default function AddClientForm({ onSuccess }) {
       return;
     }
     try {
-      await axios.post('http://localhost:8000/api/clients', { name, logo_url });
+      await axios.post(
+        'http://localhost:8000/api/clients',
+        { name, logo_url },
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`
+          }
+        }
+      );
       setSuccess('Client added!');
       setName('');
       setLogoUrl('');
@@ -29,25 +37,28 @@ export default function AddClientForm({ onSuccess }) {
   return (
     <form onSubmit={handleSubmit} style={{
       background: '#f9f9f9',
-      padding: 16,
-      borderRadius: 8,
-      boxShadow: '0 1px 4px #ccc',
-      marginBottom: '2rem'
+      padding: '1rem',
+      borderRadius: '5px',
+      border: '1px solid #ccc',
+      maxWidth: '400px',
+      margin: '1rem auto'
     }}>
       <h3>Add New Client</h3>
-      {error && <div style={{ color: 'red' }}>{error}</div>}
-      {success && <div style={{ color: 'green' }}>{success}</div>}
+      {error && <p style={{ color: 'red' }}>{error}</p>}
+      {success && <p style={{ color: 'green' }}>{success}</p>}
       <input
-        value={name}
-        onChange={e => setName(e.target.value)}
+        type="text"
         placeholder="Client Name"
-        style={{ marginBottom: 8, width: '100%' }}
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        style={{ display: 'block', width: '100%', marginBottom: '1rem' }}
       />
       <input
-        value={logo_url}
-        onChange={e => setLogoUrl(e.target.value)}
+        type="text"
         placeholder="Logo URL (optional)"
-        style={{ marginBottom: 8, width: '100%' }}
+        value={logo_url}
+        onChange={(e) => setLogoUrl(e.target.value)}
+        style={{ display: 'block', width: '100%', marginBottom: '1rem' }}
       />
       <button type="submit">Add Client</button>
     </form>

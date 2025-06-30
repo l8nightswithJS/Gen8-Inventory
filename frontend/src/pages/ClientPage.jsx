@@ -1,31 +1,32 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import axios from '../utils/axiosConfig';
 
 import InventoryTable from '../components/InventoryTable';
-import InventoryForm  from '../components/InventoryForm';
-import BulkImport     from '../components/BulkImport';
-import SearchBar      from '../components/SearchBar';
+import InventoryForm from '../components/InventoryForm';
+import BulkImport from '../components/BulkImport';
+import SearchBar from '../components/SearchBar';
 
 export default function ClientPage() {
   const { clientId } = useParams();
-  const navigate      = useNavigate();
+  const navigate = useNavigate();
 
   const isAdmin = localStorage.getItem('role') === 'admin';
 
-  const [client, setClient]   = useState({});
-  const [items,  setItems]    = useState([]);
-  const [page,   setPage]     = useState(1);
-  const [total,  setTotal]    = useState(1);
-  const [query,  setQuery]    = useState('');
-  const [error,  setError]    = useState('');
+  const [client, setClient] = useState({});
+  const [items, setItems] = useState([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(1);
+  const [query, setQuery] = useState('');
+  const [error, setError] = useState('');
 
-  /* ------------------------------------------------------- */
-  /* API helpers                                             */
-  /* ------------------------------------------------------- */
   const fetchClient = async () => {
     try {
-      const { data } = await axios.get(`/api/clients/${clientId}`);
+      const { data } = await axios.get(`/api/clients/${clientId}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        }
+      });
       setClient(data);
     } catch (err) {
       setError('Unable to load client.');
@@ -36,6 +37,9 @@ export default function ClientPage() {
     try {
       const { data } = await axios.get('/api/items', {
         params: { client_id: clientId, page: p, q },
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        }
       });
       setItems(data.items);
       setTotal(data.totalPages);
@@ -45,29 +49,17 @@ export default function ClientPage() {
     }
   };
 
-  /* ------------------------------------------------------- */
-  /* Initial data load                                       */
-  /* ------------------------------------------------------- */
   useEffect(() => {
     fetchClient();
     fetchItems();
-    // eslint-disable-next-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId]);
 
-  /* ------------------------------------------------------- */
-  /* CSV export                                              */
-  /* ------------------------------------------------------- */
   const exportCSV = () => {
     const base = process.env.REACT_APP_API || 'http://localhost:8000';
-    window.open(
-      `${base}/api/items/export?client_id=${clientId}`,
-      '_blank'
-    );
+    window.open(`${base}/api/items/export?client_id=${clientId}`, '_blank');
   };
 
-  /* ------------------------------------------------------- */
-  /* UI                                                      */
-  /* ------------------------------------------------------- */
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex items-center mb-6">
@@ -77,9 +69,7 @@ export default function ClientPage() {
         >
           ← Back
         </button>
-        <h2 className="text-2xl font-semibold">
-          {client.name || 'Loading…'}
-        </h2>
+        <h2 className="text-2xl font-semibold">{client.name || 'Loading…'}</h2>
       </div>
 
       {error && (
@@ -88,7 +78,6 @@ export default function ClientPage() {
         </div>
       )}
 
-      {/* search & export */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
         <SearchBar
           onSearch={(q) => {
@@ -105,31 +94,22 @@ export default function ClientPage() {
         </button>
       </div>
 
-      {/* inventory table */}
       <InventoryTable
-  items={items}
-  page={page}
-  totalPages={total}
-  onPage={(p) => fetchItems(p)}
-  refresh={() => fetchItems(page)}
-  role={isAdmin ? 'admin' : 'viewer'} // ✅ Add this line
-/>
+        items={items}
+        page={page}
+        totalPages={total}
+        onPage={(p) => fetchItems(p)}
+        refresh={() => fetchItems(page)}
+        role={isAdmin ? 'admin' : 'viewer'}
+      />
 
-      {/* admin-only actions */}
       {isAdmin && (
         <>
-          <InventoryForm
-            clientId={clientId}
-            refresh={() => fetchItems(page)}
-          />
-          <BulkImport
-            clientId={clientId}
-            refresh={() => fetchItems(page)}
-          />
+          <InventoryForm clientId={clientId} refresh={() => fetchItems(page)} />
+          <BulkImport clientId={clientId} refresh={() => fetchItems(page)} />
         </>
       )}
 
-      {/* empty-state hint */}
       {items.length === 0 && (
         <p className="text-center text-gray-500 mt-6">
           No inventory items found for this client.
