@@ -4,68 +4,84 @@ import axios from '../utils/axiosConfig';
 
 export default function BulkImport({ clientId, refresh }) {
   const [file, setFile] = useState(null);
-  const [status, setStatus] = useState('');
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
-    setStatus('');
+    setMessage('');
+    setError('');
   };
 
-  const handleUpload = async () => {
-    if (!file) {
-      setStatus('Please select a CSV file.');
-      return;
-    }
+  const handleImport = () => {
+    if (!file) return setError('Please select a CSV file');
 
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
       complete: async (results) => {
-        const rawItems = results.data;
-        const cleanedItems = rawItems.map((item) => {
-          return {
-            name: item.name?.trim() || '',
-            part_number: item.part_number?.trim() || '',
-            description: item.description?.trim() || '',
-            lot_number: item.lot_number?.trim() || '',
-            quantity: parseInt(item.quantity, 10) || 0,
-            location: item.location?.trim() || '',
-            has_lot: item.has_lot?.toLowerCase() === 'false' ? 0 : 1,
-            client_id: clientId,
-          };
-        });
-
         try {
-          const res = await axios.post('/api/items/bulk', {
-            client_id: clientId,
-            items: cleanedItems,
+          const parsedItems = results.data.map((row) => {
+            // Known base fields
+            const {
+              name,
+              part_number,
+              description,
+              quantity,
+              location,
+              lot_number,
+              has_lot,
+              ...extraAttributes
+            } = row;
+
+            return {
+              client_id: clientId,
+              name: name?.trim(),
+              part_number: part_number?.trim(),
+              description: description?.trim(),
+              quantity: parseInt(quantity, 10) || 0,
+              location: location?.trim(),
+              lot_number: lot_number?.trim(),
+              has_lot: has_lot?.toLowerCase?.() === 'true' || has_lot === '1' ? 1 : 0,
+              attributes: extraAttributes,
+            };
           });
-          setStatus(`Imported: ${res.data.successCount}, Failed: ${res.data.failCount}`);
+
+          const res = await axios.post('/api/items/import', {
+            client_id: clientId,
+            items: parsedItems,
+          });
+
+          setMessage(`Imported: ${res.data.successCount} | Failed: ${res.data.failCount}`);
+          setError('');
           if (refresh) refresh();
         } catch (err) {
-          console.error('Bulk import error:', err);
-          setStatus('Failed to upload items.');
+          console.error(err);
+          setError('Import failed. Check console and CSV format.');
+          setMessage('');
         }
       },
     });
   };
 
   return (
-    <div className="bg-white shadow-md rounded-lg p-4 mt-6">
-      <h3 className="text-lg font-semibold mb-2">Bulk Import Items</h3>
+    <div className="my-6">
+      <h3 className="text-lg font-semibold mb-2">Bulk Import</h3>
       <input
         type="file"
         accept=".csv"
         onChange={handleFileChange}
-        className="mb-2"
+        className="mb-2 block"
       />
       <button
-        onClick={handleUpload}
-        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-1 px-4 rounded"
+        onClick={handleImport}
+        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
       >
-        Upload
+        Import CSV
       </button>
-      {status && <p className="mt-2 text-sm text-gray-700">{status}</p>}
+
+      {message && <p className="text-green-600 mt-2">{message}</p>}
+      {error && <p className="text-red-600 mt-2">{error}</p>}
     </div>
   );
 }

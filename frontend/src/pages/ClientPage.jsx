@@ -107,12 +107,13 @@ export default function ClientPage() {
 
       {/* inventory table */}
       <InventoryTable
-        items={items}
-        page={page}
-        totalPages={total}
-        onPage={(p) => fetchItems(p)}
-        refresh={() => fetchItems(page)}
-      />
+  items={items}
+  page={page}
+  totalPages={total}
+  onPage={(p) => fetchItems(p)}
+  refresh={() => fetchItems(page)}
+  role={isAdmin ? 'admin' : 'viewer'} // ✅ Add this line
+/>
 
       {/* admin-only actions */}
       {isAdmin && (

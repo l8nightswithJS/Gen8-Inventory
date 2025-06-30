@@ -45,14 +45,20 @@ exports.getItemById = (req, res) => {
 
 exports.createItem = (req, res) => {
   try {
-    let { client_id, name, part_number, description, lot_number, quantity, location, has_lot = 1 } = req.body;
+    let {
+      client_id, name, part_number, description,
+      lot_number, quantity, location, has_lot = 1,
+      attributes = {}
+    } = req.body;
+
     if (!client_id) return res.status(400).json({ message: 'client_id is required' });
     quantity = parseInt(quantity);
     has_lot = has_lot ? 1 : 0;
+    const attrString = JSON.stringify(attributes);
 
     const result = db.prepare(
-      'INSERT INTO items (client_id, name, part_number, description, lot_number, quantity, location, has_lot) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(client_id, name, part_number, description, lot_number, quantity, location, has_lot);
+      'INSERT INTO items (client_id, name, part_number, description, lot_number, quantity, location, has_lot, attributes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(client_id, name, part_number, description, lot_number, quantity, location, has_lot, attrString);
 
     res.status(201).json({ id: result.lastInsertRowid });
   } catch (error) {
@@ -65,10 +71,16 @@ exports.createItem = (req, res) => {
 
 exports.updateItem = (req, res) => {
   try {
-    const { name, part_number, description, lot_number, quantity, location, has_lot = 1 } = req.body;
+    const {
+      name, part_number, description, lot_number,
+      quantity, location, has_lot = 1, attributes = {}
+    } = req.body;
+
+    const attrString = JSON.stringify(attributes);
+
     const result = db.prepare(
-      'UPDATE items SET name = ?, part_number = ?, description = ?, lot_number = ?, quantity = ?, location = ?, has_lot = ?, last_updated = CURRENT_TIMESTAMP WHERE id = ?'
-    ).run(name, part_number, description, lot_number, quantity, location, has_lot ? 1 : 0, req.params.id);
+      'UPDATE items SET name = ?, part_number = ?, description = ?, lot_number = ?, quantity = ?, location = ?, has_lot = ?, attributes = ?, last_updated = CURRENT_TIMESTAMP WHERE id = ?'
+    ).run(name, part_number, description, lot_number, quantity, location, has_lot ? 1 : 0, attrString, req.params.id);
 
     if (result.changes === 0) return res.status(404).json({ message: 'Item not found' });
     res.json({ message: 'Item updated' });
@@ -79,6 +91,7 @@ exports.updateItem = (req, res) => {
     res.status(500).json({ message: 'Server error during item update' });
   }
 };
+
 
 exports.deleteItem = (req, res) => {
   const result = db.prepare('DELETE FROM items WHERE id = ?').run(req.params.id);

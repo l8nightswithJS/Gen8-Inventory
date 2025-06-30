@@ -16,6 +16,11 @@ export default function InventoryTable({ items, refresh, role = 'viewer', page, 
     }
   };
 
+  // Dynamically gather unique attribute keys across all items
+  const attributeKeys = Array.from(
+    new Set(items.flatMap(item => Object.keys(item.attributes || {})))
+  );
+
   return (
     <div className="overflow-x-auto mt-6">
       <table className="w-full border text-left shadow-md rounded">
@@ -27,6 +32,9 @@ export default function InventoryTable({ items, refresh, role = 'viewer', page, 
             <th className="p-2 border">Qty</th>
             <th className="p-2 border">Location</th>
             <th className="p-2 border">Lot #</th>
+            {attributeKeys.map((key) => (
+              <th key={key} className="p-2 border capitalize">{key}</th>
+            ))}
             {role === 'admin' && <th className="p-2 border">Actions</th>}
           </tr>
         </thead>
@@ -41,8 +49,13 @@ export default function InventoryTable({ items, refresh, role = 'viewer', page, 
               <td className="p-2 border">
                 {item.has_lot ? item.lot_number || <em className="text-gray-400">N/A</em> : <em className="text-gray-400">Disabled</em>}
               </td>
+              {attributeKeys.map((key) => (
+                <td key={key} className="p-2 border">
+                  {item.attributes?.[key] || <em className="text-gray-400">—</em>}
+                </td>
+              ))}
               {role === 'admin' && (
-                <td className="p-2 border">
+                <td className="p-2 border whitespace-nowrap">
                   <button
                     onClick={() => navigate(`/edit/${item.id}`)}
                     className="bg-gray-800 text-white px-3 py-1 rounded mr-2 hover:bg-gray-900"
@@ -61,7 +74,7 @@ export default function InventoryTable({ items, refresh, role = 'viewer', page, 
           ))}
           {items.length === 0 && (
             <tr>
-              <td colSpan={role === 'admin' ? 7 : 6} className="p-4 text-center text-gray-500">
+              <td colSpan={6 + attributeKeys.length + (role === 'admin' ? 1 : 0)} className="p-4 text-center text-gray-500">
                 No items to display.
               </td>
             </tr>
@@ -69,7 +82,6 @@ export default function InventoryTable({ items, refresh, role = 'viewer', page, 
         </tbody>
       </table>
 
-      {/* Pagination Controls */}
       <div className="flex justify-center mt-4 space-x-4">
         <button
           disabled={page <= 1}

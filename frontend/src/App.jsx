@@ -7,6 +7,7 @@ import ClientPage from './pages/ClientPage';
 import Login from './pages/Login';
 import PrivateRoute from './components/PrivateRoute';
 import UsersPage from './pages/UsersPage';
+import EditItemPage from './pages/EditItemPage';
 
 export default function App() {
   return (
@@ -36,6 +37,14 @@ export default function App() {
           element={
             <PrivateRoute>
               <UsersPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/edit/:id"
+          element={
+            <PrivateRoute>
+              <EditItemPage />
             </PrivateRoute>
           }
         />
