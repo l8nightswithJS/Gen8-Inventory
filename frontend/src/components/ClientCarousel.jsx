@@ -1,18 +1,14 @@
 import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import styles from './ClientCarousel.module.css';
-import EditClientModal from './EditClientModal'; // modal for edit
-import ConfirmModal from './ConfirmModal'; // modal for delete
+import EditClientModal from './EditClientModal';
+import ConfirmModal from './ConfirmModal';
 
 export default function ClientCarousel({ clients, onClientUpdated, onClientDeleted, onAddClient }) {
   const navigate = useNavigate();
   const carouselRef = useRef();
-
-  // Modal state
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
 
-  // Scroll
   const scroll = (dir) => {
     const el = carouselRef.current;
     if (!el) return;
@@ -21,62 +17,95 @@ export default function ClientCarousel({ clients, onClientUpdated, onClientDelet
   };
 
   return (
-    <div className={styles.carouselContainer} tabIndex="0" aria-label="Client carousel">
-      <button className={styles.arrow} onClick={() => scroll(-1)} aria-label="Scroll left">&#8592;</button>
-      <div className={styles.carousel} ref={carouselRef}>
-        {/* ADD CLIENT BUTTON */}
-        <div className={styles.cardAdd} onClick={onAddClient} tabIndex={0} aria-label="Add new client">
-          <div className={styles.plus}>+</div>
-          <div className={styles.addText}>Add Client</div>
+    <div className="relative w-full" tabIndex="0" aria-label="Client carousel">
+      {/* Scroll Buttons */}
+      <button
+        onClick={() => scroll(-1)}
+        className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-gray-200 hover:bg-gray-300 p-2 rounded-full z-10 shadow"
+        aria-label="Scroll left"
+      >
+        ←
+      </button>
+
+      <div
+        ref={carouselRef}
+        className="flex overflow-x-auto px-10 py-4 space-x-4 scrollbar-hide"
+      >
+        {/* Add Client */}
+        <div
+          onClick={onAddClient}
+          className="flex-shrink-0 w-60 sm:w-64 h-44 border-2 border-dashed border-gray-400 rounded-lg flex flex-col justify-center items-center cursor-pointer hover:bg-gray-50 transition"
+        >
+          <div className="text-4xl font-bold text-gray-600">+</div>
+          <div className="text-sm text-gray-500 mt-1">Add Client</div>
         </div>
-        {/* CLIENT CARDS */}
+
+        {/* Clients */}
         {clients.map((client) => (
-          <div className={styles.card} key={client.id}>
-            <div className={styles.logoWrap} tabIndex={0}>
+          <div
+            key={client.id}
+            className="flex-shrink-0 w-60 sm:w-64 h-44 bg-white border rounded-lg shadow-md p-4 flex flex-col justify-between"
+          >
+            <div className="flex items-center justify-center h-16">
               {client.logo_url ? (
-                <img src={client.logo_url} alt={`${client.name} logo`} className={styles.logo} />
+                <img
+                  src={client.logo_url}
+                  alt={`${client.name} logo`}
+                  className="h-full object-contain max-h-16"
+                />
               ) : (
-                <div className={styles.logoFallback}>No Logo</div>
+                <div className="text-sm text-gray-500">No Logo</div>
               )}
             </div>
-            <div className={styles.clientName}>{client.name}</div>
-            <div className={styles.actions}>
+            <div className="text-center font-semibold text-gray-700 truncate">{client.name}</div>
+            <div className="flex justify-around mt-2">
               <button
-                className={styles.viewBtn}
                 onClick={() => navigate(`/clients/${client.id}`)}
-                aria-label={`View inventory for ${client.name}`}
+                className="text-sm text-blue-600 hover:underline"
               >
                 Inventory
               </button>
               <button
-                className={styles.editBtn}
                 onClick={() => setEditing(client)}
-                aria-label={`Edit ${client.name}`}
-              >✏️</button>
+                className="text-sm text-yellow-500 hover:text-yellow-600"
+                title="Edit"
+              >
+                ✏️
+              </button>
               <button
-                className={styles.deleteBtn}
                 onClick={() => setDeleting(client)}
-                aria-label={`Delete ${client.name}`}
-              >🗑️</button>
+                className="text-sm text-red-500 hover:text-red-600"
+                title="Delete"
+              >
+                🗑️
+              </button>
             </div>
           </div>
         ))}
       </div>
-      <button className={styles.arrow} onClick={() => scroll(1)} aria-label="Scroll right">&#8594;</button>
 
-      {/* Edit Modal */}
-      {editing &&
+      <button
+        onClick={() => scroll(1)}
+        className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-gray-200 hover:bg-gray-300 p-2 rounded-full z-10 shadow"
+        aria-label="Scroll right"
+      >
+        →
+      </button>
+
+      {/* Edit Client Modal */}
+      {editing && (
         <EditClientModal
           client={editing}
           onClose={() => setEditing(null)}
-          onUpdated={client => {
+          onUpdated={(client) => {
             setEditing(null);
             onClientUpdated(client);
           }}
         />
-      }
-      {/* Delete Modal */}
-      {deleting &&
+      )}
+
+      {/* Confirm Delete Modal */}
+      {deleting && (
         <ConfirmModal
           title={`Delete "${deleting.name}"?`}
           message="Are you sure? This cannot be undone."
@@ -86,7 +115,7 @@ export default function ClientCarousel({ clients, onClientUpdated, onClientDelet
             setDeleting(null);
           }}
         />
-      }
+      )}
     </div>
   );
 }

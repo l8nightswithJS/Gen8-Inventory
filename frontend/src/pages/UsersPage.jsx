@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import axios from '../utils/axiosConfig';
 import ConfirmModal from '../components/ConfirmModal';
+import UserForm from '../components/UserForm';
 
 export default function UsersPage() {
   const [users, setUsers] = useState([]);
+  const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
-  const [newUser, setNewUser] = useState({ username: '', password: '', role: 'staff' });
   const [showConfirm, setShowConfirm] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
 
@@ -16,7 +17,7 @@ export default function UsersPage() {
       const res = await axios.get('/api/users');
       setUsers(res.data);
     } catch (err) {
-      console.error('Fetch users error:', err);
+      console.error('Failed to fetch users:', err);
     }
   };
 
@@ -24,29 +25,14 @@ export default function UsersPage() {
     fetchUsers();
   }, []);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    if (editingUser) {
-      setEditingUser({ ...editingUser, [name]: value });
-    } else {
-      setNewUser({ ...newUser, [name]: value });
-    }
+  const handleAddClick = () => {
+    setEditingUser(null);
+    setShowForm(true);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      if (editingUser) {
-        await axios.put(`/api/users/${editingUser.id}`, editingUser);
-      } else {
-        await axios.post('/api/users', newUser);
-      }
-      fetchUsers();
-      setEditingUser(null);
-      setNewUser({ username: '', password: '', role: 'staff' });
-    } catch (err) {
-      console.error('Submit error:', err);
-    }
+  const handleEditClick = (user) => {
+    setEditingUser(user);
+    setShowForm(true);
   };
 
   const handleDelete = async () => {
@@ -55,40 +41,54 @@ export default function UsersPage() {
       fetchUsers();
       setShowConfirm(false);
     } catch (err) {
-      alert('Delete failed');
+      alert('Failed to delete user.');
     }
   };
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <h2 className="text-xl font-semibold mb-4">Manage Users</h2>
-      <form onSubmit={handleSubmit} className="space-x-2 mb-4">
-        <input name="username" placeholder="Username" value={editingUser ? editingUser.username : newUser.username} onChange={handleChange} required />
-        <input name="password" placeholder="Password" type="password" onChange={handleChange} required />
-        <select name="role" value={editingUser ? editingUser.role : newUser.role} onChange={handleChange}>
-          <option value="admin">Admin</option>
-          <option value="staff">Staff</option>
-        </select>
-        <button type="submit">{editingUser ? 'Update' : 'Add'}</button>
-      </form>
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold text-gray-800">Manage Users</h2>
+        {isAdmin && (
+          <button
+            onClick={handleAddClick}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+          >
+            + Add User
+          </button>
+        )}
+      </div>
 
-      <table className="w-full border">
-        <thead>
+      <table className="w-full text-sm border border-gray-300">
+        <thead className="bg-gray-100">
           <tr>
-            <th className="border p-2">Username</th>
-            <th className="border p-2">Role</th>
-            {isAdmin && <th className="border p-2">Actions</th>}
+            <th className="border p-2 text-left">Username</th>
+            <th className="border p-2 text-left">Role</th>
+            {isAdmin && <th className="border p-2 text-left">Actions</th>}
           </tr>
         </thead>
         <tbody>
-          {users.map(user => (
-            <tr key={user.id}>
-              <td className="border p-2">{user.username}</td>
-              <td className="border p-2">{user.role}</td>
+          {users.map((user) => (
+            <tr key={user.id} className="border-t">
+              <td className="p-2">{user.username}</td>
+              <td className="p-2 capitalize">{user.role}</td>
               {isAdmin && (
-                <td className="border p-2">
-                  <button onClick={() => setEditingUser(user)} className="mr-2">Edit</button>
-                  <button onClick={() => { setUserToDelete(user); setShowConfirm(true); }} className="text-red-600">Delete</button>
+                <td className="p-2 space-x-3">
+                  <button
+                    onClick={() => handleEditClick(user)}
+                    className="text-blue-600 hover:underline"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => {
+                      setUserToDelete(user);
+                      setShowConfirm(true);
+                    }}
+                    className="text-red-600 hover:underline"
+                  >
+                    Delete
+                  </button>
                 </td>
               )}
             </tr>
@@ -96,14 +96,28 @@ export default function UsersPage() {
         </tbody>
       </table>
 
+      {/* Add/Edit User Modal */}
+      {showForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-sm shadow-lg">
+            <UserForm
+              userToEdit={editingUser}
+              onSuccess={fetchUsers}
+              onClose={() => setShowForm(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Delete Modal */}
       {showConfirm && userToDelete && (
-  <ConfirmModal
-    show={true}
-    onCancel={() => setShowConfirm(false)}
-    onConfirm={handleDelete}
-    message={`Delete user "${userToDelete.username}"?`}
-  />
-)}
+        <ConfirmModal
+          show={true}
+          onCancel={() => setShowConfirm(false)}
+          onConfirm={handleDelete}
+          message={`Delete user "${userToDelete.username}"?`}
+        />
+      )}
     </div>
   );
 }

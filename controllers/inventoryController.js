@@ -92,7 +92,6 @@ exports.updateItem = (req, res) => {
   }
 };
 
-
 exports.deleteItem = (req, res) => {
   const result = db.prepare('DELETE FROM items WHERE id = ?').run(req.params.id);
   if (result.changes === 0) return res.status(404).json({ message: 'Item not found' });
@@ -100,7 +99,7 @@ exports.deleteItem = (req, res) => {
 };
 
 exports.bulkImportItems = (req, res) => {
-  let client_id = parseInt(req.body.client_id, 10);
+  const client_id = parseInt(req.body.client_id, 10);
   const items = req.body.items;
   if (!Array.isArray(items)) return res.status(400).json({ message: 'Invalid data format' });
 
@@ -110,22 +109,34 @@ exports.bulkImportItems = (req, res) => {
   items.forEach(item => {
     try {
       const cid = item.client_id ? parseInt(item.client_id, 10) : client_id;
-      if (!cid) throw new Error('No client_id');
+      if (!cid || !item.name || !item.part_number) throw new Error('Missing fields');
+
+      // Skip if an item with the same name or part_number and lot_number already exists
+      const exists = db.prepare(
+        `SELECT id FROM items WHERE client_id = ? AND 
+         ((name = ? OR part_number = ?) AND lot_number = ?)`
+      ).get(cid, item.name, item.part_number, item.lot_number);
+
+      if (exists) throw new Error('Duplicate name/part_number with same lot_number');
+
       const hasLot = item.has_lot ? 1 : 0;
+
       db.prepare(
         'INSERT INTO items (client_id, name, part_number, description, lot_number, quantity, location, has_lot) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
       ).run(
         cid,
         item.name,
         item.part_number,
-        item.description,
-        item.lot_number,
+        item.description || '',
+        item.lot_number || '',
         parseInt(item.quantity, 10) || 0,
-        item.location,
+        item.location || '',
         hasLot
       );
+
       successCount++;
     } catch (error) {
+      console.error('Failed item:', item, error.message);
       failCount++;
     }
   });

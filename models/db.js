@@ -1,6 +1,10 @@
 const Database = require('better-sqlite3');
 const db = new Database('inventory.db');
 
+// Ensure foreign key constraints are enforced
+db.pragma('foreign_keys = ON');
+
+// Create users table
 db.prepare(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -12,7 +16,6 @@ db.prepare(`
 `).run();
 
 // Create clients table
-// Add logo_url field to clients table (requires db wipe if changing schema)
 db.prepare(`
   CREATE TABLE IF NOT EXISTS clients (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,10 +24,10 @@ db.prepare(`
   )
 `).run();
 
-
-// Create items table with client_id as foreign key
+// Drop and recreate items table WITH has_lot column
+db.prepare('DROP TABLE IF EXISTS items').run();
 db.prepare(`
-  CREATE TABLE IF NOT EXISTS items (
+  CREATE TABLE items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     part_number TEXT NOT NULL,
@@ -33,13 +36,12 @@ db.prepare(`
     quantity INTEGER NOT NULL,
     location TEXT,
     last_updated TEXT DEFAULT CURRENT_TIMESTAMP,
+    has_lot INTEGER DEFAULT 1,
     client_id INTEGER NOT NULL,
-    FOREIGN KEY (client_id) REFERENCES clients(id),
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
     UNIQUE (name, client_id),
     UNIQUE (part_number, client_id)
   )
 `).run();
-
-
 
 module.exports = db;

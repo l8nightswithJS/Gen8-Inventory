@@ -19,6 +19,8 @@ export default function ClientPage() {
   const [total, setTotal] = useState(1);
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   const fetchClient = async () => {
     try {
@@ -60,6 +62,12 @@ export default function ClientPage() {
     window.open(`${base}/api/items/export?client_id=${clientId}`, '_blank');
   };
 
+  const refreshAndClose = () => {
+    fetchItems(page);
+    setShowForm(false);
+    setShowImport(false);
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex items-center mb-6">
@@ -85,13 +93,30 @@ export default function ClientPage() {
             fetchItems(1, q);
           }}
         />
-
-        <button
-          onClick={exportCSV}
-          className="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded"
-        >
-          Export CSV
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={exportCSV}
+            className="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded"
+          >
+            Export CSV
+          </button>
+          {isAdmin && (
+            <>
+              <button
+                onClick={() => setShowForm(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded"
+              >
+                + Add Item
+              </button>
+              <button
+                onClick={() => setShowImport(true)}
+                className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded"
+              >
+                Bulk Import
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       <InventoryTable
@@ -103,17 +128,40 @@ export default function ClientPage() {
         role={isAdmin ? 'admin' : 'viewer'}
       />
 
-      {isAdmin && (
-        <>
-          <InventoryForm clientId={clientId} refresh={() => fetchItems(page)} />
-          <BulkImport clientId={clientId} refresh={() => fetchItems(page)} />
-        </>
-      )}
-
       {items.length === 0 && (
         <p className="text-center text-gray-500 mt-6">
           No inventory items found for this client.
         </p>
+      )}
+
+      {/* Add Item Modal */}
+      {showForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 z-40 flex items-center justify-center">
+          <div className="bg-white p-6 rounded shadow-md max-w-2xl w-full relative">
+            <button
+              onClick={() => setShowForm(false)}
+              className="absolute top-2 right-2 text-gray-600 hover:text-black text-xl"
+            >
+              &times;
+            </button>
+            <InventoryForm clientId={clientId} refresh={refreshAndClose} />
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Import Modal */}
+      {showImport && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 z-40 flex items-center justify-center">
+          <div className="bg-white p-6 rounded shadow-md max-w-3xl w-full relative overflow-y-auto max-h-[90vh]">
+            <button
+              onClick={() => setShowImport(false)}
+              className="absolute top-2 right-2 text-gray-600 hover:text-black text-xl"
+            >
+              &times;
+            </button>
+            <BulkImport clientId={clientId} refresh={refreshAndClose} />
+          </div>
+        </div>
       )}
     </div>
   );

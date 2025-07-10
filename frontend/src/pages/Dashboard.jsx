@@ -21,34 +21,32 @@ export default function Dashboard() {
     fetchClients();
   }, []);
 
-  const handleDelete = async (id) => {
-    try {
-      await axios.delete(`http://localhost:8000/api/clients/${id}`);
-      fetchClients();
-    } catch (err) {
-      alert('Failed to delete client.');
-    }
-  };
-
-  const handleAddClient = () => {
-    setShowAddModal(true);
-  };
-
   return (
-    <div style={{ padding: '2rem' }}>
-      <div className="flex justify-between mb-6">
-        <h2 className="text-2xl font-semibold">Client Dashboard</h2>
-        <button onClick={handleAddClient} className="bg-blue-600 text-white px-4 py-2 rounded">+ Add Client</button>
+    <div className="p-8 max-w-screen-xl mx-auto">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold text-gray-800">Client Dashboard</h2>
       </div>
 
       {error && <p className="text-red-500 mb-4">{error}</p>}
 
-      <ClientCarousel clients={clients} onDelete={handleDelete} />
+      <ClientCarousel
+        clients={clients}
+        onClientDeleted={async (id) => {
+          await axios.delete(`http://localhost:8000/api/clients/${id}`);
+          fetchClients();
+        }}
+        onClientUpdated={fetchClients}
+        onAddClient={() => setShowAddModal(true)}
+      />
 
       {showAddModal && (
         <AddClientModal
+          isOpen={showAddModal} // ✅ REQUIRED for visibility
           onClose={() => setShowAddModal(false)}
-          onSuccess={fetchClients}
+          onClientAdded={() => {
+            fetchClients();
+            setShowAddModal(false);
+          }}
         />
       )}
     </div>

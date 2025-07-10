@@ -1,43 +1,34 @@
 const express = require('express');
 const cors = require('cors');
-const bodyParser = require('body-parser');
 const path = require('path');
 const fs = require('fs');
 const dotenv = require('dotenv');
-
-// Load .env variables
 dotenv.config();
 
-const { PORT } = require('./config');
-
-const inventoryRoutes = require('./routes/inventory');
-const authRoutes = require('./routes/authRoutes');
-const clientsRoutes = require('./routes/clients');
-const usersRoutes = require('./routes/users');
-
-
-
 const app = express();
+const port = process.env.PORT || 8000;
+
+// Middleware
 app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// Increase payload/body limit for big uploads (CSV, Excel, etc)
-app.use(bodyParser.json({ limit: '20mb' }));
-app.use(bodyParser.urlencoded({ extended: true, limit: '20mb' }));
-
-// Ensure uploads directory exists before using it!
-const uploadDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+// Ensure uploads directory exists
+const uploadPath = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadPath)) {
+  fs.mkdirSync(uploadPath, { recursive: true });
 }
 
-// Serve uploaded files (logos, etc.)
-app.use('/uploads', express.static(uploadDir));
+// Serve uploaded files (used by frontend for logos, etc.)
+app.use('/uploads', express.static(uploadPath));
 
-// API routes
-app.use('/api/items', inventoryRoutes);
-app.use('/api/auth', authRoutes);
-app.use('/api/clients', clientsRoutes);
-app.use('/api/users', usersRoutes);
+// ✅ Routes
+app.use('/api/auth', require('./routes/authRoutes')); // <-- This was missing
+app.use('/api/clients', require('./routes/clients'));
+app.use('/api/items', require('./routes/inventory')); // or './routes/items' if named that
+app.use('/api/users', require('./routes/users'));
 
 // Start server
-app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+app.listen(port, () => {
+  console.log(`✅ Server running on port ${port}`);
+});
