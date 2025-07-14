@@ -1,8 +1,8 @@
-// src/utils/axiosConfig.js
 import axios from 'axios';
 
 const instance = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || ''
+  // fallback to localhost:8000 if REACT_APP_API_URL isn’t defined
+  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:8000'
 });
 
 instance.interceptors.request.use(config => {

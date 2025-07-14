@@ -6,6 +6,7 @@ const fs = require('fs');
 const clientsRouter = require('./routes/clients');
 const inventoryRouter = require('./routes/inventory');
 const usersRouter = require('./routes/users');
+const authRouter      = require('./routes/authRoutes');
 const { PORT } = require('./config');
 
 const app = express();
@@ -24,9 +25,11 @@ if (!fs.existsSync(uploadPath)) {
 app.use('/uploads', express.static(uploadPath));
 
 // Routes
+app.use('/api/auth',  authRouter);
 app.use('/api/clients', clientsRouter);
 app.use('/api/items', inventoryRouter);
 app.use('/api/users', usersRouter);
+
 
 // Centralized error handler
 const errorHandler = require('./middleware/errorHandler');
