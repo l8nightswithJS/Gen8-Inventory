@@ -1,28 +1,83 @@
 const express = require('express');
-const router = express.Router();
+const { body, param, query } = require('express-validator');
 const controller = require('../controllers/inventoryController');
 const authenticate = require('../middleware/authMiddleware');
 const requireRole = require('../middleware/requireRole');
+const { handleValidation } = require('../middleware/validationMiddleware');
 
-// Get all items (with optional search & pagination)
-router.get('/', authenticate, controller.getAllItems);
+const router = express.Router();
 
-// Export CSV for a client's items
-router.get('/export', authenticate, controller.exportCSV);
+// all inventory routes need authentication
+router.use(authenticate);
 
-// Item detail
-router.get('/:id', authenticate, controller.getItemById);
+// GET /api/items?client_id=&page=&q=
+router.get(
+  '/',
+  query('client_id').isInt().withMessage('client_id is required'),
+  query('page').optional().isInt({ min: 1 }).toInt(),
+  query('limit').optional().isInt({ min: 1 }).toInt(),
+  query('q').optional().isString(),
+  handleValidation,
+  controller.getAllItems
+);
 
-// Create new item
-router.post('/', authenticate, requireRole('admin'), controller.createItem);
+// GET /api/items/:id
+router.get(
+  '/:id',
+  param('id').isInt().withMessage('Invalid item id'),
+  handleValidation,
+  controller.getItemById
+);
 
-// Bulk import
-router.post('/bulk', authenticate, requireRole('admin'), controller.bulkImportItems);
+// POST /api/items
+router.post(
+  '/',
+  requireRole('admin'),
+  body('client_id').isInt().withMessage('client_id is required'),
+  body('name').isString().notEmpty().withMessage('Name is required'),
+  body('part_number').isString().notEmpty().withMessage('Part Number is required'),
+  body('description').optional().isString(),
+  body('lot_number').optional().isString(),
+  body('quantity').isInt({ min: 0 }).withMessage('Quantity must be a non-negative integer').toInt(),
+  body('location').optional().isString(),
+  body('has_lot').optional().isBoolean().toBoolean(),
+  handleValidation,
+  controller.createItem
+);
 
-// Update item
-router.put('/:id', authenticate, requireRole('admin'), controller.updateItem);
+// PUT /api/items/:id
+router.put(
+  '/:id',
+  requireRole('admin'),
+  param('id').isInt().withMessage('Invalid item id'),
+  body('name').isString().notEmpty().withMessage('Name is required'),
+  body('part_number').isString().notEmpty().withMessage('Part Number is required'),
+  body('description').optional().isString(),
+  body('lot_number').optional().isString(),
+  body('quantity').isInt({ min: 0 }).withMessage('Quantity must be a non-negative integer').toInt(),
+  body('location').optional().isString(),
+  body('has_lot').optional().isBoolean().toBoolean(),
+  handleValidation,
+  controller.updateItem
+);
 
-// Delete item
-router.delete('/:id', authenticate, requireRole('admin'), controller.deleteItem);
+// DELETE /api/items/:id
+router.delete(
+  '/:id',
+  requireRole('admin'),
+  param('id').isInt().withMessage('Invalid item id'),
+  handleValidation,
+  controller.deleteItem
+);
+
+// POST /api/items/bulk
+router.post(
+  '/bulk',
+  requireRole('admin'),
+  body('client_id').isInt().withMessage('client_id is required'),
+  body('items').isArray({ min: 1 }).withMessage('items must be an array'),
+  handleValidation,
+  controller.bulkImportItems
+);
 
 module.exports = router;

@@ -58,8 +58,7 @@ export default function ClientPage() {
   }, [clientId]);
 
   const exportCSV = () => {
-    const base = process.env.REACT_APP_API || 'http://localhost:8000';
-    window.open(`${base}/api/items/export?client_id=${clientId}`, '_blank');
+    window.open(`/api/items/export?client_id=${clientId}`, '_blank');
   };
 
   const refreshAndClose = () => {

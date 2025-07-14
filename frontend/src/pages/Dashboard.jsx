@@ -10,7 +10,7 @@ export default function Dashboard() {
 
   const fetchClients = async () => {
     try {
-      const res = await axios.get('http://localhost:8000/api/clients');
+      const res = await axios.get('/api/clients');
       setClients(res.data);
     } catch {
       setError('Could not load clients');
@@ -32,7 +32,7 @@ export default function Dashboard() {
       <ClientCarousel
         clients={clients}
         onClientDeleted={async (id) => {
-          await axios.delete(`http://localhost:8000/api/clients/${id}`);
+          await axios.delete(`/api/clients/${id}`);
           fetchClients();
         }}
         onClientUpdated={fetchClients}
