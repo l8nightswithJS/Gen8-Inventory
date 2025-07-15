@@ -26,7 +26,7 @@ export default function ClientCarousel({
     if (!path) return '';
     if (path.startsWith('http://') || path.startsWith('https://')) return path;
     // otherwise assume it’s served from your API under /uploads
-    const base = process.env.REACT_APP_API_URL || '';
+    const base = process.env.REACT_APP_API_URL || 'http://localhost:8000';
     return `${base}${path}`;
   };
 
