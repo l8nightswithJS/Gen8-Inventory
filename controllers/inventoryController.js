@@ -1,242 +1,198 @@
 // controllers/inventoryController.js
-const db = require('../models/db');
-const fs = require('fs');
-const path = require('path');
+const supabase = require('../models/db');
+const fs        = require('fs');
+const path      = require('path');
 const csvWriter = require('fast-csv');
 
 // GET /api/items?client_id=&page=&limit=&q=
-function getAllItems(req, res) {
-  const client_id = parseInt(req.query.client_id, 10);
-  if (!client_id) {
-    return res.status(400).json({ message: 'client_id is required' });
-  }
-
-  const q = req.query.q || '';
-  let page  = parseInt(req.query.page, 10)  || 1;
-  let limit = parseInt(req.query.limit, 10) || 10;
-  if (page < 1) page = 1;
-  if (limit < 1) limit = 10;
-
-  const offset = (page - 1) * limit;
-  const filterSql = q.trim() ? `AND (name LIKE ? OR part_number LIKE ?)` : '';
-  const params = q.trim()
-    ? [client_id, `%${q}%`, `%${q}%`, limit, offset]
-    : [client_id, limit, offset];
-
-  const items = db.prepare(
-    `SELECT * FROM items
-       WHERE client_id = ?
-       ${filterSql}
-       ORDER BY id DESC
-       LIMIT ? OFFSET ?`
-  ).all(...params);
-
-  const totalCount = db.prepare(
-    `SELECT COUNT(*) AS count
-       FROM items
-       WHERE client_id = ?
-       ${filterSql}`
-  ).get(...(q.trim() ? [client_id, `%${q}%`, `%${q}%`] : [client_id])).count;
-
-  res.json({
-    items,
-    total: totalCount,
-    page,
-    totalPages: Math.ceil(totalCount / limit),
-    limit
-  });
-}
-
-// GET /api/items/:id
-function getItemById(req, res) {
-  const item = db.prepare('SELECT * FROM items WHERE id = ?').get(req.params.id);
-  if (!item) {
-    return res.status(404).json({ message: 'Item not found' });
-  }
-  res.json(item);
-}
-
-// POST /api/items
-function createItem(req, res) {
+exports.getAllItems = async (req, res, next) => {
   try {
-    const {
-      client_id,
-      name,
-      part_number,
-      description = '',
-      lot_number = '',
-      quantity = 0,
-      location = ''
-    } = req.body;
-
+    const client_id = parseInt(req.query.client_id, 10);
     if (!client_id) {
       return res.status(400).json({ message: 'client_id is required' });
     }
 
-    const qty = parseInt(quantity, 10) || 0;
+    const q     = req.query.q || '';
+    const page  = parseInt(req.query.page, 10)  || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+    const from  = (page - 1) * limit;
+    const to    = page * limit - 1;
 
-    const stmt = db.prepare(
-      `INSERT INTO items
-         (client_id, name, part_number, description, lot_number, quantity, location)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    );
-    const info = stmt.run(
-      client_id,
-      name,
-      part_number,
-      description,
-      lot_number,
-      qty,
-      location
-    );
+    // Build base query
+    let query = supabase
+      .from('items')
+      .select('*', { count: 'exact' })
+      .eq('client_id', client_id);
 
-    res.status(201).json({ id: info.lastInsertRowid });
+    // Add search filter if q is provided
+    if (q) {
+      query = query.or(
+        `name.ilike.*${q}*,part_number.ilike.*${q}*`
+      );
+    }
+
+    // Run it
+    const { data, error, count } = await query
+      .order('id', { ascending: false })
+      .range(from, to);
+
+    if (error) throw error;
+
+    res.json({
+      items:      data,
+      total:      count,
+      page,
+      totalPages: Math.ceil(count / limit),
+      limit,
+    });
   } catch (err) {
-    console.error('Create item error:', err);
-    res.status(500).json({ message: 'Error creating item' });
+    next(err);
   }
-}
+};
+
+// GET /api/items/:id
+exports.getItemById = async (req, res, next) => {
+  try {
+    const { data: [item], error } = await supabase
+      .from('items')
+      .select('*')
+      .eq('id', req.params.id)
+      .limit(1);
+
+    if (error) throw error;
+    if (!item) return res.status(404).json({ message: 'Item not found' });
+    res.json(item);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /api/items
+exports.createItem = async (req, res, next) => {
+  try {
+    const payload = {
+      client_id:  parseInt(req.body.client_id, 10),
+      name:       req.body.name,
+      part_number:req.body.part_number,
+      description:req.body.description || '',
+      lot_number: req.body.lot_number  || '',
+      quantity:   parseInt(req.body.quantity, 10) || 0,
+      location:   req.body.location    || '',
+    };
+
+    const { data: item, error } = await supabase
+      .from('items')
+      .insert(payload)
+      .single();
+
+    if (error) throw error;
+    res.status(201).json(item);
+  } catch (err) {
+    next(err);
+  }
+};
 
 // PUT /api/items/:id
-function updateItem(req, res) {
+exports.updateItem = async (req, res, next) => {
   try {
-    const {
-      name,
-      part_number,
-      description = '',
-      lot_number = '',
-      quantity = 0,
-      location = ''
-    } = req.body;
+    const updates = {
+      name:        req.body.name,
+      part_number: req.body.part_number,
+      description: req.body.description || '',
+      lot_number:  req.body.lot_number  || '',
+      quantity:    parseInt(req.body.quantity, 10) || 0,
+      location:    req.body.location    || '',
+      last_updated:new Date().toISOString(),
+    };
 
-    const qty = parseInt(quantity, 10) || 0;
+    const { data: item, error } = await supabase
+      .from('items')
+      .update(updates)
+      .eq('id', req.params.id)
+      .single();
 
-    const stmt = db.prepare(
-      `UPDATE items SET
-         name        = ?,
-         part_number = ?,
-         description = ?,
-         lot_number  = ?,
-         quantity    = ?,
-         location    = ?,
-         last_updated= CURRENT_TIMESTAMP
-       WHERE id = ?`
-    );
-    const info = stmt.run(
-      name,
-      part_number,
-      description,
-      lot_number,
-      qty,
-      location,
-      req.params.id
-    );
-
-    if (info.changes === 0) {
-      return res.status(404).json({ message: 'Item not found' });
-    }
-    res.json({ message: 'Item updated' });
+    if (error) throw error;
+    if (!item) return res.status(404).json({ message: 'Item not found' });
+    res.json(item);
   } catch (err) {
-    console.error('Update item error:', err);
-    res.status(500).json({ message: 'Error updating item' });
+    next(err);
   }
-}
+};
 
 // DELETE /api/items/:id
-function deleteItem(req, res) {
-  const info = db.prepare('DELETE FROM items WHERE id = ?').run(req.params.id);
-  if (info.changes === 0) {
-    return res.status(404).json({ message: 'Item not found' });
+exports.deleteItem = async (req, res, next) => {
+  try {
+    const { error } = await supabase
+      .from('items')
+      .delete()
+      .eq('id', req.params.id);
+
+    if (error) throw error;
+    res.json({ message: 'Item deleted' });
+  } catch (err) {
+    next(err);
   }
-  res.json({ message: 'Item deleted' });
-}
+};
 
 // POST /api/items/bulk
-function bulkImportItems(req, res) {
-  const client_id = parseInt(req.body.client_id, 10);
-  const items = req.body.items;
-  if (!client_id) {
-    return res.status(400).json({ message: 'client_id is required' });
-  }
-  if (!Array.isArray(items)) {
-    return res.status(400).json({ message: 'items must be an array' });
-  }
+exports.bulkImportItems = async (req, res, next) => {
+  try {
+    const client_id = parseInt(req.body.client_id, 10);
+    const items     = req.body.items;
+    if (!client_id)            return res.status(400).json({ message: 'client_id is required' });
+    if (!Array.isArray(items)) return res.status(400).json({ message: 'items must be an array' });
 
-  let successCount = 0;
-  let failCount = 0;
+    let successCount = 0, failCount = 0;
+    for (const item of items) {
+      try {
+        const payload = {
+          client_id,
+          name:        item.name,
+          part_number: item.part_number,
+          description: item.description || '',
+          lot_number:  item.lot_number  || '',
+          quantity:    parseInt(item.quantity, 10) || 0,
+          location:    item.location    || '',
+        };
+        const { error } = await supabase
+          .from('items')
+          .insert(payload)
+          .single();
 
-  const insert = db.prepare(
-    `INSERT INTO items
-       (client_id, name, part_number, description, lot_number, quantity, location)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  );
-
-  for (let item of items) {
-    try {
-      // ignore completely empty rows
-      if (!item.name && !item.part_number && !item.quantity && !item.description && !item.lot_number && !item.location) {
-        throw new Error('Empty row');
+        if (error) throw error;
+        successCount++;
+      } catch (err) {
+        console.error('Bulk import failed for item:', item, err.message);
+        failCount++;
       }
-
-      const qty = parseInt(item.quantity, 10);
-      if (isNaN(qty)) {
-        throw new Error('Invalid quantity');
-      }
-
-      // allow duplicate part_number as long as lot_number differs
-      insert.run(
-        client_id,
-        item.name,
-        item.part_number,
-        item.description || '',
-        item.lot_number || '',
-        qty,
-        item.location || ''
-      );
-      successCount++;
-    } catch (err) {
-      console.error('Bulk import failed for item:', item, err.message);
-      failCount++;
     }
+
+    res.json({ successCount, failCount });
+  } catch (err) {
+    next(err);
   }
+};
 
-  res.json({ successCount, failCount });
-}
+// GET /api/items/export
+exports.exportCSV = async (req, res, next) => {
+  try {
+    const { data: items, error } = await supabase
+      .from('items')
+      .select('*');
 
-// GET /api/items/export?client_id=
-function exportCSV(req, res) {
-  const client_id = parseInt(req.query.client_id, 10);
-  if (!client_id) {
-    return res.status(400).json({ message: 'client_id is required' });
-  }
+    if (error) throw error;
 
-  const rows = db.prepare('SELECT * FROM items WHERE client_id = ?').all(client_id);
+    const filename = 'items_export.csv';
+    const filepath = path.join(__dirname, '..', 'uploads', filename);
+    const ws       = fs.createWriteStream(filepath);
 
-  // ensure tmp folder exists
-  const tmpDir = path.join(__dirname, '..', 'tmp');
-  fs.mkdirSync(tmpDir, { recursive: true });
-
-  const fileName = `items-export-${Date.now()}.csv`;
-  const fullPath = path.join(tmpDir, fileName);
-  const ws = fs.createWriteStream(fullPath);
-
-  csvWriter
-    .write(rows, { headers: true })
-    .pipe(ws)
-    .on('finish', () => {
-      res.download(fullPath, fileName, err => {
-        if (err) console.error('CSV download error:', err);
-        fs.unlinkSync(fullPath);
+    csvWriter.write(items, { headers: true }).pipe(ws).on('finish', () => {
+      res.download(filepath, filename, (err) => {
+        if (err) return next(err);
+        fs.unlinkSync(filepath);
       });
     });
-}
-
-module.exports = {
-  getAllItems,
-  getItemById,
-  createItem,
-  updateItem,
-  deleteItem,
-  bulkImportItems,
-  exportCSV
+  } catch (err) {
+    next(err);
+  }
 };
