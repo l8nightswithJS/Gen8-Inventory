@@ -1,6 +1,7 @@
+// src/pages/Login.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabaseClient';
+import axios from '../utils/axiosConfig';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -11,32 +12,22 @@ export default function Login() {
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
-
-    // Use Supabase Auth instead of Axios
-    const { data, error: signInError } = await supabase.auth.signIn({
-      email: username,
-      password
-    });
-
-    if (signInError) {
+    try {
+      const res = await axios.post('/api/auth/login', {
+        username,
+        password
+      });
+      // store the JWT and role
+      localStorage.setItem('token', res.data.token);
+      localStorage.setItem('role',  res.data.role);
+      navigate('/dashboard');
+    } catch {
       setError('Invalid username or password');
-      return;
     }
-
-    // Persist the session client‑side
-    if (data.session) {
-      localStorage.setItem('supabase.session', JSON.stringify(data.session));
-      // Optionally, you can fetch your application user (with role) here
-      // and store it if needed.
-    }
-
-    // Redirect on success
-    navigate('/dashboard');
   };
 
   return (
-    <div
-      style={{
+    <div style={{
         maxWidth: '400px',
         margin: '4rem auto',
         padding: '2rem',
@@ -50,7 +41,7 @@ export default function Login() {
           type="text"
           placeholder="Username"
           value={username}
-          onChange={(e) => setUsername(e.target.value)}
+          onChange={e => setUsername(e.target.value)}
           required
           style={{ width: '100%', padding: '0.5rem', margin: '0.5rem 0' }}
         />
@@ -58,7 +49,7 @@ export default function Login() {
           type="password"
           placeholder="Password"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={e => setPassword(e.target.value)}
           required
           style={{ width: '100%', padding: '0.5rem', margin: '0.5rem 0' }}
         />
