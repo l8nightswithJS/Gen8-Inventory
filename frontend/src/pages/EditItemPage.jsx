@@ -1,3 +1,4 @@
+// src/pages/EditItemPage.jsx
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
@@ -14,7 +15,8 @@ export default function EditItemPage() {
     lot_number: '',
     quantity: '',
     location: '',
-    has_lot: false
+    has_lot: false,
+    client_id: null,       // ← add this
   });
   const [error, setError] = useState('');
 
@@ -36,7 +38,8 @@ export default function EditItemPage() {
           lot_number:  data.lot_number   || '',
           quantity:    data.quantity != null ? String(data.quantity) : '',
           location:    data.location     || '',
-          has_lot:     data.has_lot      || false
+          has_lot:     data.has_lot      || false,
+          client_id:   data.client_id    || null,  // ← store it
         });
       } catch {
         setError('Could not fetch item.');
@@ -76,7 +79,7 @@ export default function EditItemPage() {
         lot_number:  form.has_lot ? form.lot_number : '',
         quantity:    parseInt(form.quantity, 10),
         location:    form.location,
-        has_lot:     form.has_lot
+        has_lot:     form.has_lot,
       };
 
       const { error: updateError } = await supabase
@@ -85,7 +88,9 @@ export default function EditItemPage() {
         .eq('id', id);
 
       if (updateError) throw updateError;
-      navigate('/dashboard');
+
+      // go back to this client's inventory page:
+      navigate(`/clients/${form.client_id}`);
     } catch (err) {
       setError(err.message || 'An error occurred. Try again.');
     }
@@ -96,6 +101,7 @@ export default function EditItemPage() {
       <form onSubmit={handleSubmit}>
         <h2>Edit Item</h2>
         {error && <p className="text-red-600">{error}</p>}
+
         <input
           value={form.name}
           onChange={e => setForm({ ...form, name: e.target.value })}
@@ -123,14 +129,18 @@ export default function EditItemPage() {
         />
         {form.has_lot && (
           <input
-            value={form.lot_number || ''}
+            value={form.lot_number}
             onChange={e => setForm({ ...form, lot_number: e.target.value })}
             placeholder="Lot Number"
           />
         )}
+
         <div className="mt-4 flex gap-4">
           <button type="submit">Update</button>
-          <button type="button" onClick={() => navigate('/dashboard')}>
+          <button
+            type="button"
+            onClick={() => navigate(`/clients/${form.client_id}`)}
+          >
             Cancel
           </button>
         </div>

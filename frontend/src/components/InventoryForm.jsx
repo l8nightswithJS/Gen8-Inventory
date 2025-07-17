@@ -1,5 +1,6 @@
+// src/components/InventoryForm.jsx
 import React, { useState } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import axios from '../utils/axiosConfig';
 
 export default function InventoryForm({ clientId, refresh }) {
   const [form, setForm] = useState({
@@ -9,36 +10,37 @@ export default function InventoryForm({ clientId, refresh }) {
     quantity: '',
     location: '',
     lot_number: '',
-    has_lot: false
+    has_lot: false,
   });
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setForm(prev => ({
+    setForm((prev) => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value
+      [name]: type === 'checkbox' ? checked : value,
     }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     try {
-      // Insert a new item via Supabase
-      const { error } = await supabase
-        .from('items')
-        .insert([{
-          client_id: clientId,
+      // POST to your Express backend instead of Supabase client
+      await axios.post(
+        '/api/items',
+        {
+          client_id: parseInt(clientId, 10),
           name: form.name,
           part_number: form.part_number,
           description: form.description,
           quantity: parseInt(form.quantity, 10) || 0,
           location: form.location,
           has_lot: form.has_lot,
-          lot_number: form.has_lot ? form.lot_number : ''
-        }]);
-      if (error) throw error;
+          lot_number: form.has_lot ? form.lot_number : '',
+        }
+      );
 
-      // Refresh parent list and reset form
+      // Refresh list and clear form
       refresh();
       setForm({
         name: '',
@@ -47,7 +49,7 @@ export default function InventoryForm({ clientId, refresh }) {
         quantity: '',
         location: '',
         lot_number: '',
-        has_lot: false
+        has_lot: false,
       });
     } catch (err) {
       console.error(err);
@@ -56,7 +58,10 @@ export default function InventoryForm({ clientId, refresh }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="mt-8 space-y-2 bg-gray-50 p-4 rounded border">
+    <form
+      onSubmit={handleSubmit}
+      className="mt-8 space-y-2 bg-gray-50 p-4 rounded border"
+    >
       <h3 className="font-semibold">Add Inventory Item</h3>
       <input
         name="name"
@@ -88,6 +93,7 @@ export default function InventoryForm({ clientId, refresh }) {
         value={form.location}
         onChange={handleChange}
       />
+
       <label>
         <input
           type="checkbox"

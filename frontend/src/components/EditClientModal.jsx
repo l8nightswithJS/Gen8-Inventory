@@ -1,12 +1,13 @@
+// src/components/EditClientModal.jsx
 import React, { useState } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import axios from '../utils/axiosConfig';
 
 export default function EditClientModal({ client, onClose, onUpdated }) {
-  const [name, setName] = useState(client.name || '');
+  const [name,     setName]     = useState(client.name     || '');
   const [logoFile, setLogoFile] = useState(null);
-  const [logoUrl, setLogoUrl] = useState(client.logo_url || '');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [logoUrl,  setLogoUrl]  = useState(client.logo_url || '');
+  const [error,    setError]    = useState('');
+  const [loading,  setLoading]  = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -14,40 +15,28 @@ export default function EditClientModal({ client, onClose, onUpdated }) {
     setLoading(true);
 
     try {
-      // Determine final logo URL
-      let finalLogoUrl = logoUrl.trim();
-
-      // If a new file was selected, upload it
+      // build up the FormData
+      const formData = new FormData();
+      formData.append('name', name.trim());
       if (logoFile) {
-        const fileName = `${Date.now()}_${logoFile.name}`;
-        const { error: uploadError } = await supabase
-          .storage
-          .from('client-logos')
-          .upload(fileName, logoFile);
-        if (uploadError) throw uploadError;
-
-        const { publicURL, error: urlError } = supabase
-          .storage
-          .from('client-logos')
-          .getPublicUrl(fileName);
-        if (urlError) throw urlError;
-
-        finalLogoUrl = publicURL;
+        formData.append('logo', logoFile);
+      } else if (logoUrl.trim()) {
+        formData.append('logo_url', logoUrl.trim());
       }
 
-      // Update the client record
-      const { data, error: updateError } = await supabase
-        .from('clients')
-        .update({ name, logo_url: finalLogoUrl })
-        .eq('id', client.id)
-        .single();
-      if (updateError) throw updateError;
+      // call your backend PUT /api/clients/:id
+      const res = await axios.put(
+        `/api/clients/${client.id}`,
+        formData,
+        { headers: { 'Content-Type': 'multipart/form-data' } }
+      );
 
-      // Notify parent of the update
-      onUpdated && onUpdated(data);
+      // notify parent & close
+      onUpdated && onUpdated(res.data);
       onClose();
     } catch (err) {
-      setError(err.message || 'Failed to update client.');
+      console.error(err);
+      setError(err.response?.data?.message || 'Failed to update client.');
     } finally {
       setLoading(false);
     }
@@ -58,13 +47,12 @@ export default function EditClientModal({ client, onClose, onUpdated }) {
       <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6 relative">
         <button
           onClick={onClose}
-          className="absolute top-2 right-3 text-gray-500 hover:text-black text-lg"
+          className="absolute top-2 right-2 text-gray-500 hover:text-black text-xl"
         >
           ×
         </button>
 
         <h2 className="text-xl font-semibold mb-4">Edit Client</h2>
-
         {error && <p className="text-red-600 mb-3">{error}</p>}
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -72,7 +60,7 @@ export default function EditClientModal({ client, onClose, onUpdated }) {
             type="text"
             placeholder="Client Name"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={e => setName(e.target.value)}
             className="w-full border border-gray-300 px-3 py-2 rounded"
             required
           />
@@ -82,7 +70,7 @@ export default function EditClientModal({ client, onClose, onUpdated }) {
             <input
               type="file"
               accept="image/*"
-              onChange={(e) => setLogoFile(e.target.files[0])}
+              onChange={e => setLogoFile(e.target.files[0])}
               className="w-full"
             />
           </div>
@@ -91,22 +79,12 @@ export default function EditClientModal({ client, onClose, onUpdated }) {
             <label className="block text-sm mb-1">Or Enter Logo URL:</label>
             <input
               type="text"
-              placeholder="http://..."
+              placeholder="https://example.com/logo.png"
               value={logoUrl}
-              onChange={(e) => setLogoUrl(e.target.value)}
+              onChange={e => setLogoUrl(e.target.value)}
               className="w-full border border-gray-300 px-3 py-2 rounded"
             />
           </div>
-
-          {logoUrl && (
-            <div className="mt-2">
-              <img
-                src={logoUrl}
-                alt="Client Logo Preview"
-                className="max-h-20 rounded border"
-              />
-            </div>
-          )}
 
           <div className="flex justify-end gap-3 pt-4">
             <button

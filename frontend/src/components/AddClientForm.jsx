@@ -1,11 +1,12 @@
+// src/components/AddClientForm.jsx
 import React, { useState } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import axios from '../utils/axiosConfig';
 
 export default function AddClientForm({ onSuccess }) {
-  const [name, setName] = useState('');
+  const [name, setName]       = useState('');
   const [logoFile, setLogoFile] = useState(null);
-  const [logoUrl, setLogoUrl] = useState('');
-  const [error, setError] = useState('');
+  const [logoUrl, setLogoUrl]   = useState('');
+  const [error, setError]     = useState('');
   const [success, setSuccess] = useState('');
 
   const handleSubmit = async (e) => {
@@ -19,46 +20,31 @@ export default function AddClientForm({ onSuccess }) {
     }
 
     try {
-      // 1) Upload the file to Supabase Storage (bucket: "client-logos")
-      let finalLogoUrl = '';
+      // Build FormData payload
+      const formData = new FormData();
+      formData.append('name', name.trim());
       if (logoFile) {
-        const fileName = `${Date.now()}_${logoFile.name}`;
-        const { error: uploadError } = await supabase
-          .storage
-          .from('client-logos')
-          .upload(fileName, logoFile);
-        if (uploadError) throw uploadError;
-        const { publicURL, error: urlError } = supabase
-          .storage
-          .from('client-logos')
-          .getPublicUrl(fileName);
-        if (urlError) throw urlError;
-        finalLogoUrl = publicURL;
-      }
-      // 2) Or use the URL text input if provided
-      else if (logoUrl.trim()) {
-        finalLogoUrl = logoUrl.trim();
+        formData.append('logo', logoFile);
+      } else if (logoUrl.trim()) {
+        formData.append('logo_url', logoUrl.trim());
       }
 
-      // 3) Insert the new client record
-      const { data, error: insertError } = await supabase
-        .from('clients')
-        .insert([{ name, logo_url: finalLogoUrl }])
-        .single();
-      if (insertError) throw insertError;
+      // Send to your Express backend (uses service-role key server‑side)
+      const res = await axios.post(
+        '/api/clients',
+        formData,
+        { headers: { 'Content-Type': 'multipart/form-data' } }
+      );
 
       setSuccess('Client added!');
       setName('');
       setLogoFile(null);
       setLogoUrl('');
 
-      // notify parent after a brief delay
-      setTimeout(() => {
-        onSuccess && onSuccess(data);
-      }, 500);
+      onSuccess && onSuccess(res.data);
     } catch (err) {
       console.error(err);
-      setError(err.message || 'Error adding client');
+      setError(err.response?.data?.message || 'Error adding client');
     }
   };
 
@@ -66,14 +52,14 @@ export default function AddClientForm({ onSuccess }) {
     <form onSubmit={handleSubmit} className="space-y-4">
       <h2 className="text-xl font-semibold">Add New Client</h2>
 
-      {error && <div className="text-red-600">{error}</div>}
+      {error   && <div className="text-red-600">{error}</div>}
       {success && <div className="text-green-600">{success}</div>}
 
       <input
         type="text"
         value={name}
         placeholder="Client Name"
-        onChange={(e) => setName(e.target.value)}
+        onChange={e => setName(e.target.value)}
         className="w-full border border-gray-300 px-3 py-2 rounded"
         required
       />
@@ -83,7 +69,7 @@ export default function AddClientForm({ onSuccess }) {
         <input
           type="file"
           accept="image/*"
-          onChange={(e) => setLogoFile(e.target.files[0])}
+          onChange={e => setLogoFile(e.target.files[0])}
           className="block w-full text-sm text-gray-700"
         />
       </div>
@@ -94,7 +80,7 @@ export default function AddClientForm({ onSuccess }) {
           type="text"
           value={logoUrl}
           placeholder="https://example.com/logo.png"
-          onChange={(e) => setLogoUrl(e.target.value)}
+          onChange={e => setLogoUrl(e.target.value)}
           className="w-full border border-gray-300 px-3 py-2 rounded"
         />
       </div>
