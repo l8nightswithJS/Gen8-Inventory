@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from '../utils/axiosConfig';
+import { supabase } from '../lib/supabaseClient';
 
 export default function InventoryTable({ items, refresh, role = 'viewer', page, totalPages, onPage }) {
   const navigate = useNavigate();
@@ -8,8 +8,15 @@ export default function InventoryTable({ items, refresh, role = 'viewer', page, 
 
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this item?')) {
-      await axios.delete(`/api/items/${id}`);
-      if (refresh) refresh();
+      const { error } = await supabase
+        .from('items')
+        .delete()
+        .eq('id', id);
+      if (error) {
+        console.error('Delete failed:', error);
+        return;
+      }
+      refresh && refresh();
     }
   };
 

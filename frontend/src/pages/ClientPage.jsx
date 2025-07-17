@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from '../utils/axiosConfig';
+import { supabase } from '../lib/supabaseClient';
 
 import InventoryTable from '../components/InventoryTable';
 import InventoryForm from '../components/InventoryForm';
@@ -10,43 +10,58 @@ import SearchBar from '../components/SearchBar';
 export default function ClientPage() {
   const { clientId } = useParams();
   const navigate = useNavigate();
-
   const isAdmin = localStorage.getItem('role') === 'admin';
 
   const [client, setClient] = useState({});
-  const [items, setItems] = useState([]);
-  const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(1);
-  const [query, setQuery] = useState('');
-  const [error, setError] = useState('');
-  const [showForm, setShowForm] = useState(false);
+  const [items, setItems]     = useState([]);
+  const [page, setPage]       = useState(1);
+  const [total, setTotal]     = useState(1);
+  const [query, setQuery]     = useState('');
+  const [error, setError]     = useState('');
+  const [showForm, setShowForm]   = useState(false);
   const [showImport, setShowImport] = useState(false);
 
+  // Fetch client details
   const fetchClient = async () => {
     try {
-      const { data } = await axios.get(`/api/clients/${clientId}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      setClient(data);
-    } catch (err) {
+      const { data: [c], error } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('id', clientId)
+        .limit(1);
+      if (error) throw error;
+      setClient(c);
+    } catch {
       setError('Unable to load client.');
     }
   };
 
+  // Fetch items with pagination and optional search
   const fetchItems = async (p = 1, q = query) => {
+    const limitVal = 10;
+    const from = (p - 1) * limitVal;
+    const to   = p * limitVal - 1;
+
     try {
-      const { data } = await axios.get('/api/items', {
-        params: { client_id: clientId, page: p, q },
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      setItems(data.items);
-      setTotal(data.totalPages);
+      let qb = supabase
+        .from('items')
+        .select('*', { count: 'exact' })
+        .eq('client_id', clientId);
+
+      if (q) {
+        qb = qb.or(`name.ilike.*${q}*,part_number.ilike.*${q}*`);
+      }
+
+      const { data, error, count } = await qb
+        .order('id', { ascending: false })
+        .range(from, to);
+
+      if (error) throw error;
+
+      setItems(data);
+      setTotal(Math.ceil(count / limitVal));
       setPage(p);
-    } catch (err) {
+    } catch {
       setError('Unable to load items.');
     }
   };
@@ -57,10 +72,43 @@ export default function ClientPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId]);
 
-  const exportCSV = () => {
-    window.open(`/api/items/export?client_id=${clientId}`, '_blank');
+  // Export all items for this client as CSV
+  const exportCSV = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('items')
+        .select('*')
+        .eq('client_id', clientId);
+
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        setError('No items to export.');
+        return;
+      }
+
+      const headers = Object.keys(data[0]);
+      const csvRows = [
+        headers.join(','),
+        ...data.map(row =>
+          headers
+            .map(h => `"${String(row[h] ?? '').replace(/"/g, '""')}"`)
+            .join(',')
+        )
+      ];
+
+      const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${client.name || 'items'}_export.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError('Unable to export CSV.');
+    }
   };
 
+  // Close modals and refresh list
   const refreshAndClose = () => {
     fetchItems(page);
     setShowForm(false);
@@ -76,7 +124,9 @@ export default function ClientPage() {
         >
           ← Back
         </button>
-        <h2 className="text-2xl font-semibold">{client.name || 'Loading…'}</h2>
+        <h2 className="text-2xl font-semibold">
+          {client.name || 'Loading…'}
+        </h2>
       </div>
 
       {error && (

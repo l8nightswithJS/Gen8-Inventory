@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from '../utils/axiosConfig';
+import { supabase } from '../lib/supabaseClient';
 
 export default function EditClientModal({ client, onClose, onUpdated }) {
   const [name, setName] = useState(client.name || '');
@@ -14,23 +14,40 @@ export default function EditClientModal({ client, onClose, onUpdated }) {
     setLoading(true);
 
     try {
-      const formData = new FormData();
-      formData.append('name', name);
+      // Determine final logo URL
+      let finalLogoUrl = logoUrl.trim();
+
+      // If a new file was selected, upload it
       if (logoFile) {
-        formData.append('logo', logoFile);
-      } else {
-        formData.append('logo_url', logoUrl);
+        const fileName = `${Date.now()}_${logoFile.name}`;
+        const { error: uploadError } = await supabase
+          .storage
+          .from('client-logos')
+          .upload(fileName, logoFile);
+        if (uploadError) throw uploadError;
+
+        const { publicURL, error: urlError } = supabase
+          .storage
+          .from('client-logos')
+          .getPublicUrl(fileName);
+        if (urlError) throw urlError;
+
+        finalLogoUrl = publicURL;
       }
 
-      const { data } = await axios.put(`/api/clients/${client.id}`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      // Update the client record
+      const { data, error: updateError } = await supabase
+        .from('clients')
+        .update({ name, logo_url: finalLogoUrl })
+        .eq('id', client.id)
+        .single();
+      if (updateError) throw updateError;
 
-      if (onUpdated) onUpdated(data);
+      // Notify parent of the update
+      onUpdated && onUpdated(data);
+      onClose();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update client.');
+      setError(err.message || 'Failed to update client.');
     } finally {
       setLoading(false);
     }

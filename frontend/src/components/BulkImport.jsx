@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
-import axios from '../utils/axiosConfig';
+import { supabase } from '../lib/supabaseClient';
 
 const REQUIRED_FIELDS = [
   { key: 'name', label: 'Item Name (required)' },
@@ -30,6 +30,7 @@ export default function BulkImport({ refresh, clientId }) {
     setPreviewRows([]);
     setMapping({});
     setRawRows([]);
+
     const file = e.target.files[0];
     if (!file) return;
 
@@ -39,23 +40,25 @@ export default function BulkImport({ refresh, clientId }) {
       if (file.name.endsWith('.csv')) {
         const text = evt.target.result;
         const lines = text.split('\n').map(line => line.replace('\r', ''));
-        const headerLine = lines[0].split(',').map(h => h.trim());
-        rows = lines.slice(1).filter(Boolean).map(line =>
-          line.split(',').reduce((acc, val, idx) => {
-            acc[headerLine[idx]] = val.trim();
+        const cols = lines[0].split(',').map(h => h.trim());
+        rows = lines.slice(1).filter(Boolean).map(line => {
+          const vals = line.split(',');
+          return cols.reduce((acc, h, i) => {
+            acc[h] = vals[i]?.trim() || '';
             return acc;
-          }, {})
-        );
-        setHeaders(headerLine);
+          }, {});
+        });
+        setHeaders(cols);
       } else {
-        const workbook = XLSX.read(evt.target.result, { type: 'binary' });
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        rows = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
+        const wb = XLSX.read(evt.target.result, { type: 'binary' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
         setHeaders(rows.length ? Object.keys(rows[0]) : []);
       }
-      setPreviewRows(rows.slice(0, 5));
       setRawRows(rows);
+      setPreviewRows(rows.slice(0, 5));
     };
+
     if (file.name.endsWith('.csv')) {
       reader.readAsText(file);
     } else {
@@ -64,38 +67,47 @@ export default function BulkImport({ refresh, clientId }) {
   };
 
   const handleMappingChange = (appField, excelCol) => {
-    setMapping({ ...mapping, [appField]: excelCol });
+    setMapping(prev => ({ ...prev, [appField]: excelCol }));
   };
 
   const handleImport = async () => {
     setError('');
     setSuccess('');
-    for (let field of REQUIRED_FIELDS) {
+
+    // Ensure required fields are mapped
+    for (const field of REQUIRED_FIELDS) {
       if (!mapping[field.key]) {
         setError(`Map required field: ${field.label}`);
         return;
       }
     }
 
-    const items = rawRows.map(row => {
+    // Build payloads
+    const payloads = rawRows.map(row => {
       const item = {};
       ALL_FIELDS.forEach(f => {
         item[f.key] = mapping[f.key] ? row[mapping[f.key]] : '';
       });
-      return item;
+      return { client_id: clientId, ...item };
     });
 
     try {
-      const res = await axios.post('/api/items/bulk', { items, client_id: clientId });
-      setSuccess(`${res.data.successCount} imported, ${res.data.failCount} failed.`);
+      const { data, error: insertError } = await supabase
+        .from('items')
+        .insert(payloads);
+
+      if (insertError) throw insertError;
+
+      setSuccess(`${data.length} imported.`);
+      // Reset UI
       setRawRows([]);
       setPreviewRows([]);
       setMapping({});
       setHeaders([]);
-      fileRef.current.value = '';
-      refresh();
+      if (fileRef.current) fileRef.current.value = '';
+      if (refresh) refresh();
     } catch (err) {
-      setError(err.response?.data?.message || 'Bulk import failed');
+      setError(err.message || 'Bulk import failed');
     }
   };
 
@@ -105,12 +117,13 @@ export default function BulkImport({ refresh, clientId }) {
         <b>Bulk Import (Excel or CSV)</b>
         <input
           type="file"
-          accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+          accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           ref={fileRef}
           onChange={handleFileChange}
           style={{ marginLeft: '1rem' }}
         />
       </label>
+
       {headers.length > 0 && (
         <div style={{ margin: '1rem 0', background: '#f7f7fa', padding: 16, borderRadius: 8 }}>
           <div><b>Column Mapping:</b></div>
@@ -131,13 +144,16 @@ export default function BulkImport({ refresh, clientId }) {
           ))}
         </div>
       )}
+
       {previewRows.length > 0 && (
         <div style={{ marginBottom: 10, fontSize: '0.95rem', color: '#333' }}>
           <b>Preview:</b>
           <table style={{ borderCollapse: 'collapse', marginTop: 5 }}>
             <thead>
               <tr>
-                {headers.map(h => <th key={h} style={{ border: '1px solid #ccc', padding: 3 }}>{h}</th>)}
+                {headers.map(h => (
+                  <th key={h} style={{ border: '1px solid #ccc', padding: 3 }}>{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -152,13 +168,18 @@ export default function BulkImport({ refresh, clientId }) {
           </table>
         </div>
       )}
+
       {headers.length > 0 && (
-        <button onClick={handleImport} style={{ margin: '0.5rem 0 1rem 0' }}>Import</button>
+        <button onClick={handleImport} style={{ margin: '0.5rem 0 1rem 0' }}>
+          Import
+        </button>
       )}
+
       {error && <div style={{ color: 'red', marginTop: 8 }}>{error}</div>}
       {success && <div style={{ color: 'green', marginTop: 8 }}>{success}</div>}
+
       <div style={{ fontSize: '0.9rem', color: '#666', marginTop: '0.5rem' }}>
-        You can upload Excel (.xlsx) or CSV files. <br />
+        You can upload Excel (.xlsx) or CSV files.<br />
         Map each column to the correct field before importing.
       </div>
     </div>

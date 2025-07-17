@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import axios from '../utils/axiosConfig';
+import { supabase } from '../lib/supabaseClient';
 import ConfirmModal from '../components/ConfirmModal';
 import UserForm from '../components/UserForm';
 
@@ -10,12 +10,17 @@ export default function UsersPage() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
 
+  // You can keep your existing logic for admin detection
   const isAdmin = localStorage.getItem('role') === 'admin';
 
   const fetchUsers = async () => {
     try {
-      const res = await axios.get('/api/users');
-      setUsers(res.data);
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, username, role, created_at')
+        .order('id', { ascending: true });
+      if (error) throw error;
+      setUsers(data);
     } catch (err) {
       console.error('Failed to fetch users:', err);
     }
@@ -37,9 +42,13 @@ export default function UsersPage() {
 
   const handleDelete = async () => {
     try {
-      await axios.delete(`/api/users/${userToDelete.id}`);
-      fetchUsers();
+      const { error } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', userToDelete.id);
+      if (error) throw error;
       setShowConfirm(false);
+      fetchUsers();
     } catch (err) {
       alert('Failed to delete user.');
     }
@@ -102,7 +111,10 @@ export default function UsersPage() {
           <div className="bg-white rounded-lg p-6 w-full max-w-sm shadow-lg">
             <UserForm
               userToEdit={editingUser}
-              onSuccess={fetchUsers}
+              onSuccess={() => {
+                fetchUsers();
+                setShowForm(false);
+              }}
               onClose={() => setShowForm(false)}
             />
           </div>

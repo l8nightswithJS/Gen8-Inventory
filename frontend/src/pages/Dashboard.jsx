@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import ClientCarousel from '../components/ClientCarousel';
 import AddClientModal from '../components/AddClientModal';
-import axios from '../utils/axiosConfig';
+import { supabase } from '../lib/supabaseClient';
 
 export default function Dashboard() {
   const [clients, setClients] = useState([]);
@@ -10,8 +10,12 @@ export default function Dashboard() {
 
   const fetchClients = async () => {
     try {
-      const res = await axios.get('/api/clients');
-      setClients(res.data);
+      const { data, error } = await supabase
+        .from('clients')
+        .select('*')
+        .order('id', { ascending: false });
+      if (error) throw error;
+      setClients(data);
     } catch {
       setError('Could not load clients');
     }
@@ -32,8 +36,11 @@ export default function Dashboard() {
       <ClientCarousel
         clients={clients}
         onClientDeleted={async (id) => {
-          await axios.delete(`/api/clients/${id}`);
-          fetchClients();
+          const { error } = await supabase
+            .from('clients')
+            .delete()
+            .eq('id', id);
+          if (!error) fetchClients();
         }}
         onClientUpdated={fetchClients}
         onAddClient={() => setShowAddModal(true)}
@@ -41,12 +48,11 @@ export default function Dashboard() {
 
       {showAddModal && (
         <AddClientModal
-          isOpen={showAddModal} // ✅ REQUIRED for visibility
-          onClose={() => setShowAddModal(false)}
-          onClientAdded={() => {
+          onSuccess={() => {
             fetchClients();
             setShowAddModal(false);
           }}
+          onClose={() => setShowAddModal(false)}
         />
       )}
     </div>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from '../utils/axiosConfig';
+import { supabase } from '../lib/supabaseClient';
 
 export default function AddClientForm({ onSuccess }) {
   const [name, setName] = useState('');
@@ -19,25 +19,46 @@ export default function AddClientForm({ onSuccess }) {
     }
 
     try {
-      const formData = new FormData();
-      formData.append('name', name);
-      if (logoFile) formData.append('logo', logoFile);
-      else if (logoUrl.trim()) formData.append('logo_url', logoUrl);
+      // 1) Upload the file to Supabase Storage (bucket: "client-logos")
+      let finalLogoUrl = '';
+      if (logoFile) {
+        const fileName = `${Date.now()}_${logoFile.name}`;
+        const { error: uploadError } = await supabase
+          .storage
+          .from('client-logos')
+          .upload(fileName, logoFile);
+        if (uploadError) throw uploadError;
+        const { publicURL, error: urlError } = supabase
+          .storage
+          .from('client-logos')
+          .getPublicUrl(fileName);
+        if (urlError) throw urlError;
+        finalLogoUrl = publicURL;
+      }
+      // 2) Or use the URL text input if provided
+      else if (logoUrl.trim()) {
+        finalLogoUrl = logoUrl.trim();
+      }
 
-      await axios.post('/api/clients', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      // 3) Insert the new client record
+      const { data, error: insertError } = await supabase
+        .from('clients')
+        .insert([{ name, logo_url: finalLogoUrl }])
+        .single();
+      if (insertError) throw insertError;
 
       setSuccess('Client added!');
       setName('');
       setLogoFile(null);
       setLogoUrl('');
 
+      // notify parent after a brief delay
       setTimeout(() => {
-        if (onSuccess) onSuccess();
-      }, 700);
+        onSuccess && onSuccess(data);
+      }, 500);
     } catch (err) {
-      setError(err.response?.data?.message || 'Error adding client');
+      console.error(err);
+      setError(err.message || 'Error adding client');
     }
   };
 
@@ -58,7 +79,7 @@ export default function AddClientForm({ onSuccess }) {
       />
 
       <div>
-        <label className="block text-sm font-medium mb-1">Upload Logo (Image)</label>
+        <label className="block text-sm font-medium mb-1">Upload Logo</label>
         <input
           type="file"
           accept="image/*"
