@@ -1,8 +1,10 @@
 // src/utils/axiosConfig.js
 import axios from 'axios';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
 const instance = axios.create({
-  baseURL: 'http://localhost:8000',   // or wherever your Express server runs
+  baseURL: API_URL,   // now comes from your env or falls back to localhost
 });
 
 // inject token

@@ -1,5 +1,6 @@
+// src/components/UserForm.jsx
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import axios from '../utils/axiosConfig';
 
 export default function UserForm({ onSuccess, userToEdit, onClose }) {
   const [username, setUsername] = useState('');
@@ -17,50 +18,41 @@ export default function UserForm({ onSuccess, userToEdit, onClose }) {
       setRole('staff');
       setPassword('');
     }
+    setError('');
   }, [userToEdit]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
-    // Validation
     if (!username.trim() || (!userToEdit && !password.trim())) {
       setError('Username and password are required.');
       return;
     }
 
     try {
-      // Build payload
       const payload = { username: username.trim(), role };
       if (!userToEdit || password.trim()) {
-        payload.password = password;
+        payload.password = password.trim();
       }
 
-      let result;
       if (userToEdit) {
-        // Update existing user
-        const { data, error: updateError } = await supabase
-          .from('users')
-          .update(payload)
-          .eq('id', userToEdit.id)
-          .single();
-        if (updateError) throw updateError;
-        result = data;
+        // EDIT
+        await axios.put(`/api/users/${userToEdit.id}`, payload);
       } else {
-        // Create new user
-        const { data, error: insertError } = await supabase
-          .from('users')
-          .insert([payload])
-          .single();
-        if (insertError) throw insertError;
-        result = data;
+        // CREATE
+        await axios.post('/api/users', payload);
       }
 
-      onSuccess && onSuccess(result);
-      onClose && onClose();
+      // refresh list first, then close
+      if (onSuccess) await onSuccess();
+      if (onClose) onClose();
     } catch (err) {
-      console.error(err);
-      setError(err.message || 'Failed to submit user.');
+      setError(
+        err.response?.data?.message ||
+        err.message ||
+        'Failed to submit user.'
+      );
     }
   };
 
@@ -75,7 +67,7 @@ export default function UserForm({ onSuccess, userToEdit, onClose }) {
         <input
           type="text"
           value={username}
-          onChange={(e) => setUsername(e.target.value)}
+          onChange={e => setUsername(e.target.value)}
           placeholder="Username"
           className="w-full border border-gray-300 px-3 py-2 rounded"
           required
@@ -84,7 +76,7 @@ export default function UserForm({ onSuccess, userToEdit, onClose }) {
         <input
           type="password"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={e => setPassword(e.target.value)}
           placeholder={userToEdit ? 'New Password (optional)' : 'Password'}
           className="w-full border border-gray-300 px-3 py-2 rounded"
           required={!userToEdit}
@@ -92,7 +84,7 @@ export default function UserForm({ onSuccess, userToEdit, onClose }) {
 
         <select
           value={role}
-          onChange={(e) => setRole(e.target.value)}
+          onChange={e => setRole(e.target.value)}
           className="w-full border border-gray-300 px-3 py-2 rounded"
         >
           <option value="admin">Admin</option>

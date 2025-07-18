@@ -1,26 +1,22 @@
-import React, { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import React, { useState, useEffect } from 'react';
+import axios from '../utils/axiosConfig';
 import ConfirmModal from '../components/ConfirmModal';
 import UserForm from '../components/UserForm';
 
 export default function UsersPage() {
-  const [users, setUsers] = useState([]);
-  const [showForm, setShowForm] = useState(false);
+  const [users, setUsers]             = useState([]);
+  const [showForm, setShowForm]       = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
 
-  // You can keep your existing logic for admin detection
   const isAdmin = localStorage.getItem('role') === 'admin';
 
+  // NOTE: still async, so awaiting fetchUsers() in the form will wait for completion
   const fetchUsers = async () => {
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('id, username, role, created_at')
-        .order('id', { ascending: true });
-      if (error) throw error;
-      setUsers(data);
+      const res = await axios.get('/api/users');
+      setUsers(res.data);
     } catch (err) {
       console.error('Failed to fetch users:', err);
     }
@@ -42,13 +38,9 @@ export default function UsersPage() {
 
   const handleDelete = async () => {
     try {
-      const { error } = await supabase
-        .from('users')
-        .delete()
-        .eq('id', userToDelete.id);
-      if (error) throw error;
+      await axios.delete(`/api/users/${userToDelete.id}`);
+      await fetchUsers();
       setShowConfirm(false);
-      fetchUsers();
     } catch (err) {
       alert('Failed to delete user.');
     }
@@ -77,7 +69,7 @@ export default function UsersPage() {
           </tr>
         </thead>
         <tbody>
-          {users.map((user) => (
+          {users.map(user => (
             <tr key={user.id} className="border-t">
               <td className="p-2">{user.username}</td>
               <td className="p-2 capitalize">{user.role}</td>
@@ -105,23 +97,18 @@ export default function UsersPage() {
         </tbody>
       </table>
 
-      {/* Add/Edit User Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-sm shadow-lg">
             <UserForm
               userToEdit={editingUser}
-              onSuccess={() => {
-                fetchUsers();
-                setShowForm(false);
-              }}
+              onSuccess={fetchUsers}
               onClose={() => setShowForm(false)}
             />
           </div>
         </div>
       )}
 
-      {/* Confirm Delete Modal */}
       {showConfirm && userToDelete && (
         <ConfirmModal
           show={true}
