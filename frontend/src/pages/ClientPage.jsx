@@ -1,65 +1,51 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
-
 import InventoryTable from '../components/InventoryTable';
-import InventoryForm from '../components/InventoryForm';
-import BulkImport from '../components/BulkImport';
-import SearchBar from '../components/SearchBar';
+import InventoryForm  from '../components/InventoryForm';
+import BulkImport     from '../components/BulkImport';
+import SearchBar      from '../components/SearchBar';
 
 export default function ClientPage() {
   const { clientId } = useParams();
-  const navigate = useNavigate();
-  const isAdmin = localStorage.getItem('role') === 'admin';
+  const navigate     = useNavigate();
+  const isAdmin      = localStorage.getItem('role') === 'admin';
 
-  const [client, setClient] = useState({});
-  const [items, setItems]     = useState([]);
-  const [page, setPage]       = useState(1);
-  const [total, setTotal]     = useState(1);
-  const [query, setQuery]     = useState('');
-  const [error, setError]     = useState('');
-  const [showForm, setShowForm]   = useState(false);
+  const [client, setClient]     = useState({});
+  const [items, setItems]       = useState([]);
+  const [page, setPage]         = useState(1);
+  const [total, setTotal]       = useState(1);
+  const [query, setQuery]       = useState('');
+  const [error, setError]       = useState('');
+  const [showAdd, setShowAdd]   = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+  const [showEdit, setShowEdit] = useState(false);
 
-  // Fetch client details
   const fetchClient = async () => {
     try {
-      const { data: [c], error } = await supabase
+      let { data } = await supabase
         .from('clients')
         .select('*')
         .eq('id', clientId)
-        .limit(1);
-      if (error) throw error;
-      setClient(c);
+        .single();
+      setClient(data);
     } catch {
       setError('Unable to load client.');
     }
   };
 
-  // Fetch items with pagination and optional search
   const fetchItems = async (p = 1, q = query) => {
-    const limitVal = 10;
-    const from = (p - 1) * limitVal;
-    const to   = p * limitVal - 1;
-
     try {
-      let qb = supabase
+      let { data, error: e, count } = await supabase
         .from('items')
         .select('*', { count: 'exact' })
-        .eq('client_id', clientId);
-
-      if (q) {
-        qb = qb.or(`name.ilike.*${q}*,part_number.ilike.*${q}*`);
-      }
-
-      const { data, error, count } = await qb
-        .order('id', { ascending: false })
-        .range(from, to);
-
-      if (error) throw error;
-
+        .eq('client_id', clientId)
+        .ilike('name', `%${q}%`)
+        .range((p-1)*10, p*10-1);
+      if (e) throw e;
       setItems(data);
-      setTotal(Math.ceil(count / limitVal));
+      setTotal(Math.ceil(count/10));
       setPage(p);
     } catch {
       setError('Unable to load items.');
@@ -69,64 +55,22 @@ export default function ClientPage() {
   useEffect(() => {
     fetchClient();
     fetchItems();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId]);
 
-  // Export all items for this client as CSV
-  const exportCSV = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('items')
-        .select('*')
-        .eq('client_id', clientId);
-
-      if (error) throw error;
-      if (!data || data.length === 0) {
-        setError('No items to export.');
-        return;
-      }
-
-      const headers = Object.keys(data[0]);
-      const csvRows = [
-        headers.join(','),
-        ...data.map(row =>
-          headers
-            .map(h => `"${String(row[h] ?? '').replace(/"/g, '""')}"`)
-            .join(',')
-        )
-      ];
-
-      const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${client.name || 'items'}_export.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      setError('Unable to export CSV.');
-    }
-  };
-
-  // Close modals and refresh list
   const refreshAndClose = () => {
     fetchItems(page);
-    setShowForm(false);
+    setShowAdd(false);
     setShowImport(false);
+    setShowEdit(false);
   };
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex items-center mb-6">
-        <button
-          className="text-blue-600 hover:underline mr-4"
-          onClick={() => navigate('/dashboard')}
-        >
+        <button onClick={() => navigate('/dashboard')} className="text-blue-600 hover:underline mr-4">
           ← Back
         </button>
-        <h2 className="text-2xl font-semibold">
-          {client.name || 'Loading…'}
-        </h2>
+        <h2 className="text-2xl font-semibold">{client.name || 'Loading…'}</h2>
       </div>
 
       {error && (
@@ -137,34 +81,32 @@ export default function ClientPage() {
 
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
         <SearchBar
-          onSearch={(q) => {
+          onSearch={q => {
             setQuery(q);
             fetchItems(1, q);
           }}
         />
         <div className="flex flex-wrap gap-2">
           <button
-            onClick={exportCSV}
+            onClick={() => window.open(`/api/items/export?client_id=${clientId}`, '_blank')}
             className="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded"
           >
             Export CSV
           </button>
-          {isAdmin && (
-            <>
-              <button
-                onClick={() => setShowForm(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded"
-              >
-                + Add Item
-              </button>
-              <button
-                onClick={() => setShowImport(true)}
-                className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded"
-              >
-                Bulk Import
-              </button>
-            </>
-          )}
+          {isAdmin && <>
+            <button
+              onClick={() => setShowAdd(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded"
+            >
+              + Add Item
+            </button>
+            <button
+              onClick={() => setShowImport(true)}
+              className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded"
+            >
+              Bulk Import
+            </button>
+          </>}
         </div>
       </div>
 
@@ -172,35 +114,44 @@ export default function ClientPage() {
         items={items}
         page={page}
         totalPages={total}
-        onPage={(p) => fetchItems(p)}
+        onPage={fetchItems}
         refresh={() => fetchItems(page)}
         role={isAdmin ? 'admin' : 'viewer'}
+        onEdit={item => {
+          setEditItem(item);
+          setShowEdit(true);
+        }}
       />
 
-      {items.length === 0 && (
+      {/* No-items message */}
+      {items.length === 0 && !error && (
         <p className="text-center text-gray-500 mt-6">
-          No inventory items found for this client.
+          No inventory items found.
         </p>
       )}
 
       {/* Add Item Modal */}
-      {showForm && (
+      {showAdd && (
         <div className="fixed inset-0 bg-black bg-opacity-30 z-40 flex items-center justify-center">
           <div className="bg-white p-6 rounded shadow-md max-w-2xl w-full relative">
             <button
-              onClick={() => setShowForm(false)}
+              onClick={() => setShowAdd(false)}
               className="absolute top-2 right-2 text-gray-600 hover:text-black text-xl"
             >
               &times;
             </button>
-            <InventoryForm clientId={clientId} refresh={refreshAndClose} />
+            <InventoryForm
+              clientId={clientId}
+              onSuccess={refreshAndClose}
+              onClose={() => setShowAdd(false)}
+            />
           </div>
         </div>
       )}
 
       {/* Bulk Import Modal */}
       {showImport && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 z-40 flex items-center justify-center">
+        <div className="fixed inset-0 bg-black bg-opacity-30 z-40 flex items‑center justify‑center">
           <div className="bg-white p-6 rounded shadow-md max-w-3xl w-full relative overflow-y-auto max-h-[90vh]">
             <button
               onClick={() => setShowImport(false)}
@@ -209,6 +160,26 @@ export default function ClientPage() {
               &times;
             </button>
             <BulkImport clientId={clientId} refresh={refreshAndClose} />
+          </div>
+        </div>
+      )}
+
+      {/* Edit Item Modal */}
+      {showEdit && editItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 z-40 flex items-center justify-center">
+          <div className="bg-white p-6 rounded shadow-md max-w-2xl w-full relative">
+            <button
+              onClick={() => setShowEdit(false)}
+              className="absolute top-2 right-2 text-gray-600 hover:text-black text-xl"
+            >
+              &times;
+            </button>
+            <InventoryForm
+              clientId={clientId}
+              item={editItem}
+              onSuccess={refreshAndClose}
+              onClose={() => setShowEdit(false)}
+            />
           </div>
         </div>
       )}

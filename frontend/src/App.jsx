@@ -7,7 +7,6 @@ import ClientPage from './pages/ClientPage';
 import Login from './pages/Login';
 import PrivateRoute from './components/PrivateRoute';
 import UsersPage from './pages/UsersPage';
-import EditItemPage from './pages/EditItemPage';
 
 export default function App() {
   return (
@@ -15,7 +14,9 @@ export default function App() {
       <Navbar />
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" />} />
+
         <Route path="/login" element={<Login />} />
+
         <Route
           path="/dashboard"
           element={
@@ -24,6 +25,7 @@ export default function App() {
             </PrivateRoute>
           }
         />
+
         <Route
           path="/clients/:clientId"
           element={
@@ -32,6 +34,7 @@ export default function App() {
             </PrivateRoute>
           }
         />
+
         <Route
           path="/users"
           element={
@@ -40,14 +43,8 @@ export default function App() {
             </PrivateRoute>
           }
         />
-        <Route
-          path="/edit/:id"
-          element={
-            <PrivateRoute>
-              <EditItemPage />
-            </PrivateRoute>
-          }
-        />
+
+        {/* edit/:id removed — editing now happens in a modal within ClientPage */}
       </Routes>
     </Router>
   );
