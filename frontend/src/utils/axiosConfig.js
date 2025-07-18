@@ -1,18 +1,20 @@
 // src/utils/axiosConfig.js
 import axios from 'axios';
 
-// In dev this will be undefined so we fall back to localhost:8000.
-// In production Vercel you must define REACT_APP_API_URL to be your live API.
+// In production (Vercel/etc) set REACT_APP_API_URL to your real backend URL.
+// Locally, it'll default back to http://localhost:8000
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 const instance = axios.create({
   baseURL: API_URL,
 });
 
-// attach stored token (if any) to every request
+// Automatically attach your stored JWT on every request
 instance.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
   return config;
 });
 
