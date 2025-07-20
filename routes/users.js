@@ -1,49 +1,32 @@
-const express = require('express');
-const { body, param } = require('express-validator');
-const controller = require('../controllers/userController');
-const authenticate = require('../middleware/authMiddleware');
+// routes/users.js
+const express     = require('express');
+const { param }   = require('express-validator');
+const controller  = require('../controllers/userController');
+const authenticate= require('../middleware/authMiddleware');
 const requireRole = require('../middleware/requireRole');
 const { handleValidation } = require('../middleware/validationMiddleware');
 
 const router = express.Router();
 
-// all /api/users endpoints require authentication + admin
+// all /api/users require auth + admin
 router.use(authenticate);
 router.use(requireRole('admin'));
 
+// existing CRUD…
 router.get('/', controller.getAllUsers);
+router.get('/:id', /*…*/);
+router.post('/', /*…*/);
+router.put('/:id', /*…*/);
+router.delete('/:id', /*…*/);
 
-router.get(
-  '/:id',
-  param('id').isInt().withMessage('must be an integer'),
-  handleValidation,
-  controller.getUserById
-);
-
-router.post(
-  '/',
-  body('username').isString().notEmpty().withMessage('required'),
-  body('password').isLength({ min: 6 }).withMessage('minimum 6 characters'),
-  body('role').isIn(['admin', 'staff']).withMessage('must be admin or staff'),
-  handleValidation,
-  controller.createUser
-);
+// new endpoints:
+router.get('/pending', controller.getPendingUsers);
 
 router.put(
-  '/:id',
-  param('id').isInt().withMessage('must be an integer'),
-  body('username').optional().isString().notEmpty(),
-  body('password').optional().isLength({ min: 6 }),
-  body('role').optional().isIn(['admin', 'staff']),
+  '/:id/approve',
+  param('id').isInt(),
   handleValidation,
-  controller.updateUser
-);
-
-router.delete(
-  '/:id',
-  param('id').isInt().withMessage('must be an integer'),
-  handleValidation,
-  controller.deleteUser
+  controller.approveUser
 );
 
 module.exports = router;

@@ -1,22 +1,32 @@
 // src/App.jsx
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import Navbar from './components/Navbar';
-import Dashboard from './pages/Dashboard';
-import ClientPage from './pages/ClientPage';
-import Login from './pages/Login';
-import PrivateRoute from './components/PrivateRoute';
-import UsersPage from './pages/UsersPage';
+import React from 'react'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+
+import Navbar        from './components/Navbar'
+import IdleLogout    from './components/IdleLogout'    // ← new
+import Dashboard     from './pages/Dashboard'
+import ClientPage    from './pages/ClientPage'
+import UsersPage     from './pages/UsersPage'
+import Login         from './pages/Login'
+import SplashPage    from './pages/SplashPage'
+import PrivateRoute  from './components/PrivateRoute'
 
 export default function App() {
   return (
     <Router>
-      <Navbar />
-      <Routes>
-        <Route path="/" element={<Navigate to="/dashboard" />} />
+      {/* kick off our idle‑logout watcher */}
+      <IdleLogout timeout={15 * 60 * 1000} />
 
+      <Navbar />
+
+      <Routes>
+        {/* Splash */}
+        <Route path="/" element={<SplashPage />} />
+
+        {/* Public */}
         <Route path="/login" element={<Login />} />
 
+        {/* Protected */}
         <Route
           path="/dashboard"
           element={
@@ -25,7 +35,6 @@ export default function App() {
             </PrivateRoute>
           }
         />
-
         <Route
           path="/clients/:clientId"
           element={
@@ -34,7 +43,6 @@ export default function App() {
             </PrivateRoute>
           }
         />
-
         <Route
           path="/users"
           element={
@@ -44,8 +52,9 @@ export default function App() {
           }
         />
 
-        {/* edit/:id removed — editing now happens in a modal within ClientPage */}
+        {/* Catch‑all → Splash */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
-  );
+  )
 }
