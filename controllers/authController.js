@@ -4,12 +4,19 @@ const bcrypt    = require('bcryptjs');
 const supabase  = require('../models/db');
 const { JWT_SECRET } = require('../config');
 
+/**
+ * POST /api/auth/register
+ * Creates a new user (approved=false) pending admin approval.
+ */
 exports.register = async (req, res, next) => {
   try {
     const { username, password, role } = req.body;
-    // hash & insert with approved=false
+
+    // Hash password
     const hash = bcrypt.hashSync(password, 10);
-    const { data: user, error } = await supabase
+
+    // Insert user with approved=false
+    const { data: newUser, error } = await supabase
       .from('users')
       .insert({
         username,
@@ -20,13 +27,14 @@ exports.register = async (req, res, next) => {
       .single();
 
     if (error) {
+      // Unique username violation
       if (error.code === '23505') {
         return res.status(400).json({ message: 'Username already exists' });
       }
       throw error;
     }
-    // success: let them know request is pending
-    res
+
+    return res
       .status(201)
       .json({ message: 'Registration submitted – awaiting admin approval.' });
   } catch (err) {
@@ -34,9 +42,15 @@ exports.register = async (req, res, next) => {
   }
 };
 
+/**
+ * POST /api/auth/login
+ * Authenticates only approved users.
+ */
 exports.login = async (req, res, next) => {
   try {
     const { username, password } = req.body;
+
+    // Fetch user by username
     const { data: [user], error } = await supabase
       .from('users')
       .select('*')
@@ -44,19 +58,25 @@ exports.login = async (req, res, next) => {
       .limit(1);
 
     if (error) throw error;
+
+    // Validate credentials
     if (!user || !bcrypt.compareSync(password, user.password)) {
       return res.status(401).json({ message: 'Invalid username or password' });
     }
-    if (!user.approved) {
+
+    // Check approval flag
+    if (user.approved === false) {
       return res.status(403).json({ message: 'Account pending approval' });
     }
 
+    // Issue JWT
     const token = jwt.sign(
       { id: user.id, role: user.role, username: user.username },
       JWT_SECRET,
       { expiresIn: '8h' }
     );
-    res.json({ token, role: user.role, username: user.username });
+
+    return res.json({ token, role: user.role, username: user.username });
   } catch (err) {
     next(err);
   }
