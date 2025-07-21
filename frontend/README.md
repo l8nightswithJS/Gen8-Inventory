@@ -105,7 +105,6 @@ name, part_number, description, lot_number, quantity, location, has_lot
 ## 🛡️ Security & Compliance
 
 - All endpoints protected by JWT
-- Inputs validated server-side
 - Accessibility-friendly UI design
 - Passwords hashed using bcrypt
 
