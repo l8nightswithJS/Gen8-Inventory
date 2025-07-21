@@ -46,7 +46,7 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-white to-gray-50 px-4">
+    <div className="h-full flex items-center justify-center bg-gradient-to-b from-white to-gray-50 px-4 overflow-hidden">
       <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-xl">
         <h2 className="text-2xl font-extrabold text-gray-900 text-center mb-6">
           Login

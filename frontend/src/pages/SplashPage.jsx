@@ -27,7 +27,7 @@ export default function SplashPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-b from-white to-gray-50">
+    <div className="h-full flex flex-col bg-gradient-to-b from-white to-gray-50 overflow-hidden">
 
       <main className="flex-grow flex flex-col items-center justify-center text-center px-6">
         <img src={logoSrc} alt="Gener8" className="h-28 mb-6 animate-pulse" />
@@ -95,13 +95,7 @@ export default function SplashPage() {
             </div>
           </form>
         )}
-      </main>
-
-      {/* footer banner */}
-      
-      <footer className="py-6 bg-gray-100 text-center text-sm text-gray-500">
-        © {new Date().getFullYear()} Gener8 Inventory. All rights reserved.
-      </footer>
+      </main>      
     </div>
   );
 }

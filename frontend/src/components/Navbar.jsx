@@ -9,7 +9,6 @@ export default function Navbar() {
   const role     = localStorage.getItem('role')     // "admin" or "staff"
 
   // never render on the login page
-  if (location.pathname === '/login') return null
 
   return (
     <nav className="bg-gray-800 text-white px-4 py-3 shadow-md flex justify-between items-center">
