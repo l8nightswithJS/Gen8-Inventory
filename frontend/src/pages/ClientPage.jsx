@@ -1,3 +1,4 @@
+// src/pages/ClientPage.jsx
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
@@ -22,7 +23,7 @@ export default function ClientPage() {
   const [editItem, setEditItem]       = useState(null);
   const [showEdit, setShowEdit]       = useState(false);
 
-  // Stable fetchClient
+  // fetch client details
   const fetchClient = useCallback(async () => {
     try {
       const { data } = await supabase
@@ -36,7 +37,7 @@ export default function ClientPage() {
     }
   }, [clientId]);
 
-  // Stable fetchItems
+  // fetch items list (with pagination + search)
   const fetchItems = useCallback(
     async (p = 1) => {
       try {
@@ -57,7 +58,7 @@ export default function ClientPage() {
     [clientId, query]
   );
 
-  // On mount or whenever clientId / query changes:
+  // initial load + reload when clientId or query changes
   useEffect(() => {
     fetchClient();
     fetchItems(1);
@@ -72,6 +73,7 @@ export default function ClientPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      {/* header / back button */}
       <div className="flex items-center mb-6">
         <button
           onClick={() => navigate('/dashboard')}
@@ -84,20 +86,24 @@ export default function ClientPage() {
         </h2>
       </div>
 
+      {/* error banner */}
       {error && (
         <div className="bg-red-100 text-red-700 p-3 mb-4 rounded border border-red-300">
           {error}
         </div>
       )}
 
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+      {/* search + action buttons */}
+      <div className="flex flex-col space-y-2 md:flex-row md:space-y-0 md:items-center md:justify-between mb-4">
         <SearchBar
           onSearch={(q) => {
             setQuery(q);
             fetchItems(1);
           }}
+          className="w-full md:w-auto"
         />
-        <div className="flex flex-wrap gap-2">
+
+        <div className="flex flex-wrap justify-end gap-2">
           <button
             onClick={() =>
               window.open(
@@ -105,29 +111,31 @@ export default function ClientPage() {
                 '_blank'
               )
             }
-            className="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded"
+            className="bg-green-600 hover:bg-green-700 text-white text-sm py-1.5 px-3 rounded"
           >
-            Export CSV
+            Export
           </button>
+
           {isAdmin && (
             <>
               <button
                 onClick={() => setShowAdd(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded"
+                className="bg-blue-600 hover:bg-blue-700 text-white text-sm py-1.5 px-3 rounded"
               >
-                + Add Item
+                + Add
               </button>
               <button
                 onClick={() => setShowImport(true)}
-                className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded"
+                className="bg-purple-600 hover:bg-purple-700 text-white text-sm py-1.5 px-3 rounded"
               >
-                Bulk Import
+                Bulk
               </button>
             </>
           )}
         </div>
       </div>
 
+      {/* inventory table */}
       <InventoryTable
         items={items}
         page={page}
@@ -141,6 +149,7 @@ export default function ClientPage() {
         }}
       />
 
+      {/* no-items message */}
       {items.length === 0 && !error && (
         <p className="text-center text-gray-500 mt-6">
           No inventory items found.

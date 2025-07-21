@@ -1,8 +1,13 @@
 // src/components/Footer.jsx
 import React from 'react';
+import { useLocation } from "react-router-dom";
 import logog8 from '../assets/logog8.png';
 
 export default function Footer() {
+  const { pathname } = useLocation();
+
+  // hide on any client page
+  if (pathname.startsWith("/clients/")) return null;
   return (
     <section className="bg-gray-50">
       <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-6">
