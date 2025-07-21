@@ -10,14 +10,17 @@ import UsersPage     from './pages/UsersPage'
 import Login         from './pages/Login'
 import SplashPage    from './pages/SplashPage'
 import PrivateRoute  from './components/PrivateRoute'
+import Footer from './components/footer'
 
 export default function App() {
   return (
+    
     <Router>
+      <Navbar />
       {/* kick off our idle‑logout watcher */}
       <IdleLogout timeout={15 * 60 * 1000} />
 
-      <Navbar />
+      
 
       <Routes>
         {/* Splash */}
@@ -55,6 +58,7 @@ export default function App() {
         {/* Catch‑all → Splash */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <Footer />
     </Router>
   )
 }

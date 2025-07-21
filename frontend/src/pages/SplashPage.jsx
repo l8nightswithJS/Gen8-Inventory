@@ -2,7 +2,6 @@
 import React, { useState } from 'react';
 import { Link }            from 'react-router-dom';
 import axios                from '../utils/axiosConfig';
-import logog8 from '../assets/logog8.png';
 const logoSrc = 'https://www.gener8.net/wp-content/uploads/2023/02/logo.svg';
 
 export default function SplashPage() {
@@ -29,9 +28,6 @@ export default function SplashPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-white to-gray-50">
-      <nav className="absolute top-0 right-0 p-6 z-10">
-        <Link to="/login" className="text-gray-700 hover:underline">Login</Link>
-      </nav>
 
       <main className="flex-grow flex flex-col items-center justify-center text-center px-6">
         <img src={logoSrc} alt="Gener8" className="h-28 mb-6 animate-pulse" />
@@ -102,32 +98,7 @@ export default function SplashPage() {
       </main>
 
       {/* footer banner */}
-      <section className="bg-gray-50 border-t py-8">
-        {/* … your existing footer code … */}
-        <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <img
-              src={logog8}
-              alt="Warehouse icon"
-              className="w-20 h-20 flex-shrink-0"
-            />
-            <blockquote className="italic text-gray-700">
-              <p>“Inventory accuracy is the hallmark of operational excellence.”</p>
-              <cite className="block mt-2 not-italic text-sm font-semibold text-gray-800">
-                — Gener8 Team
-              </cite>
-            </blockquote>
-          </div>
-          <div className="text-center md:text-right">
-            <a
-              href="mailto:feedback@gener8.net"
-              className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-2 rounded-md shadow transition"
-            >
-              Send Feedback
-            </a>
-          </div>
-        </div>
-      </section>
+      
       <footer className="py-6 bg-gray-100 text-center text-sm text-gray-500">
         © {new Date().getFullYear()} Gener8 Inventory. All rights reserved.
       </footer>

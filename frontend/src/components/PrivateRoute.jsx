@@ -20,7 +20,7 @@ export default function PrivateRoute({ children }) {
     // clear any stale auth
     localStorage.removeItem('token')
     localStorage.removeItem('role')
-    return <Navigate to="/login" replace />
+    return <Navigate to="/" replace />
   }
 
   return children
