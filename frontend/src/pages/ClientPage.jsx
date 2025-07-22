@@ -1,4 +1,3 @@
-// src/pages/ClientPage.jsx
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
@@ -23,7 +22,6 @@ export default function ClientPage() {
   const [editItem, setEditItem]       = useState(null);
   const [showEdit, setShowEdit]       = useState(false);
 
-  // fetch client details
   const fetchClient = useCallback(async () => {
     try {
       const { data } = await supabase
@@ -37,7 +35,6 @@ export default function ClientPage() {
     }
   }, [clientId]);
 
-  // fetch items list (with pagination + search)
   const fetchItems = useCallback(
     async (p = 1) => {
       try {
@@ -58,7 +55,6 @@ export default function ClientPage() {
     [clientId, query]
   );
 
-  // initial load + reload when clientId or query changes
   useEffect(() => {
     fetchClient();
     fetchItems(1);
@@ -72,8 +68,7 @@ export default function ClientPage() {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      {/* header / back button */}
+    <div className="px-4 py-6 sm:px-6 lg:px-8 max-w-7xl mx-auto">
       <div className="flex items-center mb-6">
         <button
           onClick={() => navigate('/dashboard')}
@@ -86,21 +81,19 @@ export default function ClientPage() {
         </h2>
       </div>
 
-      {/* error banner */}
       {error && (
         <div className="bg-red-100 text-red-700 p-3 mb-4 rounded border border-red-300">
           {error}
         </div>
       )}
 
-      {/* search + action buttons */}
-      <div className="flex flex-col space-y-2 md:flex-row md:space-y-0 md:items-center md:justify-between mb-4">
+      <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:items-center sm:justify-between mb-4">
         <SearchBar
           onSearch={(q) => {
             setQuery(q);
             fetchItems(1);
           }}
-          className="w-full md:w-auto"
+          className="w-full sm:w-auto"
         />
 
         <div className="flex flex-wrap justify-end gap-2">
@@ -135,7 +128,6 @@ export default function ClientPage() {
         </div>
       </div>
 
-      {/* inventory table */}
       <InventoryTable
         items={items}
         page={page}
@@ -149,17 +141,16 @@ export default function ClientPage() {
         }}
       />
 
-      {/* no-items message */}
       {items.length === 0 && !error && (
         <p className="text-center text-gray-500 mt-6">
           No inventory items found.
         </p>
       )}
 
-      {/* Add Item Modal */}
+      {/* Add Item */}
       {showAdd && (
         <div className="fixed inset-0 bg-black bg-opacity-30 z-40 flex items-center justify-center">
-          <div className="bg-white p-6 rounded shadow-md max-w-2xl w-full relative">
+          <div className="bg-white p-6 rounded shadow-md max-w-2xl w-full mx-4 sm:mx-auto relative">
             <button
               onClick={() => setShowAdd(false)}
               className="absolute top-2 right-2 text-gray-600 hover:text-black text-xl"
@@ -175,10 +166,11 @@ export default function ClientPage() {
         </div>
       )}
 
-      {/* Bulk Import Modal */}
+      {/* Bulk Import */}
       {showImport && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 z-40 flex items‑center justify‑center">
-          <div className="bg-white p-6 rounded shadow-md max-w-3xl w-full relative overflow-y-auto max-h-[90vh]">
+        <div className="fixed inset-0 bg-black bg-opacity-30 z-40 flex items-center justify-center">
+          <div className="bg-white p-6 rounded shadow-md max-w-3xl w-full mx-4 sm:mx-auto 
+                          relative overflow-y-auto max-h-[90vh]">
             <button
               onClick={() => setShowImport(false)}
               className="absolute top-2 right-2 text-gray-600 hover:text-black text-xl"
@@ -190,10 +182,10 @@ export default function ClientPage() {
         </div>
       )}
 
-      {/* Edit Item Modal */}
+      {/* Edit Item */}
       {showEdit && editItem && (
         <div className="fixed inset-0 bg-black bg-opacity-30 z-40 flex items-center justify-center">
-          <div className="bg-white p-6 rounded shadow-md max-w-2xl w-full relative">
+          <div className="bg-white p-6 rounded shadow-md max-w-2xl w-full mx-4 sm:mx-auto relative">
             <button
               onClick={() => setShowEdit(false)}
               className="absolute top-2 right-2 text-gray-600 hover:text-black text-xl"

@@ -1,27 +1,23 @@
-// src/components/Navbar.jsx
 import React from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 
 export default function Navbar() {
   const navigate = useNavigate()
   const location = useLocation()
-  const token    = localStorage.getItem('token')    // your auth flag
-  const role     = localStorage.getItem('role')     // "admin" or "staff"
-
-  // never render on the login page
+  const token    = localStorage.getItem('token')
+  const role     = localStorage.getItem('role')
 
   return (
-    <nav className="bg-gray-800 text-white px-4 py-3 shadow-md flex justify-between items-center">
-      {/* Brand always goes to dashboard */}
+    <nav className="bg-gray-800 text-white px-4 sm:px-6 lg:px-8 py-3 sm:py-4 shadow-md flex justify-between items-center">
       <Link
-        to={ token ? '/dashboard' : '/' }
+        to={token ? '/dashboard' : '/'}
         className="text-lg font-bold hover:text-gray-300"
       >
-        <span className="text-white">Gener8</span> <span className="text-blue-400">Inventory</span>
+        <span className="text-white">Gener8</span>{' '}
+        <span className="text-blue-400">Inventory</span>
       </Link>
 
       <div className="flex space-x-2 items-center">
-        {/* If not logged in, show Login */}
         {!token && (
           <Link
             to="/login"
@@ -31,7 +27,6 @@ export default function Navbar() {
           </Link>
         )}
 
-        {/* If logged in as admin, show Manage Users */}
         {token && role === 'admin' && location.pathname !== '/users' && (
           <button
             onClick={() => navigate('/users')}
@@ -41,7 +36,6 @@ export default function Navbar() {
           </button>
         )}
 
-        {/* If logged in, show Logout */}
         {token && (
           <button
             onClick={() => {
