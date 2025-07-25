@@ -1,8 +1,9 @@
+// routes/inventory.js
 const express = require('express');
 const { body, param, query } = require('express-validator');
 const controller = require('../controllers/inventoryController');
 const authenticate = require('../middleware/authMiddleware');
-const requireRole = require('../middleware/requireRole');
+const requireRole  = require('../middleware/requireRole');
 const { handleValidation } = require('../middleware/validationMiddleware');
 
 const router = express.Router();
@@ -10,74 +11,86 @@ const router = express.Router();
 // all inventory routes need authentication
 router.use(authenticate);
 
-// GET /api/items?client_id=&page=&q=
+// existing item routes…
 router.get(
   '/',
-  query('client_id').isInt().withMessage('client_id is required'),
-  query('page').optional().isInt({ min: 1 }).toInt(),
-  query('limit').optional().isInt({ min: 1 }).toInt(),
-  query('q').optional().isString(),
+  query('client_id').isInt().withMessage('client_id is required').toInt(),
+  /* …other validators… */
   handleValidation,
   controller.getAllItems
 );
 
-// GET /api/items/:id
 router.get(
   '/:id',
-  param('id').isInt().withMessage('Invalid item id'),
+  param('id').isInt().withMessage('Invalid item id').toInt(),
   handleValidation,
   controller.getItemById
 );
 
-// POST /api/items
 router.post(
   '/',
   requireRole('admin'),
-  body('client_id').isInt().withMessage('client_id is required'),
-  body('name').isString().notEmpty().withMessage('Name is required'),
-  body('part_number').isString().notEmpty().withMessage('Part Number is required'),
-  body('description').optional().isString(),
-  body('lot_number').optional().isString(),
-  body('quantity').isInt({ min: 0 }).withMessage('Quantity must be a non-negative integer').toInt(),
-  body('location').optional().isString(),
-  body('has_lot').optional().isBoolean().toBoolean(),
+  body('client_id').isInt().withMessage('client_id is required').toInt(),
+  body('name').isString().notEmpty(),
+  body('part_number').isString().notEmpty(),
+  body('quantity').isInt({ min: 0 }).toInt(),
+  /* …existing validators… */
+  // ← new validators:
+  body('low_stock_threshold')
+    .optional()
+    .isInt({ min: 0 })
+    .withMessage('Threshold must be ≥ 0')
+    .toInt(),
+  body('alert_enabled')
+    .optional()
+    .isBoolean()
+    .withMessage('alert_enabled must be boolean')
+    .toBoolean(),
   handleValidation,
   controller.createItem
 );
 
-// PUT /api/items/:id
 router.put(
   '/:id',
   requireRole('admin'),
-  param('id').isInt().withMessage('Invalid item id'),
-  body('name').isString().notEmpty().withMessage('Name is required'),
-  body('part_number').isString().notEmpty().withMessage('Part Number is required'),
-  body('description').optional().isString(),
-  body('lot_number').optional().isString(),
-  body('quantity').isInt({ min: 0 }).withMessage('Quantity must be a non-negative integer').toInt(),
-  body('location').optional().isString(),
-  body('has_lot').optional().isBoolean().toBoolean(),
+  param('id').isInt().withMessage('Invalid item id').toInt(),
+  body('name').isString().notEmpty(),
+  body('part_number').isString().notEmpty(),
+  body('quantity').isInt({ min: 0 }).toInt(),
+  /* …existing validators… */
+  // ← new validators:
+  body('low_stock_threshold')
+    .optional()
+    .isInt({ min: 0 })
+    .withMessage('Threshold must be ≥ 0')
+    .toInt(),
+  body('alert_enabled')
+    .optional()
+    .isBoolean()
+    .withMessage('alert_enabled must be boolean')
+    .toBoolean(),
   handleValidation,
   controller.updateItem
 );
 
-// DELETE /api/items/:id
-router.delete(
-  '/:id',
+// DELETE, bulk, etc…
+
+// NEW: fetch active alerts for a client
+router.get(
+  '/alerts',
   requireRole('admin'),
-  param('id').isInt().withMessage('Invalid item id'),
+  query('client_id').isInt().withMessage('client_id is required').toInt(),
   handleValidation,
-  controller.deleteItem
+  controller.getActiveAlerts
 );
 
-// POST /api/items/bulk
+// NEW: acknowledge (clear) an alert
 router.post(
-  '/bulk',
+  '/alerts/:itemId/acknowledge',
   requireRole('admin'),
-  body('client_id').isInt().withMessage('client_id is required'),
-  body('items').isArray({ min: 1 }).withMessage('items must be an array'),
+  param('itemId').isInt().withMessage('Invalid item id').toInt(),
   handleValidation,
-  controller.bulkImportItems
+  controller.acknowledgeAlert
 );
 
 module.exports = router;

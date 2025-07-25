@@ -1,11 +1,12 @@
+// src/components/InventoryForm.jsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
 export default function InventoryForm({
   clientId,
-  item = null,      // ← if set, we’re editing
-  onSuccess,        // called after create/update
-  onClose          // closes the modal
+  item = null,
+  onSuccess,
+  onClose
 }) {
   const [form, setForm] = useState({
     name: '',
@@ -14,21 +15,29 @@ export default function InventoryForm({
     quantity: '',
     location: '',
     lot_number: '',
-    has_lot: false
+    has_lot: false,
+    // ← New fields
+    low_stock_threshold: '',
+    alert_enabled: false,
   });
   const [error, setError] = useState('');
 
-  // preload when editing
+  // preload form when editing
   useEffect(() => {
     if (item) {
       setForm({
-        name:        item.name || '',
+        name: item.name || '',
         part_number: item.part_number || '',
         description: item.description || '',
-        quantity:    item.quantity != null ? String(item.quantity) : '',
-        location:    item.location || '',
-        lot_number:  item.lot_number || '',
-        has_lot:     !!item.has_lot
+        quantity: item.quantity != null ? String(item.quantity) : '',
+        location: item.location || '',
+        lot_number: item.lot_number || '',
+        has_lot: !!item.has_lot,
+        // ← initialize new fields
+        low_stock_threshold: item.low_stock_threshold != null
+          ? String(item.low_stock_threshold)
+          : '',
+        alert_enabled: !!item.alert_enabled,
       });
     }
   }, [item]);
@@ -42,10 +51,16 @@ export default function InventoryForm({
   };
 
   const validate = () => {
-    if (!form.name.trim())       return setError('Name is required.');
-    if (!form.part_number.trim())return setError('Part # is required.');
+    if (!form.name.trim()) return setError('Name is required.');
+    if (!form.part_number.trim()) return setError('Part # is required.');
     const q = parseInt(form.quantity, 10);
-    if (isNaN(q) || q < 0)       return setError('Quantity must be ≥ 0.');
+    if (isNaN(q) || q < 0) return setError('Quantity must be ≥ 0.');
+    if (form.low_stock_threshold !== '') {
+      const t = parseInt(form.low_stock_threshold, 10);
+      if (isNaN(t) || t < 0) {
+        return setError('Threshold must be ≥ 0.');
+      }
+    }
     setError('');
     return true;
   };
@@ -55,26 +70,29 @@ export default function InventoryForm({
     if (!validate()) return;
 
     const payload = {
-      client_id:   clientId,
-      name:        form.name.trim(),
-      part_number: form.part_number.trim(),
-      description: form.description,
-      quantity:    parseInt(form.quantity, 10),
-      location:    form.location,
-      has_lot:     form.has_lot,
-      lot_number:  form.has_lot ? form.lot_number : ''
+      client_id:           clientId,
+      name:                form.name.trim(),
+      part_number:         form.part_number.trim(),
+      description:         form.description,
+      quantity:            parseInt(form.quantity, 10),
+      location:            form.location,
+      has_lot:             form.has_lot,
+      lot_number:          form.has_lot ? form.lot_number : '',
+      // ← include new fields
+      low_stock_threshold: form.low_stock_threshold
+        ? parseInt(form.low_stock_threshold, 10)
+        : 0,
+      alert_enabled:       form.alert_enabled,
     };
 
     try {
       let res;
       if (item) {
-        // UPDATE
         res = await supabase
           .from('items')
           .update(payload)
           .eq('id', item.id);
       } else {
-        // INSERT
         res = await supabase
           .from('items')
           .insert([payload]);
@@ -93,6 +111,7 @@ export default function InventoryForm({
       <h3 className="text-xl font-semibold">
         {item ? 'Edit Item' : 'Add Inventory Item'}
       </h3>
+
       {error && <p className="text-red-600">{error}</p>}
 
       <input
@@ -102,6 +121,7 @@ export default function InventoryForm({
         onChange={handleChange}
         className="w-full border border-gray-300 px-3 py-2 rounded"
       />
+
       <input
         name="part_number"
         placeholder="Part Number"
@@ -109,6 +129,7 @@ export default function InventoryForm({
         onChange={handleChange}
         className="w-full border border-gray-300 px-3 py-2 rounded"
       />
+
       <input
         name="description"
         placeholder="Description"
@@ -116,15 +137,17 @@ export default function InventoryForm({
         onChange={handleChange}
         className="w-full border border-gray-300 px-3 py-2 rounded"
       />
+
       <input
         name="quantity"
-        placeholder="Quantity"
         type="number"
         min="0"
+        placeholder="Quantity"
         value={form.quantity}
         onChange={handleChange}
         className="w-full border border-gray-300 px-3 py-2 rounded"
       />
+
       <input
         name="location"
         placeholder="Location"
@@ -153,6 +176,36 @@ export default function InventoryForm({
           className="w-full border border-gray-300 px-3 py-2 rounded"
         />
       )}
+
+      {/* ─────────────────────────────────────────────────── */}
+      {/* New Low‑Stock Alert fields: */}
+      <div className="space-y-1">
+        <label className="block text-sm font-medium text-gray-700">
+          Low‑Stock Threshold
+        </label>
+        <input
+          name="low_stock_threshold"
+          type="number"
+          min="0"
+          placeholder="e.g. 10"
+          value={form.low_stock_threshold}
+          onChange={handleChange}
+          className="w-full border border-gray-300 px-3 py-2 rounded"
+        />
+      </div>
+
+      <label className="flex items-center space-x-2">
+        <input
+          name="alert_enabled"
+          type="checkbox"
+          checked={form.alert_enabled}
+          onChange={handleChange}
+          className="h-4 w-4 text-green-600 rounded"
+        />
+        <span className="text-sm">Enable Low‑Stock Alert</span>
+      </label>
+
+      {/* ─────────────────────────────────────────────────── */}
 
       <div className="flex justify-end space-x-2">
         <button

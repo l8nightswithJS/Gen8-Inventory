@@ -1,3 +1,4 @@
+// src/pages/Login.jsx
 import React, { useState, useEffect } from 'react'
 import { useNavigate }                from 'react-router-dom'
 import axios                          from '../utils/axiosConfig'
@@ -43,32 +44,28 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex">
-      {/* Left panel: softer gradient + branding */}
-      <div className="hidden md:flex w-1/2 bg-gradient-to-br from-blue-600 to-green-400 relative overflow-hidden">
-        <div className="px-12 pt-16">
-          {/* Transparent SVG logo */}
-          <img src={logoSvg} alt="Gener8" className="h-10 mb-6" />
-          <h2 className="text-white text-4xl font-extrabold leading-tight">
-            Welcome to Gener8
-          </h2>
-          <p className="text-white mt-4 max-w-xs">
-            Streamline your inventory with rock‑solid reliability and built‑in security.
-          </p>
-        </div>
-      </div>
+    <div className="min-h-screen flex flex-col bg-gradient-to-b from-white to-gray-50">
+      {/* Navbar */}
+      <header className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 flex justify-between items-center">
+        <h1 className="flex items-center gap-2 text-2xl sm:text-3xl font-bold">
+          <img src={logoSvg} alt="Gener8" className="h-8 sm:h-10" />
+          <span className="text-green-500">Inventory</span>
+        </h1>
+      </header>
 
-      {/* Right panel: lighter background */}
-      <div className="flex flex-1 items-center justify-center p-8 bg-gray-50">
+      {/* Main login card */}
+      <main className="flex-grow flex items-center justify-center px-4">
         <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow-xl">
-          <h3 className="text-2xl font-bold text-gray-900 text-center mb-6">
+          <h2 className="text-2xl font-extrabold text-gray-900 text-center mb-6">
             Log in to your account
-          </h3>
+          </h2>
+
           {error && (
             <div className="bg-red-100 text-red-700 px-4 py-2 rounded mb-4 text-center">
               {error}
             </div>
           )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label htmlFor="username" className="block text-gray-700 mb-1">
@@ -86,6 +83,7 @@ export default function Login() {
                            focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+
             <div>
               <label htmlFor="password" className="block text-gray-700 mb-1">
                 Password
@@ -102,6 +100,7 @@ export default function Login() {
                            focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+
             <button
               type="submit"
               className="w-full bg-blue-600 hover:bg-blue-700 text-white
@@ -112,7 +111,7 @@ export default function Login() {
             </button>
           </form>
         </div>
-      </div>
+      </main>
     </div>
   )
 }

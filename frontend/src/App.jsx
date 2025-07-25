@@ -1,50 +1,59 @@
+// src/App.jsx
 import React from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate
+} from 'react-router-dom'
 
+import LandingPage  from './pages/LandingPage'
+import Login        from './pages/Login'
 import Dashboard    from './pages/Dashboard'
 import ClientPage   from './pages/ClientPage'
 import UsersPage    from './pages/UsersPage'
-import Login        from './pages/Login'
-import LandingPage  from './pages/LandingPage'
 import PrivateRoute from './components/PrivateRoute'
+import Navbar       from './components/Navbar'
+import Footer       from './components/Footer'
 
 export default function App() {
   return (
     <Router>
       <Routes>
-        {/* 1) Landing page — no nav/footer */}
-        <Route path="/" element={<LandingPage />} />
-
-        {/* 2) Login — styled same as landing header */}
+        {/* Public */}
+        <Route path="/"      element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
 
-        {/* 3) All other routes get protected + wrapped in nav/footer */}
+        {/* All protected views live in our PrivateLayout */}
         <Route
-          path="/dashboard"
+          path="/*"
           element={
             <PrivateRoute>
-              <Dashboard />
+              <PrivateLayout />
             </PrivateRoute>
           }
         />
-        <Route
-          path="/clients/:clientId"
-          element={
-            <PrivateRoute>
-              <ClientPage />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/users"
-          element={
-            <PrivateRoute>
-              <UsersPage />
-            </PrivateRoute>
-          }
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
+  )
+}
+
+function PrivateLayout() {
+  return (
+    <div className="flex flex-col h-screen bg-white">
+      <Navbar />
+
+      {/* main scroll region */}
+      <main className="flex-1 overflow-auto px-4 sm:px-6 lg:px-8 py-4">
+        <Routes>
+          <Route path="dashboard"        element={<Dashboard />} />
+          <Route path="clients/:clientId" element={<ClientPage />} />
+          <Route path="users"            element={<UsersPage />} />
+          <Route path="*"                element={<Navigate to="dashboard" replace />} />
+        </Routes>
+      </main>
+
+      <Footer />
+    </div>
   )
 }

@@ -7,3 +7,29 @@ html, body, #root {
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@media (orientation: portrait) {
+  .client-carousel {
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+    max-height: 80vh;
+  }
+  .client-carousel > * {
+    margin-bottom: 1rem;
+  }
+}
+
+/* Landscape: horizontal as before */
+@media (orientation: landscape) {
+  .client-carousel {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+}
+
+.shadow-t-sm {
+  box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.05);
+}
+
