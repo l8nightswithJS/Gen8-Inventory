@@ -1,42 +1,37 @@
 // src/components/Footer.jsx
-import React from 'react';
-import { useLocation } from "react-router-dom";
-import logog8 from '../assets/logog8.png';
+import React from 'react'
+import logog8 from '../assets/logog8.png'
 
 export default function Footer() {
-  const { pathname } = useLocation();
+  const year = new Date().getFullYear()
 
-  // hide on any client page
-  if (pathname.startsWith("/clients/")) return null;
   return (
-    <section className="bg-gray-50">
-      <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-6">
-        <div className="flex items-center gap-4">
-          <img
-            src={logog8}
-            alt="Warehouse icon"
-            className="w-20 h-20 flex-shrink-0"
-          />
-          <blockquote className="italic text-gray-700">
-            <p>“Inventory accuracy is the hallmark of operational excellence.”</p>
-            <cite className="block mt-2 not-italic text-sm font-semibold text-gray-800">
+    <footer className="sticky bottom-0 bg-white border-t px-4 py-2 sm:py-4 lg:py-6">
+      <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center 
+                      justify-between gap-3">
+        {/* Quote */}
+        <div className="flex items-center gap-2">
+          <img src={logog8} alt="Gener8 blocks" className="w-6 h-6 sm:w-8 sm:h-8" />
+          <blockquote className="italic text-gray-700 text-[11px] sm:text-sm">
+            “Inventory accuracy is the hallmark of operational excellence.”
+            <cite className="block not-italic font-semibold text-gray-900 mt-0.5 text-[10px] sm:text-xs">
               — Gener8 Team
             </cite>
           </blockquote>
         </div>
-        <div className="text-center md:text-right">
+        {/* Feedback */}
           <a
             href="mailto:feedback@gener8.net"
-            className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-2 rounded-md shadow transition"
+          className="inline-block bg-blue-600 hover:bg-blue-700 text-white 
+                     px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-[11px] sm:text-sm 
+                     shadow-sm transition"
           >
             Send Feedback
           </a>
         </div>
+      <div className="text-center text-gray-500 text-[10px] sm:text-xs mt-2">
+        © {year} Gener8 Inventory. All rights reserved.
       </div>
-
-      <footer className="bg-gray-100 text-center text-sm text-gray-500">
-        © {new Date().getFullYear()} Gener8 Inventory. All rights reserved.
       </footer>
-    </section>
-  );
+  )
 }
