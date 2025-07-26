@@ -5,14 +5,13 @@ const controller             = require('../controllers/inventoryController')
 const authenticate           = require('../middleware/authMiddleware')
 const requireRole            = require('../middleware/requireRole')
 
-// Ensure we grab the middleware function correctly, whether it’s
-// exported as default or named.
+// Import your validation middleware correctly
 const validationMiddleware = require('../middleware/validationMiddleware')
 const handleValidation     = validationMiddleware.handleValidation || validationMiddleware
 
 const router = express.Router()
 
-// all inventory routes need authentication
+// All inventory routes need authentication
 router.use(authenticate)
 
 //
@@ -66,7 +65,9 @@ router.get(
 //    GET /api/items/:id
 router.get(
   '/:id',
-  param('id').isInt().withMessage('Invalid item id').toInt(),
+  param('id')
+    .isInt().withMessage('Invalid item id')
+    .toInt(),
   handleValidation,
   controller.getItemById
 )
@@ -99,7 +100,9 @@ router.post(
 router.put(
   '/:id',
   requireRole('admin'),
-  param('id').isInt().withMessage('Invalid item id').toInt(),
+  param('id')
+    .isInt().withMessage('Invalid item id')
+    .toInt(),
   body('name').isString().notEmpty(),
   body('part_number').isString().notEmpty(),
   body('quantity')
