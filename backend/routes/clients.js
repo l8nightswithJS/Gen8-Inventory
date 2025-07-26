@@ -4,17 +4,28 @@ const clientsController = require('../controllers/clientsController')
 const multer            = require('multer')
 const path              = require('path')
 
-const router = express.Router()
+const router  = express.Router()
 
-// … your upload setup and existing routes …
-router.get('/',    clientsController.getAllClients)
-router.get('/:id', clientsController.getClientById)
+// ── Multer upload config ───────────────────────────────────────────────────────
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, path.join(__dirname, '..', 'uploads'))
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`)
+  }
+})
+const upload = multer({ storage })
 
-// ← NEW: list all alerts for a client
+// ── CLIENT CRUD ────────────────────────────────────────────────────────────────
+router.get('/',             clientsController.getAllClients)
+router.get('/:id',          clientsController.getClientById)
+router.post('/',   upload.single('logo'), clientsController.createClient)
+router.put('/:id', upload.single('logo'), clientsController.updateClient)
+router.delete('/:id',       clientsController.deleteClient)
+
+// ── NEW: Alerts for a client ──────────────────────────────────────────────────
+// GET /api/clients/:id/alerts
 router.get('/:id/alerts', clientsController.getClientAlerts)
-
-router.post('/',           upload.single('logo'), clientsController.createClient)
-router.put('/:id',         upload.single('logo'), clientsController.updateClient)
-router.delete('/:id',      clientsController.deleteClient)
 
 module.exports = router
