@@ -20,18 +20,18 @@ export default function Footer() {
           </blockquote>
         </div>
         {/* Feedback */}
-        <a
-          href="mailto:feedback@gener8.net"
+          <a
+            href="mailto:feedback@gener8.net"
           className="inline-block bg-blue-600 hover:bg-blue-700 text-white 
                      px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-[11px] sm:text-sm 
                      shadow-sm transition"
-        >
-          Send Feedback
-        </a>
-      </div>
+          >
+            Send Feedback
+          </a>
+        </div>
       <div className="text-center text-gray-500 text-[10px] sm:text-xs mt-2">
         © {year} Gener8 Inventory. All rights reserved.
       </div>
-    </footer>
+      </footer>
   )
 }
