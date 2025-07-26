@@ -4,7 +4,11 @@ const { body, param, query } = require('express-validator')
 const controller             = require('../controllers/inventoryController')
 const authenticate           = require('../middleware/authMiddleware')
 const requireRole            = require('../middleware/requireRole')
-const { handleValidation }   = require('../middleware/validationMiddleware')
+
+// Ensure we grab the middleware function correctly, whether it’s
+// exported as default or named.
+const validationMiddleware = require('../middleware/validationMiddleware')
+const handleValidation     = validationMiddleware.handleValidation || validationMiddleware
 
 const router = express.Router()
 
