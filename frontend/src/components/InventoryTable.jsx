@@ -1,6 +1,6 @@
 // src/components/InventoryTable.jsx
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import { supabase } from '../../../backend/lib/supabaseClient';
 
 export default function InventoryTable({
   items,

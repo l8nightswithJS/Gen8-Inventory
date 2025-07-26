@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import ClientCarousel                  from '../components/ClientCarousel'
 import AddClientModal                  from '../components/AddClientModal'
-import { supabase }                    from '../lib/supabaseClient'
+import { supabase }                    from '../../../backend/lib/supabaseClient'
 
 export default function Dashboard() {
   const [clients, setClients]           = useState([])

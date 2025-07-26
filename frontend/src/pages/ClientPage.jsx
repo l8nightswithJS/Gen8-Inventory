@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabaseClient';
+import { supabase } from '../../../backend/lib/supabaseClient';
 import InventoryTable from '../components/InventoryTable';
 import InventoryForm  from '../components/InventoryForm';
 import BulkImport     from '../components/BulkImport';

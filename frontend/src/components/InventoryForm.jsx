@@ -1,6 +1,6 @@
 // src/components/InventoryForm.jsx
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import { supabase } from '../../../backend/lib/supabaseClient';
 
 export default function InventoryForm({
   clientId,
