@@ -6,11 +6,11 @@ export default function Navbar() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const token = localStorage.getItem('token')
-  const role  = localStorage.getItem('role')
+  const role = localStorage.getItem('role')
 
-  // show Alerts link only when inside /clients/:clientId/*
-  const clientMatch = useMatch('/clients/:clientId/*')
-  const clientId = clientMatch?.params.clientId
+  // only show Alerts when on a client page
+  const match = useMatch('/clients/:clientId/*')
+  const clientId = match?.params?.clientId
 
   return (
     <nav className="bg-white shadow-sm px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center sticky top-0 z-50">
@@ -44,7 +44,7 @@ export default function Navbar() {
         {token && role === 'admin' && pathname !== '/users' && (
           <button
             onClick={() => navigate('/users')}
-            className="flex items-center text-gray-700 hover:text-gray-900 p-2 sm:px-2 sm:py-1 sm:rounded transition"
+            className="flex items-center text-gray-700 hover:text-gray-900 p-2 rounded transition"
           >
             <FiUsers className="text-lg" />
             <span className="hidden sm:inline ml-1 text-sm font-medium">
@@ -59,7 +59,7 @@ export default function Navbar() {
               localStorage.clear()
               navigate('/login')
             }}
-            className="flex items-center text-gray-700 hover:text-gray-900 p-2 sm:px-2 sm:py-1 sm:rounded transition"
+            className="flex items-center text-gray-700 hover:text-gray-900 p-2 rounded transition"
           >
             <FiLogOut className="text-lg" />
             <span className="hidden sm:inline ml-1 text-sm font-medium">
@@ -69,5 +69,5 @@ export default function Navbar() {
         )}
       </div>
     </nav>
-  )
+)
 }

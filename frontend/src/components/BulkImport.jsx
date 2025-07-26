@@ -1,34 +1,35 @@
-// src/components/BulkImport.jsx
 import React, { useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import axios from '../utils/axiosConfig'
 
 const REQUIRED_FIELDS = [
-  { key: 'name',        label: 'Item Name (required)'   },
+  { key: 'name', label: 'Item Name (required)' },
   { key: 'part_number', label: 'Part Number (required)' },
-  { key: 'quantity',    label: 'Quantity (required)'    }
+  { key: 'quantity', label: 'Quantity (required)' },
 ]
 const OPTIONAL_FIELDS = [
-  { key: 'description', label: 'Description'             },
-  { key: 'lot_number',  label: 'Lot Number'              },
-  { key: 'location',    label: 'Location'                }
+  { key: 'description', label: 'Description' },
+  { key: 'lot_number', label: 'Lot Number' },
+  { key: 'location', label: 'Location' },
 ]
 const ALL_FIELDS = [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS]
 
-export default function BulkImport({ refresh, clientId, onClose }) {
-  const fileRef = useRef()
-  const [error, setError]             = useState('')
-  const [success, setSuccess]         = useState('')
-  const [headers, setHeaders]         = useState([])
+export default function BulkImport({ clientId, refresh, onClose }) {
+  const fileRef = useRef(null)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [headers, setHeaders] = useState([])
   const [previewRows, setPreviewRows] = useState([])
-  const [mapping, setMapping]         = useState({})
-  const [rawRows, setRawRows]         = useState([])
+  const [mapping, setMapping] = useState({})
+  const [rawRows, setRawRows] = useState([])
 
-  // load & parse file
   const handleFileChange = e => {
-    setError(''); setSuccess('')
-    setHeaders([]); setPreviewRows([])
-    setMapping({}); setRawRows([])
+    setError('')
+    setSuccess('')
+    setHeaders([])
+    setPreviewRows([])
+    setMapping({})
+    setRawRows([])
 
     const file = e.target.files[0]
     if (!file) return
@@ -38,9 +39,12 @@ export default function BulkImport({ refresh, clientId, onClose }) {
       let rows = []
       if (file.name.match(/\.csv$/i)) {
         const text = evt.target.result
-        const lines = text.split('\n').map(l => l.replace(/\r/,''))
+        const lines = text
+          .split('\n')
+          .map(l => l.replace(/\r/, ''))
+          .filter(Boolean)
         const cols = lines[0].split(',').map(h => h.trim())
-        rows = lines.slice(1).filter(Boolean).map(line => {
+        rows = lines.slice(1).map(line => {
           const vals = line.split(',')
           return cols.reduce((acc, col, i) => {
             acc[col] = vals[i]?.trim() || ''
@@ -58,7 +62,6 @@ export default function BulkImport({ refresh, clientId, onClose }) {
       setPreviewRows(rows.slice(0, 5))
     }
 
-    // read as text or binary
     file.name.match(/\.csv$/i)
       ? reader.readAsText(file)
       : reader.readAsBinaryString(file)
@@ -68,17 +71,18 @@ export default function BulkImport({ refresh, clientId, onClose }) {
     setMapping(prev => ({ ...prev, [appField]: excelCol }))
   }
 
-  // fire the import
   const handleImport = async () => {
-    setError(''); setSuccess('')
-    // validate required
+    setError('')
+    setSuccess('')
+
+    // ensure all required
     for (let f of REQUIRED_FIELDS) {
       if (!mapping[f.key]) {
         setError(`Please map: ${f.label}`)
         return
       }
     }
-    // build payload
+
     const items = rawRows.map(row => {
       const it = {}
       ALL_FIELDS.forEach(f => {
@@ -95,11 +99,15 @@ export default function BulkImport({ refresh, clientId, onClose }) {
     })
 
     try {
-      const { data } = await axios.post('/api/items/bulk', { items })
-      setSuccess(`${data.successCount} imported, ${data.failCount} failed.`)
-      // reset UI
-      setRawRows([]); setPreviewRows([]); setMapping({}); setHeaders([])
+      const resp = await axios.post('/api/items/bulk', { items })
+      setSuccess(
+        `${resp.data.successCount} imported, ${resp.data.failCount} failed.`
+      )
       fileRef.current.value = ''
+      setRawRows([])
+      setPreviewRows([])
+      setMapping({})
+      setHeaders([])
       refresh && refresh()
       onClose && onClose()
     } catch (err) {
@@ -109,34 +117,28 @@ export default function BulkImport({ refresh, clientId, onClose }) {
 
   return (
     <div className="space-y-6 p-6">
-      {/* Modal header */}
       <div className="flex justify-between items-center">
         <h3 className="text-2xl font-semibold">Import Items in Bulk</h3>
         {onClose && (
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-800 text-xl"
+            className="text-gray-500 hover:text-gray-800 text-2xl"
           >
             &times;
           </button>
         )}
       </div>
 
-      {/* File picker */}
-      <div>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          onChange={handleFileChange}
-          className="file:py-2 file:px-4 file:border-0 file:bg-indigo-600 file:text-white file:rounded hover:file:bg-indigo-700"
-        />
-      </div>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        onChange={handleFileChange}
+        className="file:py-2 file:px-4 file:border-0 file:bg-indigo-600 file:text-white file:rounded hover:file:bg-indigo-700"
+      />
 
-      {/* Only show mapping & preview once a file is chosen */}
       {headers.length > 0 && (
         <>
-          {/* Column Mapping */}
           <div className="bg-gray-50 border rounded p-4">
             <h4 className="font-medium mb-3">Map Your Columns</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -144,13 +146,17 @@ export default function BulkImport({ refresh, clientId, onClose }) {
                 <div key={f.key} className="flex items-center space-x-2">
                   <label className="w-40 text-gray-700">{f.label}</label>
                   <select
-                    value={mapping[f.key]||''}
-                    onChange={e => handleMappingChange(f.key, e.target.value)}
+                    value={mapping[f.key] || ''}
+                    onChange={e =>
+                      handleMappingChange(f.key, e.target.value)
+                    }
                     className="flex-1 border rounded px-2 py-1"
                   >
                     <option value="">-- Not Mapped --</option>
                     {headers.map(h => (
-                      <option key={h} value={h}>{h}</option>
+                      <option key={h} value={h}>
+                        {h}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -158,21 +164,27 @@ export default function BulkImport({ refresh, clientId, onClose }) {
             </div>
           </div>
 
-          {/* Preview */}
           <div className="overflow-x-auto border rounded">
             <table className="min-w-full text-sm">
               <thead className="bg-gray-100">
                 <tr>
                   {headers.map(h => (
-                    <th key={h} className="px-3 py-2 text-left">{h}</th>
+                    <th key={h} className="px-3 py-2 text-left">
+                      {h}
+                    </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {previewRows.map((row,i) => (
-                  <tr key={i} className={i%2===0 ? 'bg-white' : 'bg-gray-50'}>
+                {previewRows.map((row, i) => (
+                  <tr
+                    key={i}
+                    className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
+                  >
                     {headers.map(h => (
-                      <td key={h} className="px-3 py-2">{row[h]}</td>
+                      <td key={h} className="px-3 py-2">
+                        {row[h]}
+                      </td>
                     ))}
                   </tr>
                 ))}
@@ -180,9 +192,8 @@ export default function BulkImport({ refresh, clientId, onClose }) {
             </table>
           </div>
 
-          {/* Import button + feedback */}
           <div className="flex justify-end items-center space-x-4">
-            {error   && <p className="text-red-600">{error}</p>}
+            {error && <p className="text-red-600">{error}</p>}
             {success && <p className="text-green-600">{success}</p>}
             <button
               onClick={handleImport}

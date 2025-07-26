@@ -1,41 +1,45 @@
-import React, { useEffect, useState } from 'react'
-import ClientCarousel                  from '../components/ClientCarousel'
-import AddClientModal                  from '../components/AddClientModal'
-import { supabase }                    from '../../../backend/lib/supabaseClient'
+import React, { useState, useEffect, useCallback } from 'react'
+import axios from '../utils/axiosConfig'
+import ClientCarousel from '../components/ClientCarousel'
+import AddClientModal from '../components/AddClientModal'
 
 export default function Dashboard() {
-  const [clients, setClients]           = useState([])
-  const [error, setError]               = useState('')
+  const [clients, setClients] = useState([])
+  const [error, setError] = useState('')
   const [showAddModal, setShowAddModal] = useState(false)
 
-  const fetchClients = async () => {
+  const fetchClients = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('clients')
-        .select('*')
-        .order('id', { ascending: false })
-      if (error) throw error
-      setClients(data)
+      const res = await axios.get('/api/clients')
+      setClients(res.data)
+      setError('')
     } catch {
-      setError('Could not load clients')
+      setError('Could not load clients.')
     }
-  }
+  }, [])
 
   useEffect(() => {
     fetchClients()
-  }, [])
+  }, [fetchClients])
+
+  const handleDelete = async id => {
+    if (!window.confirm('Delete this client?')) return
+    try {
+      await axios.delete(`/api/clients/${id}`)
+      fetchClients()
+    } catch {
+      setError('Failed to delete client.')
+    }
+  }
 
   return (
-    <div className="px-4 py-8 sm:px-6 lg:px-8 max-w-screen-xl mx-auto">
-      <h2 className="text-2xl font-bold text-gray-800 mb-6">Projects Dashboard</h2>
+    <div className="px-4 py-8 max-w-screen-xl mx-auto">
+      <h2 className="text-2xl font-bold mb-6">Projects Dashboard</h2>
       {error && <p className="text-red-500 mb-4">{error}</p>}
 
       <ClientCarousel
         clients={clients}
-        onClientDeleted={async (id) => {
-          await supabase.from('clients').delete().eq('id', id)
-          fetchClients()
-        }}
+        onClientDeleted={handleDelete}
         onClientUpdated={fetchClients}
         onAddClient={() => setShowAddModal(true)}
       />

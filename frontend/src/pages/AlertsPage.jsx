@@ -1,56 +1,67 @@
 import React, { useEffect, useState } from 'react'
-import { useParams }                  from 'react-router-dom'
-import axios                          from '../utils/axiosConfig'
+import { useParams, useNavigate } from 'react-router-dom'
+import axios from '../utils/axiosConfig'
 
 export default function AlertsPage() {
   const { clientId } = useParams()
+  const navigate      = useNavigate()
   const [alerts, setAlerts]   = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
 
   useEffect(() => {
-    async function fetchAlerts() {
+    async function loadAlerts() {
       if (!clientId) {
         setError('No client specified.')
-        setLoading(false)
-        return
+        return setLoading(false)
       }
       try {
-        const { data } = await axios.get('/api/items/alerts', {
-          params: { client_id: parseInt(clientId, 10) }
-        })
-        setAlerts(data)
-      } catch (err) {
-        console.error('Error loading alerts:', err)
+        const {
+          data: { alerts: fetchedAlerts },
+        } = await axios.get(`/api/items/${clientId}/alerts`)
+        setAlerts(Array.isArray(fetchedAlerts) ? fetchedAlerts : [])
+      } catch {
+        setAlerts([])
         setError('Failed to load alerts.')
       } finally {
         setLoading(false)
       }
     }
-    fetchAlerts()
+    loadAlerts()
   }, [clientId])
 
-  const acknowledgeAlert = async (itemId) => {
+  const acknowledge = async alertId => {
+    // find the alert so we know its item_id
+    const a = alerts.find(x => x.id === alertId)
     try {
-      await axios.post(`/api/items/alerts/${itemId}/acknowledge`)
-      setAlerts(prev => prev.filter(a => a.items.id !== itemId))
-    } catch (err) {
-      console.error('Error acknowledging alert:', err)
+      await axios.post(
+        `/api/items/${a.item_id}/alerts/${alertId}/acknowledge`
+      )
+      setAlerts(prev => prev.filter(x => x.id !== alertId))
+    } catch {
       alert('Failed to acknowledge alert.')
     }
   }
 
   if (loading) return <p className="p-4">Loading alerts…</p>
   if (error)   return <p className="p-4 text-red-600">{error}</p>
-  if (alerts.length === 0) {
+  if (!alerts.length)
     return <p className="p-4 text-gray-700">No active low‑stock alerts.</p>
-  }
 
   return (
-    <div className="px-4 py-6 sm:px-6 lg:px-8 max-w-5xl mx-auto">
-      <h2 className="text-2xl font-bold mb-4">
-        Low‑Stock Alerts for Client {clientId}
-      </h2>
+    <div className="px-4 py-6 max-w-5xl mx-auto">
+      <div className="flex items-center mb-6">
+        <button
+          onClick={() => navigate(`/clients/${clientId}`)}
+          className="text-blue-600 hover:underline mr-4"
+        >
+          ← Back
+        </button>
+        <h2 className="text-2xl font-bold">
+          Low‑Stock Alerts for Client {clientId}
+        </h2>
+      </div>
+
       <div className="overflow-x-auto bg-white shadow rounded">
         <table className="min-w-full text-sm table-auto">
           <thead className="bg-gray-100 text-xs uppercase text-gray-600">
@@ -63,21 +74,20 @@ export default function AlertsPage() {
             </tr>
           </thead>
           <tbody>
-            {alerts.map((a) => (
+            {alerts.map(a => (
               <tr key={a.id} className="border-t">
-                <td className="px-4 py-2">{a.items.name}</td>
+                {/* your API returns each alert joined with its item data */}
+                <td className="px-4 py-2">{a.item.name}</td>
+                <td className="px-4 py-2 text-center">{a.item.quantity}</td>
                 <td className="px-4 py-2 text-center">
-                  {a.items.quantity}
-                </td>
-                <td className="px-4 py-2 text-center">
-                  {a.items.low_stock_threshold}
+                  {a.item.low_stock_threshold}
                 </td>
                 <td className="px-4 py-2">
                   {new Date(a.triggered_at).toLocaleString()}
                 </td>
                 <td className="px-4 py-2 text-center">
                   <button
-                    onClick={() => acknowledgeAlert(a.items.id)}
+                    onClick={() => acknowledge(a.id)}
                     className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs"
                   >
                     Acknowledge

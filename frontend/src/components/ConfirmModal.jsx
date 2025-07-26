@@ -1,4 +1,3 @@
-// src/components/ConfirmModal.jsx
 import React from 'react'
 import PropTypes from 'prop-types'
 
@@ -7,11 +6,10 @@ export default function ConfirmModal({
   message,
   cancelText = 'Cancel',
   confirmText = 'Confirm',
-  variant = 'danger',       // 'danger' | 'success'
+  variant = 'danger', // 'danger' | 'success'
   onCancel,
   onConfirm,
 }) {
-  // Choose confirm-button classes based on variant
   const confirmClasses =
     variant === 'success'
       ? 'bg-green-600 hover:bg-green-700 text-white'
@@ -24,16 +22,10 @@ export default function ConfirmModal({
       aria-modal="true"
     >
       <div className="bg-white rounded-lg shadow-lg w-full max-w-sm p-6">
-        {title && (
-          <h3 className="text-xl font-semibold text-gray-800 mb-4">
-            {title}
-          </h3>
-        )}
-        {message && (
-          <p className="text-gray-700 mb-6">
-            {message}
-          </p>
-        )}
+        <h3 className="text-xl font-semibold text-gray-800 mb-4">
+          {title}
+        </h3>
+        <p className="text-gray-700 mb-6">{message}</p>
         <div className="flex justify-end space-x-3">
           <button
             onClick={onCancel}
@@ -54,11 +46,11 @@ export default function ConfirmModal({
 }
 
 ConfirmModal.propTypes = {
-  title:        PropTypes.string,
-  message:      PropTypes.string.isRequired,
-  cancelText:   PropTypes.string,
-  confirmText:  PropTypes.string,
-  variant:      PropTypes.oneOf(['danger', 'success']),
-  onCancel:     PropTypes.func.isRequired,
-  onConfirm:    PropTypes.func.isRequired,
+  title:       PropTypes.string,
+  message:     PropTypes.string.isRequired,
+  cancelText:  PropTypes.string,
+  confirmText: PropTypes.string,
+  variant:     PropTypes.oneOf(['danger', 'success']),
+  onCancel:    PropTypes.func.isRequired,
+  onConfirm:   PropTypes.func.isRequired,
 }

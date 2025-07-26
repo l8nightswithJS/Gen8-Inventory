@@ -1,43 +1,35 @@
-// src/components/InventoryTable.jsx
-import React, { useEffect, useState } from 'react';
-import { supabase } from '../../../backend/lib/supabaseClient';
+import React, { useEffect, useState } from 'react'
 
 export default function InventoryTable({
   items,
-  refresh,
-  role = 'viewer',
   page,
   totalPages,
   onPage,
-  onEdit,      // callback for editing
+  onEdit,    // callback(item) to open edit
+  onDelete,  // callback(id) to delete via API + refresh
+  role = 'viewer',
 }) {
-  const [showRotateNotice, setShowRotateNotice] = useState(false);
+  const [showRotateNotice, setShowRotateNotice] = useState(false)
 
-  // Portrait notice
+  // show rotate notice in narrow/mobile
   useEffect(() => {
-    const checkWidth = () => setShowRotateNotice(window.innerWidth < 775);
-    checkWidth();
-    window.addEventListener('resize', checkWidth);
-    return () => window.removeEventListener('resize', checkWidth);
-  }, []);
+    const check = () => setShowRotateNotice(window.innerWidth < 775)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
 
-  const handleDelete = async id => {
-    if (!window.confirm('Are you sure you want to delete this item?')) return;
-    const { error } = await supabase.from('items').delete().eq('id', id);
-    if (error) return console.error('Delete failed:', error);
-    refresh();
-  };
-
-  // Collect any custom attribute columns
+  // defensive: ensure items is an array
+  const safeItems = Array.isArray(items) ? items : []
   const attributeKeys = Array.from(
-    new Set(items.flatMap(i => Object.keys(i.attributes || {})))
-  );
+    new Set(safeItems.flatMap(item => Object.keys(item.attributes || {})))
+  )
 
   return (
     <div className="relative mt-6">
       {showRotateNotice && (
         <div className="bg-yellow-100 border border-yellow-300 text-yellow-800 px-4 py-3 rounded mb-4 text-sm text-center max-w-xl mx-auto">
-          📱 For better viewing, please rotate to landscape.
+          📱 For best experience, please rotate to landscape.
         </div>
       )}
 
@@ -62,24 +54,20 @@ export default function InventoryTable({
             </tr>
           </thead>
           <tbody>
-            {items.length === 0 ? (
+            {safeItems.length === 0 ? (
               <tr>
                 <td
-                  colSpan={
-                    6 +
-                    attributeKeys.length +
-                    (role === 'admin' ? 1 : 0)
-                  }
+                  colSpan={6 + attributeKeys.length + (role === 'admin' ? 1 : 0)}
                   className="px-6 py-5 text-center text-gray-500 italic"
                 >
                   No items to display.
                 </td>
               </tr>
             ) : (
-              items.map(item => {
+              safeItems.map(item => {
                 const isLow =
                   item.alert_enabled &&
-                  item.quantity < item.low_stock_threshold;
+                  item.quantity < item.low_stock_threshold
                 return (
                   <tr
                     key={item.id}
@@ -97,9 +85,7 @@ export default function InventoryTable({
                     <td className="px-2 py-2 border text-center flex items-center justify-center space-x-1">
                       <span>{item.quantity}</span>
                       {isLow && (
-                        <span className="text-red-600 font-semibold">
-                          ⚠
-                        </span>
+                        <span className="text-red-600 font-semibold">⚠</span>
                       )}
                     </td>
                     <td className="px-2 py-2 border text-center">
@@ -124,7 +110,7 @@ export default function InventoryTable({
                           Edit
                         </button>
                         <button
-                          onClick={() => handleDelete(item.id)}
+                          onClick={() => onDelete(item.id)}
                           className="bg-red-600 text-white text-xs px-3 py-1 rounded hover:bg-red-700"
                         >
                           Delete
@@ -132,7 +118,7 @@ export default function InventoryTable({
                       </td>
                     )}
                   </tr>
-                );
+                )
               })
             )}
           </tbody>
@@ -160,5 +146,5 @@ export default function InventoryTable({
         </button>
       </div>
     </div>
-  );
+  )
 }

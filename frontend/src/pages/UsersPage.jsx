@@ -1,88 +1,68 @@
-// src/pages/UsersPage.jsx
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import axios from '../utils/axiosConfig'
 import ConfirmModal from '../components/ConfirmModal'
-import UserForm     from '../components/UserForm'
+import UserForm from '../components/UserForm'
 
 export default function UsersPage() {
-  const [users, setUsers]                 = useState([])
-  const [showForm, setShowForm]           = useState(false)
-  const [editingUser, setEditingUser]     = useState(null)
-
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [userToDelete, setUserToDelete]           = useState(null)
-
-  const [showApproveConfirm, setShowApproveConfirm] = useState(false)
-  const [userToApprove, setUserToApprove]           = useState(null)
-
-  const [showDenyConfirm, setShowDenyConfirm] = useState(false)
-  const [userToDeny,    setUserToDeny]        = useState(null)
+  const [users, setUsers] = useState([])
+  const [showForm, setShowForm] = useState(false)
+  const [editingUser, setEditingUser] = useState(null)
+  const [confirm, setConfirm] = useState({
+    type: '', // 'delete' | 'approve' | 'deny'
+    user: null,
+    open: false,
+  })
 
   const isAdmin = localStorage.getItem('role') === 'admin'
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       const res = await axios.get('/api/users')
       setUsers(res.data)
     } catch {
-      console.error('Failed to fetch users')
+      console.error('Failed to fetch users.')
     }
-  }
+  }, [])
 
   useEffect(() => {
     fetchUsers()
-  }, [])
+  }, [fetchUsers])
 
-  const handleAddClick = () => {
-    setEditingUser(null)
-    setShowForm(true)
-  }
-  const handleEditClick = (user) => {
+  const openForm = user => {
     setEditingUser(user)
     setShowForm(true)
   }
 
-  const handleDelete = async () => {
-    try {
-      await axios.delete(`/api/users/${userToDelete.id}`)
-      setShowDeleteConfirm(false)
-      setUserToDelete(null)
-      fetchUsers()
-    } catch {
-      alert('Failed to delete user.')
-    }
+  const openConfirm = (type, user) => {
+    setConfirm({ type, user, open: true })
   }
+  const closeConfirm = () =>
+    setConfirm({ type: '', user: null, open: false })
 
-  const handleApprove = async () => {
+  const handleConfirm = async () => {
+    const { type, user } = confirm
     try {
-      // <— changed from /approved to /approve
-      await axios.put(`/api/users/${userToApprove.id}/approve`)
-      setShowApproveConfirm(false)
-      setUserToApprove(null)
+      if (type === 'approve') {
+        await axios.put(`/api/users/${user.id}/approve`)
+      } else if (type === 'deny') {
+        await axios.delete(`/api/users/${user.id}`)
+      } else if (type === 'delete') {
+        await axios.delete(`/api/users/${user.id}`)
+      }
+      closeConfirm()
       fetchUsers()
     } catch {
-      alert('Failed to approve user.')
-    }
-  }
-
-  const handleDeny = async () => {
-    try {
-      await axios.delete(`/api/users/${userToDeny.id}`)
-      setShowDenyConfirm(false)
-      setUserToDeny(null)
-      fetchUsers()
-    } catch {
-      alert('Failed to deny user.')
+      alert(`Failed to ${type} user.`)
     }
   }
 
   return (
-    <div className="px-4 py-6 sm:px-6 lg:px-8 max-w-4xl mx-auto">
+    <div className="px-4 py-6 max-w-4xl mx-auto">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Manage Users</h2>
+        <h2 className="text-2xl font-bold">Manage Users</h2>
         {isAdmin && (
           <button
-            onClick={handleAddClick}
+            onClick={() => openForm(null)}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
           >
             + Add User
@@ -91,7 +71,7 @@ export default function UsersPage() {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="min-w-full text-sm border border-gray-300">
+        <table className="min-w-full text-sm border">
           <thead className="bg-gray-100">
             <tr>
               <th className="border p-2 text-left">Username</th>
@@ -100,37 +80,28 @@ export default function UsersPage() {
             </tr>
           </thead>
           <tbody>
-            {users.map((user) => {
-              const isPending = user.approved === false
+            {users.map(u => {
+              const pending = !u.approved
               return (
                 <tr
-                  key={user.id}
-                  className={`border-t ${
-                    isAdmin && isPending
-                      ? 'animate-pulse bg-red-50 border-red-300'
-                      : ''
-                  }`}
+                  key={u.id}
+                  className={`border-t ${pending ? 'bg-red-50 animate-pulse' : ''
+                    }`}
                 >
-                  <td className="p-2">{user.username}</td>
-                  <td className="p-2 capitalize">{user.role}</td>
+                  <td className="p-2">{u.username}</td>
+                  <td className="p-2 capitalize">{u.role}</td>
                   {isAdmin && (
                     <td className="p-2 space-x-3">
-                      {isPending ? (
+                      {pending ? (
                         <>
                           <button
-                            onClick={() => {
-                              setUserToApprove(user)
-                              setShowApproveConfirm(true)
-                            }}
+                            onClick={() => openConfirm('approve', u)}
                             className="text-green-700 hover:underline"
                           >
                             Approve
                           </button>
                           <button
-                            onClick={() => {
-                              setUserToDeny(user)
-                              setShowDenyConfirm(true)
-                            }}
+                            onClick={() => openConfirm('deny', u)}
                             className="text-red-600 hover:underline"
                           >
                             Deny
@@ -139,16 +110,13 @@ export default function UsersPage() {
                       ) : (
                         <>
                           <button
-                            onClick={() => handleEditClick(user)}
+                            onClick={() => openForm(u)}
                             className="text-blue-600 hover:underline"
                           >
                             Edit
                           </button>
                           <button
-                            onClick={() => {
-                              setUserToDelete(user)
-                              setShowDeleteConfirm(true)
-                            }}
+                            onClick={() => openConfirm('delete', u)}
                             className="text-red-600 hover:underline"
                           >
                             Delete
@@ -164,10 +132,10 @@ export default function UsersPage() {
         </table>
       </div>
 
-      {/* User form modal */}
+      {/* User Form */}
       {showForm && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-sm mx-4 sm:mx-auto shadow-lg">
+          <div className="bg-white p-6 rounded shadow-md max-w-sm w-full mx-4 relative">
             <UserForm
               userToEdit={editingUser}
               onSuccess={() => {
@@ -180,53 +148,30 @@ export default function UsersPage() {
         </div>
       )}
 
-      {/* Delete confirm */}
-      {showDeleteConfirm && userToDelete && (
+      {/* Confirm Modal */}
+      {confirm.open && (
         <ConfirmModal
-          title="Delete User"
-          message={`Delete "${userToDelete.username}"?`}
+          title={
+            confirm.type === 'approve'
+              ? 'Approve User'
+              : confirm.type === 'deny'
+              ? 'Deny User'
+              : 'Delete User'
+          }
+          message={
+            confirm.type === 'approve'
+              ? `Approve "${confirm.user.username}"?`
+              : confirm.type === 'deny'
+              ? `Deny "${confirm.user.username}"? This deletes their request.`
+              : `Delete "${confirm.user.username}"?`
+          }
+          variant={confirm.type === 'approve' ? 'success' : 'danger'}
           cancelText="No"
-          confirmText="Yes, Delete"
-          variant="danger"
-          onCancel={() => {
-            setShowDeleteConfirm(false)
-            setUserToDelete(null)
-          }}
-          onConfirm={handleDelete}
-        />
-      )}
-
-      {/* Approve confirm */}
-      {showApproveConfirm && userToApprove && (
-        <ConfirmModal
-          title="Approve User"
-          message={`Approve "${userToApprove.username}"?`}
-          cancelText="No"
-          confirmText="Yes, Approve"
-          variant="success"
-          onCancel={() => {
-            setShowApproveConfirm(false)
-            setUserToApprove(null)
-          }}
-          onConfirm={handleApprove}
-        />
-      )}
-
-      {/* Deny confirm */}
-      {showDenyConfirm && userToDeny && (
-        <ConfirmModal
-          title="Deny User"
-          message={`Deny "${userToDeny.username}"? This will delete their request.`}
-          cancelText="No"
-          confirmText="Yes, Deny"
-          variant="danger"
-          onCancel={() => {
-            setShowDenyConfirm(false)
-            setUserToDeny(null)
-          }}
-          onConfirm={handleDeny}
+          confirmText="Yes"
+          onCancel={closeConfirm}
+          onConfirm={handleConfirm}
         />
       )}
     </div>
-  )
+)
 }

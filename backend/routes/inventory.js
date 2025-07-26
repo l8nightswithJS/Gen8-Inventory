@@ -1,8 +1,9 @@
-const express          = require('express')
+// routes/inventory.js
+const express                = require('express')
 const { body, param, query } = require('express-validator')
-const controller       = require('../controllers/inventoryController')
-const authenticate     = require('../middleware/authMiddleware')
-const requireRole      = require('../middleware/requireRole')
+const controller             = require('../controllers/inventoryController')
+const authenticate           = require('../middleware/authMiddleware')
+const requireRole            = require('../middleware/requireRole')
 const { handleValidation }   = require('../middleware/validationMiddleware')
 
 const router = express.Router()
@@ -10,9 +11,12 @@ const router = express.Router()
 // all inventory routes need authentication
 router.use(authenticate)
 
-/** ─── ALERTS ───────────────────────── */
+//
+// ─── ALERTS ────────────────────────────────────────────────────────────────────
+//
 
 // Fetch all active alerts for a client
+//    GET /api/items/alerts?client_id=123
 router.get(
   '/alerts',
   requireRole('admin'),
@@ -25,20 +29,24 @@ router.get(
   controller.getActiveAlerts
 )
 
-// Acknowledge (clear) one alert by item ID
+// Acknowledge (clear) one alert by alert ID
+//    POST /api/items/alerts/:alertId/acknowledge
 router.post(
-  '/alerts/:itemId/acknowledge',
+  '/alerts/:alertId/acknowledge',
   requireRole('admin'),
-  param('itemId')
-    .isInt().withMessage('Invalid item id')
+  param('alertId')
+    .isInt().withMessage('Invalid alert id')
     .toInt(),
   handleValidation,
   controller.acknowledgeAlert
 )
 
-/** ─── ITEMS CRUD ─────────────────────── */
+//
+// ─── ITEM CRUD ────────────────────────────────────────────────────────────────
+//
 
 // List items for a client
+//    GET /api/items?client_id=123
 router.get(
   '/',
   query('client_id')
@@ -50,25 +58,29 @@ router.get(
   controller.getAllItems
 )
 
-// Get one item by ID
+// Fetch one item by its ID
+//    GET /api/items/:id
 router.get(
-  '/:id(\\d+)',           // only match numeric IDs
+  '/:id',
   param('id').isInt().withMessage('Invalid item id').toInt(),
   handleValidation,
   controller.getItemById
 )
 
-// Create (admin only)
+// Create a new item (admin only)
+//    POST /api/items
 router.post(
   '/',
   requireRole('admin'),
   body('client_id').isInt().withMessage('client_id is required').toInt(),
   body('name').isString().notEmpty(),
   body('part_number').isString().notEmpty(),
-  body('quantity').isInt({ min: 0 }).toInt(),
+  body('quantity')
+    .isInt({ min: 0 }).withMessage('quantity must be ≥ 0')
+    .toInt(),
   body('low_stock_threshold')
     .optional()
-    .isInt({ min: 0 }).withMessage('Threshold must be ≥ 0')
+    .isInt({ min: 0 }).withMessage('Threshold must be ≥ 0')
     .toInt(),
   body('alert_enabled')
     .optional()
@@ -78,17 +90,20 @@ router.post(
   controller.createItem
 )
 
-// Update (admin only)
+// Update an existing item (admin only)
+//    PUT /api/items/:id
 router.put(
-  '/:id(\\d+)',
+  '/:id',
   requireRole('admin'),
   param('id').isInt().withMessage('Invalid item id').toInt(),
   body('name').isString().notEmpty(),
   body('part_number').isString().notEmpty(),
-  body('quantity').isInt({ min: 0 }).toInt(),
+  body('quantity')
+    .isInt({ min: 0 }).withMessage('quantity must be ≥ 0')
+    .toInt(),
   body('low_stock_threshold')
     .optional()
-    .isInt({ min: 0 }).withMessage('Threshold must be ≥ 0')
+    .isInt({ min: 0 }).withMessage('Threshold must be ≥ 0')
     .toInt(),
   body('alert_enabled')
     .optional()
