@@ -4,10 +4,10 @@ import axios from '../utils/axiosConfig'
 
 export default function AlertsPage() {
   const { clientId } = useParams()
-  const navigate      = useNavigate()
-  const [alerts, setAlerts]   = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState('')
+  const navigate     = useNavigate()
+  const [alerts, setAlerts]     = useState([])
+  const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState('')
 
   useEffect(() => {
     async function loadAlerts() {
@@ -18,8 +18,10 @@ export default function AlertsPage() {
       try {
         const {
           data: { alerts: fetchedAlerts },
-        } = await axios.get(`/api/items/${clientId}/alerts`)
+        } = await axios.get(`/api/clients/${clientId}/alerts`)
+
         setAlerts(Array.isArray(fetchedAlerts) ? fetchedAlerts : [])
+        setError('')
       } catch {
         setAlerts([])
         setError('Failed to load alerts.')
@@ -31,11 +33,16 @@ export default function AlertsPage() {
   }, [clientId])
 
   const acknowledge = async alertId => {
-    // find the alert so we know its item_id
+    // lookup the itemId from the nested object
     const a = alerts.find(x => x.id === alertId)
+    const itemId = a?.item?.id
+    if (!itemId) {
+      return alert('Cannot acknowledge: item ID missing')
+    }
+
     try {
       await axios.post(
-        `/api/items/${a.item_id}/alerts/${alertId}/acknowledge`
+        `/api/items/${itemId}/alerts/${alertId}/acknowledge`
       )
       setAlerts(prev => prev.filter(x => x.id !== alertId))
     } catch {
@@ -45,7 +52,7 @@ export default function AlertsPage() {
 
   if (loading) return <p className="p-4">Loading alerts…</p>
   if (error)   return <p className="p-4 text-red-600">{error}</p>
-  if (!alerts.length)
+  if (alerts.length === 0)
     return <p className="p-4 text-gray-700">No active low‑stock alerts.</p>
 
   return (
@@ -76,7 +83,6 @@ export default function AlertsPage() {
           <tbody>
             {alerts.map(a => (
               <tr key={a.id} className="border-t">
-                {/* your API returns each alert joined with its item data */}
                 <td className="px-4 py-2">{a.item.name}</td>
                 <td className="px-4 py-2 text-center">{a.item.quantity}</td>
                 <td className="px-4 py-2 text-center">

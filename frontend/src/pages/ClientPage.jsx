@@ -9,18 +9,18 @@ import SearchBar from '../components/SearchBar'
 
 export default function ClientPage() {
   const { clientId } = useParams()
-  const navigate = useNavigate()
-  const isAdmin = localStorage.getItem('role') === 'admin'
+  const navigate    = useNavigate()
+  const isAdmin     = localStorage.getItem('role') === 'admin'
 
   const [client, setClient] = useState(null)
-  const [items, setItems] = useState([])
-  const [query, setQuery] = useState('')
-  const [error, setError] = useState('')
+  const [items, setItems]   = useState([])
+  const [query, setQuery]   = useState('')
+  const [error, setError]   = useState('')
 
-  const [showAdd, setShowAdd] = useState(false)
+  const [showAdd, setShowAdd]       = useState(false)
   const [showImport, setShowImport] = useState(false)
-  const [editItem, setEditItem] = useState(null)
-  const [showEdit, setShowEdit] = useState(false)
+  const [editItem, setEditItem]     = useState(null)
+  const [showEdit, setShowEdit]     = useState(false)
 
   // Fetch client details
   const fetchClient = useCallback(async () => {
@@ -33,16 +33,13 @@ export default function ClientPage() {
     }
   }, [clientId])
 
-  // Fetch items, always pull items from response.data
+  // Fetch items — response.data is the array we want
   const fetchItems = useCallback(async () => {
     try {
-      const {
-        data: { items },
-      } = await axios.get('/api/items', {
+      const { data } = await axios.get('/api/items', {
         params: { client_id: clientId },
       })
-
-      setItems(Array.isArray(items) ? items : [])
+      setItems(Array.isArray(data) ? data : [])
       setError('')
     } catch {
       setError('Unable to load items.')
@@ -66,11 +63,9 @@ export default function ClientPage() {
     }
   }
 
-  // Always work on a safe array
+  // Search + safe array
   const safeItems = Array.isArray(items) ? items : []
-
-  // Client‑side search
-  const filtered = safeItems.filter(i =>
+  const filtered  = safeItems.filter(i =>
     `${i.name} ${i.part_number}`.toLowerCase().includes(query.toLowerCase())
   )
 
@@ -83,6 +78,7 @@ export default function ClientPage() {
 
   return (
     <div className="px-4 py-6 max-w-7xl mx-auto">
+      {/* Header */}
       <div className="flex items-center mb-6">
         <button
           onClick={() => navigate('/dashboard')}
@@ -95,12 +91,14 @@ export default function ClientPage() {
         </h2>
       </div>
 
+      {/* Error banner */}
       {error && (
         <div className="bg-red-100 text-red-700 p-3 mb-4 rounded border border-red-300">
           {error}
         </div>
       )}
 
+      {/* Search & actions */}
       <div className="flex flex-col sm:flex-row sm:justify-between mb-4 space-y-2 sm:space-y-0">
         <SearchBar
           value={query}
@@ -137,6 +135,7 @@ export default function ClientPage() {
         </div>
       </div>
 
+      {/* Inventory table */}
       <InventoryTable
         items={filtered}
         onDelete={handleDelete}
@@ -147,13 +146,13 @@ export default function ClientPage() {
         role={isAdmin ? 'admin' : 'viewer'}
       />
 
-      {filtered.length === 0 && !error && (
+      {!filtered.length && !error && (
         <p className="text-center text-gray-500 mt-6">
           No inventory items found.
         </p>
       )}
 
-      {/* Add Item Modal */}
+      {/* Modals (unchanged) */}
       {showAdd && (
         <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-40">
           <div className="bg-white p-6 rounded shadow-md max-w-2xl w-full mx-4 relative">
@@ -172,7 +171,6 @@ export default function ClientPage() {
         </div>
       )}
 
-      {/* Bulk Import Modal */}
       {showImport && (
         <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-40">
           <div className="bg-white p-6 rounded shadow-md max-w-3xl w-full mx-4 relative overflow-y-auto max-h-[90vh]">
@@ -191,7 +189,6 @@ export default function ClientPage() {
         </div>
       )}
 
-      {/* Edit Item Modal */}
       {showEdit && editItem && (
         <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-40">
           <div className="bg-white p-6 rounded shadow-md max-w-2xl w-full mx-4 relative">
@@ -211,5 +208,5 @@ export default function ClientPage() {
         </div>
       )}
     </div>
-  )
+)
 }

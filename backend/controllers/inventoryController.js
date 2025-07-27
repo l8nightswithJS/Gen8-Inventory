@@ -1,5 +1,5 @@
 // controllers/inventoryController.js
-const supabase = require('../lib/supabaseClient')
+const supabase = require('../models/db');
 
 // GET /api/items?client_id=123
 exports.getAllItems = async (req, res, next) => {
