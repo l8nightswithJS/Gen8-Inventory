@@ -1,3 +1,4 @@
+// src/pages/AlertsPage.jsx
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import axios from '../utils/axiosConfig'
@@ -17,11 +18,14 @@ export default function AlertsPage() {
         return
       }
       try {
-        // CORRECT: server expects client_id as a query param
         const { data } = await axios.get('/api/items/alerts', {
           params: { client_id: parseInt(clientId, 10) },
         })
-        setAlerts(Array.isArray(data) ? data : [])
+        // API returns an array where some entries have item: null
+        const valid = Array.isArray(data)
+          ? data.filter(a => a.item && typeof a.item === 'object')
+          : []
+        setAlerts(valid)
         setError('')
       } catch {
         setAlerts([])
@@ -34,10 +38,14 @@ export default function AlertsPage() {
   }, [clientId])
 
   const acknowledge = async itemId => {
+    if (!itemId) {
+      alert('Cannot acknowledge: no item specified.')
+      return
+    }
     try {
-      // server’s route is POST /api/items/alerts/:itemId/acknowledge
       await axios.post(`/api/items/alerts/${itemId}/acknowledge`)
-      setAlerts(prev => prev.filter(a => a.items.id !== itemId))
+      // drop alerts for that item
+      setAlerts(prev => prev.filter(a => a.item.id !== itemId))
     } catch {
       alert('Failed to acknowledge alert.')
     }
@@ -76,20 +84,17 @@ export default function AlertsPage() {
           <tbody>
             {alerts.map(a => (
               <tr key={a.id} className="border-t">
-                {/* note the nested `items` property */}
-                <td className="px-4 py-2">{a.items.name}</td>
+                <td className="px-4 py-2">{a.item.name}</td>
+                <td className="px-4 py-2 text-center">{a.item.quantity}</td>
                 <td className="px-4 py-2 text-center">
-                  {a.items.quantity}
-                </td>
-                <td className="px-4 py-2 text-center">
-                  {a.items.low_stock_threshold}
+                  {a.item.low_stock_threshold}
                 </td>
                 <td className="px-4 py-2">
                   {new Date(a.triggered_at).toLocaleString()}
                 </td>
                 <td className="px-4 py-2 text-center">
                   <button
-                    onClick={() => acknowledge(a.items.id)}
+                    onClick={() => acknowledge(a.item.id)}
                     className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs"
                   >
                     Acknowledge

@@ -1,249 +1,177 @@
+// src/components/InventoryForm.jsx
 import React, { useState, useEffect } from 'react'
 import axios from '../utils/axiosConfig'
 
-/**
- * InventoryForm renders a form for creating or editing an inventory
- * item. When submitted successfully it calls `onSuccess` with the
- * updated/new item so the parent component can update its local
- * state without re‑fetching the entire list.
- */
-export default function InventoryForm({ clientId, item = null, onSuccess, onClose }) {
-  const [form, setForm] = useState({
+export default function InventoryForm({ clientId, item, onClose, onSuccess }) {
+  // only the fields our API wants:
+  const [values, setValues] = useState({
     name: '',
     part_number: '',
     description: '',
-    quantity: '',
+    quantity: 0,
     location: '',
     has_lot: false,
     lot_number: '',
-    low_stock_threshold: '',
+    low_stock_threshold: 0,
     alert_enabled: false,
   })
-  const [error, setError] = useState('')
-  const [submitting, setSubmitting] = useState(false)
 
-  // If editing, populate the form with the existing item values
+  // load existing item into form
   useEffect(() => {
-    if (item) {
-      setForm({
+    if (item && item.id) {
+      setValues({
         name: item.name || '',
         part_number: item.part_number || '',
         description: item.description || '',
-        quantity: item.quantity != null ? String(item.quantity) : '',
+        quantity: item.quantity || 0,
         location: item.location || '',
-        has_lot: !!item.has_lot,
+        has_lot: item.has_lot || false,
         lot_number: item.lot_number || '',
-        low_stock_threshold:
-          item.low_stock_threshold != null ? String(item.low_stock_threshold) : '',
-        alert_enabled: !!item.alert_enabled,
+        low_stock_threshold: item.low_stock_threshold || 0,
+        alert_enabled: item.alert_enabled || false,
       })
     }
   }, [item])
 
-  // Update form state on input change
   const handleChange = e => {
-    const { name, value, type, checked } = e.target
-    setForm(prev => ({
-      ...prev,
+    const { name, type, checked, value } = e.target
+    setValues(v => ({
+      ...v,
       [name]: type === 'checkbox' ? checked : value,
     }))
   }
 
-  // Simple validation rules
-  const validate = () => {
-    if (!form.name.trim()) {
-      setError('Name is required.')
-      return false
-    }
-    if (!form.part_number.trim()) {
-      setError('Part # is required.')
-      return false
-    }
-    const q = parseInt(form.quantity, 10)
-    if (isNaN(q) || q < 0) {
-      setError('Quantity must be ≥ 0.')
-      return false
-    }
-    if (form.low_stock_threshold !== '') {
-      const t = parseInt(form.low_stock_threshold, 10)
-      if (isNaN(t) || t < 0) {
-        setError('Threshold must be ≥ 0.')
-        return false
-      }
-    }
-    setError('')
-    return true
-  }
-
-  /**
-   * Submit handler. Serializes the form into a payload and sends
-   * either a POST (create) or PUT (update) request. On success the
-   * API is expected to return the updated item; however if the
-   * response is missing we merge the payload with the existing item
-   * and pass that back to onSuccess. After calling onSuccess the
-   * form invokes onClose to dismiss itself.
-   */
   const handleSubmit = async e => {
     e.preventDefault()
-    if (!validate()) return
-
+    // build a clean payload—no stray id/last_updated/etc.
     const payload = {
-      client_id: clientId,
-      name: form.name.trim(),
-      part_number: form.part_number.trim(),
-      description: form.description,
-      quantity: parseInt(form.quantity, 10),
-      location: form.location,
-      has_lot: form.has_lot,
-      lot_number: form.has_lot ? form.lot_number : '',
-      low_stock_threshold: form.low_stock_threshold
-        ? parseInt(form.low_stock_threshold, 10)
-        : 0,
-      alert_enabled: form.alert_enabled,
+      client_id: Number(clientId),
+      name: values.name,
+      part_number: values.part_number,
+      description: values.description,
+      quantity: Number(values.quantity),
+      location: values.location,
+      has_lot: values.has_lot,
+      lot_number: values.lot_number,
+      low_stock_threshold: Number(values.low_stock_threshold),
+      alert_enabled: values.alert_enabled,
     }
 
-    setSubmitting(true)
     try {
-      let resp
-      if (item) {
-        // Editing an existing item
-        resp = await axios.put(`/api/items/${item.id}`, payload)
+      let res
+      if (item && item.id) {
+        // use PATCH, not PUT
+        res = await axios.patch(`/api/items/${item.id}`, payload)
       } else {
-        // Creating a new item
-        resp = await axios.post('/api/items', payload)
+        res = await axios.post('/api/items', payload)
       }
-      // Prefer the returned object, fall back to our own merge
-      const returned = resp?.data
-      const updatedItem =
-        returned && typeof returned === 'object'
-          ? returned
-          : { ...(item || {}), ...payload, id: item?.id }
-      onSuccess(updatedItem)
+      onSuccess(res.data) // merge into your table state
       onClose()
     } catch (err) {
       console.error(err)
-      setError(
-        err.response?.data?.message || 'There was an error saving. Please try again.'
-      )
-    } finally {
-      setSubmitting(false)
+      alert(err.response?.data?.message || 'Save failed')
     }
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <h3 className="text-xl font-semibold">{item ? 'Edit Item' : 'Add Inventory Item'}</h3>
-      {error && <p className="text-red-600">{error}</p>}
-      {/* Name */}
-      <input
-        name="name"
-        placeholder="Name"
-        value={form.name}
-        onChange={handleChange}
-        className="w-full border border-gray-300 px-3 py-2 rounded"
-        disabled={submitting}
-      />
-      {/* Part Number */}
-      <input
-        name="part_number"
-        placeholder="Part Number"
-        value={form.part_number}
-        onChange={handleChange}
-        className="w-full border border-gray-300 px-3 py-2 rounded"
-        disabled={submitting}
-      />
-      {/* Description */}
-      <input
-        name="description"
-        placeholder="Description"
-        value={form.description}
-        onChange={handleChange}
-        className="w-full border border-gray-300 px-3 py-2 rounded"
-        disabled={submitting}
-      />
-      {/* Quantity */}
-      <input
-        name="quantity"
-        type="number"
-        min="0"
-        placeholder="Quantity"
-        value={form.quantity}
-        onChange={handleChange}
-        className="w-full border border-gray-300 px-3 py-2 rounded"
-        disabled={submitting}
-      />
-      {/* Location */}
-      <input
-        name="location"
-        placeholder="Location"
-        value={form.location}
-        onChange={handleChange}
-        className="w-full border border-gray-300 px-3 py-2 rounded"
-        disabled={submitting}
-      />
-      {/* Track Lot? */}
-      <label className="flex items-center space-x-2">
+      <div>
+        <label>Name</label>
         <input
-          type="checkbox"
-          name="has_lot"
-          checked={form.has_lot}
+          name="name"
+          value={values.name}
           onChange={handleChange}
-          disabled={submitting}
-        />
-        <span>Track Lot Number</span>
-      </label>
-      {/* Lot Number (conditional) */}
-      {form.has_lot && (
-        <input
-          name="lot_number"
-          placeholder="Lot Number"
-          value={form.lot_number}
-          onChange={handleChange}
-          className="w-full border border-gray-300 px-3 py-2 rounded"
-          disabled={submitting}
-        />
-      )}
-      {/* Low‑Stock Threshold */}
-      <div className="space-y-1">
-        <label className="block text-sm font-medium text-gray-700">Low‑Stock Threshold</label>
-        <input
-          name="low_stock_threshold"
-          type="number"
-          min="0"
-          placeholder="e.g. 10"
-          value={form.low_stock_threshold}
-          onChange={handleChange}
-          className="w-full border border-gray-300 px-3 py-2 rounded"
-          disabled={submitting}
+          required
+          className="w-full border px-2 py-1"
         />
       </div>
-      {/* Enable Alert */}
-      <label className="flex items-center space-x-2">
+      <div>
+        <label>Part #</label>
         <input
-          name="alert_enabled"
-          type="checkbox"
-          checked={form.alert_enabled}
+          name="part_number"
+          value={values.part_number}
           onChange={handleChange}
-          disabled={submitting}
+          required
+          className="w-full border px-2 py-1"
         />
-        <span className="text-sm">Enable Low‑Stock Alert</span>
-      </label>
-      {/* Buttons */}
+      </div>
+      <div>
+        <label>Description</label>
+        <textarea
+          name="description"
+          value={values.description}
+          onChange={handleChange}
+          className="w-full border px-2 py-1"
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label>Quantity</label>
+          <input
+            name="quantity"
+            type="number"
+            value={values.quantity}
+            onChange={handleChange}
+            className="w-full border px-2 py-1"
+          />
+        </div>
+        <div>
+          <label>Location</label>
+          <input
+            name="location"
+            value={values.location}
+            onChange={handleChange}
+            className="w-full border px-2 py-1"
+          />
+        </div>
+      </div>
+      <div className="flex items-center space-x-4">
+        <label>
+          <input
+            name="has_lot"
+            type="checkbox"
+            checked={values.has_lot}
+            onChange={handleChange}
+          />{' '}
+          Track Lot Number
+        </label>
+        {values.has_lot && (
+          <input
+            name="lot_number"
+            placeholder="Lot #"
+            value={values.lot_number}
+            onChange={handleChange}
+            className="border px-2 py-1"
+          />
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label>Low‑Stock Threshold</label>
+          <input
+            name="low_stock_threshold"
+            type="number"
+            value={values.low_stock_threshold}
+            onChange={handleChange}
+            className="w-full border px-2 py-1"
+          />
+        </div>
+        <div className="flex items-center space-x-2">
+          <input
+            name="alert_enabled"
+            type="checkbox"
+            checked={values.alert_enabled}
+            onChange={handleChange}
+          />
+          <label>Enable Low‑Stock Alert</label>
+        </div>
+      </div>
       <div className="flex justify-end space-x-2 pt-4">
-        <button
-          type="button"
-          onClick={onClose}
-          disabled={submitting}
-          className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
-        >
+        <button type="button" onClick={onClose} className="px-4 py-2 border">
           Cancel
         </button>
-        <button
-          type="submit"
-          disabled={submitting}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-        >
-          {submitting ? (item ? 'Updating…' : 'Adding…') : item ? 'Update' : 'Add'}
+        <button type="submit" className="px-4 py-2 bg-blue-600 text-white">
+          Save
         </button>
       </div>
     </form>
