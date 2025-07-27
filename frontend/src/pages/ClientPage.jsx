@@ -1,4 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+} from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import axios from '../utils/axiosConfig'
 import InventoryTable from '../components/InventoryTable'
@@ -6,22 +10,32 @@ import InventoryForm from '../components/InventoryForm'
 import BulkImport from '../components/BulkImport'
 import SearchBar from '../components/SearchBar'
 
+/**
+ * ClientPage displays a single client's inventory and allows
+ * administrators to add, import, edit and delete items. In the
+ * upstream implementation the UI required a hard refresh after
+ * updating an item because the parent component always reloaded
+ * the entire list via fetchItems(). This refactored version
+ * optionally accepts an updated item from child forms and
+ * mutates local state, ensuring the table reflects changes
+ * immediately without a manual refresh.
+ */
 export default function ClientPage() {
   const { clientId } = useParams()
-  const navigate    = useNavigate()
-  const isAdmin     = localStorage.getItem('role') === 'admin'
+  const navigate = useNavigate()
+  const isAdmin = localStorage.getItem('role') === 'admin'
 
   const [client, setClient] = useState(null)
-  const [items, setItems]   = useState([])
-  const [query, setQuery]   = useState('')
-  const [error, setError]   = useState('')
+  const [items, setItems] = useState([])
+  const [query, setQuery] = useState('')
+  const [error, setError] = useState('')
 
-  const [showAdd, setShowAdd]       = useState(false)
+  const [showAdd, setShowAdd] = useState(false)
   const [showImport, setShowImport] = useState(false)
-  const [editItem, setEditItem]     = useState(null)
-  const [showEdit, setShowEdit]     = useState(false)
+  const [editItem, setEditItem] = useState(null)
+  const [showEdit, setShowEdit] = useState(false)
 
-  // Fetch client details
+  // Fetch client details once when the component mounts or the id changes
   const fetchClient = useCallback(async () => {
     try {
       const { data } = await axios.get(`/api/clients/${clientId}`)
@@ -32,7 +46,11 @@ export default function ClientPage() {
     }
   }, [clientId])
 
-  // Fetch items — response.data is already an array
+  /**
+   * Fetches the list of items for this client. If the server
+   * responds with an array assign it directly; otherwise fall
+   * back to an empty array and show an error.
+   */
   const fetchItems = useCallback(async () => {
     try {
       const { data } = await axios.get('/api/items', {
@@ -46,12 +64,16 @@ export default function ClientPage() {
     }
   }, [clientId])
 
+  // Initial load of client and items
   useEffect(() => {
     fetchClient()
     fetchItems()
   }, [fetchClient, fetchItems])
 
-  // Delete an item then refresh
+  /**
+   * Delete an item by id. On success the list is re‑fetched.
+   * The confirmation prompt helps prevent accidental deletions.
+   */
   const handleDelete = async id => {
     if (!window.confirm('Delete this item?')) return
     try {
@@ -62,17 +84,46 @@ export default function ClientPage() {
     }
   }
 
-  // Client‑side search
+  // Filter items based on the search query
   const safeItems = Array.isArray(items) ? items : []
-  const filtered  = safeItems.filter(i =>
-    `${i.name} ${i.part_number}`.toLowerCase().includes(query.toLowerCase())
+  const filtered = safeItems.filter(i =>
+    `${i.name} ${i.part_number}`
+      .toLowerCase()
+      .includes(query.toLowerCase())
   )
 
-  const closeAllModals = () => {
+  /**
+   * Close all modals. If an updated item is provided, merge it
+   * directly into the local items state. Otherwise perform a
+   * full refetch to sync state with the server. This prevents
+   * the user from having to manually reload the page after an
+   * edit or add operation.
+   *
+   * @param {object|null} updatedItem An item returned from the
+   *   server after a successful mutation; if undefined the list
+   *   will be refetched from the server.
+   */
+  const closeAllModals = updatedItem => {
     setShowAdd(false)
     setShowImport(false)
     setShowEdit(false)
-    fetchItems()
+    if (updatedItem && typeof updatedItem === 'object') {
+      setItems(prev => {
+        // Check for existing item by id
+        const index = prev.findIndex(i => i.id === updatedItem.id)
+        if (index > -1) {
+          // Replace existing item
+          const next = [...prev]
+          next[index] = updatedItem
+          return next
+        }
+        // Append new item
+        return [...prev, updatedItem]
+      })
+    } else {
+      // No updated item available – refresh from API
+      fetchItems()
+    }
   }
 
   return (
@@ -107,9 +158,7 @@ export default function ClientPage() {
 
         <div className="flex flex-wrap gap-2">
           <button
-            onClick={() =>
-              window.open(`/api/items/export?client_id=${clientId}`, '_blank')
-            }
+            onClick={() => window.open(`/api/items/export?client_id=${clientId}`, '_blank')}
             className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm"
           >
             Export
@@ -146,9 +195,7 @@ export default function ClientPage() {
       />
 
       {!filtered.length && !error && (
-        <p className="text-center text-gray-500 mt-6">
-          No inventory items found.
-        </p>
+        <p className="text-center text-gray-500 mt-6">No inventory items found.</p>
       )}
 
       {/* Add Item Modal */}
@@ -163,7 +210,7 @@ export default function ClientPage() {
             </button>
             <InventoryForm
               clientId={clientId}
-              onSuccess={closeAllModals}
+              onSuccess={updated => closeAllModals(updated)}
               onClose={() => setShowAdd(false)}
             />
           </div>
@@ -202,7 +249,7 @@ export default function ClientPage() {
             <InventoryForm
               clientId={clientId}
               item={editItem}
-              onSuccess={closeAllModals}
+              onSuccess={updated => closeAllModals(updated)}
               onClose={() => setShowEdit(false)}
             />
           </div>

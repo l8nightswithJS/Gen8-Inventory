@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import axios from '../utils/axiosConfig'
 
-export default function InventoryForm({
-  clientId,
-  item = null,
-  onSuccess,
-  onClose,
-}) {
+/**
+ * InventoryForm renders a form for creating or editing an inventory
+ * item. When submitted successfully it calls `onSuccess` with the
+ * updated/new item so the parent component can update its local
+ * state without re‑fetching the entire list.
+ */
+export default function InventoryForm({ clientId, item = null, onSuccess, onClose }) {
   const [form, setForm] = useState({
     name: '',
     part_number: '',
@@ -18,28 +19,28 @@ export default function InventoryForm({
     low_stock_threshold: '',
     alert_enabled: false,
   })
-  const [error, setError]       = useState('')
+  const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  // Seed form when editing
+  // If editing, populate the form with the existing item values
   useEffect(() => {
     if (item) {
       setForm({
-        name:                item.name || '',
-        part_number:         item.part_number || '',
-        description:         item.description || '',
-        quantity:            item.quantity != null ? String(item.quantity) : '',
-        location:            item.location || '',
-        has_lot:             !!item.has_lot,
-        lot_number:          item.lot_number || '',
-        low_stock_threshold: item.low_stock_threshold != null
-                               ? String(item.low_stock_threshold)
-                               : '',
-        alert_enabled:       !!item.alert_enabled,
+        name: item.name || '',
+        part_number: item.part_number || '',
+        description: item.description || '',
+        quantity: item.quantity != null ? String(item.quantity) : '',
+        location: item.location || '',
+        has_lot: !!item.has_lot,
+        lot_number: item.lot_number || '',
+        low_stock_threshold:
+          item.low_stock_threshold != null ? String(item.low_stock_threshold) : '',
+        alert_enabled: !!item.alert_enabled,
       })
     }
   }, [item])
 
+  // Update form state on input change
   const handleChange = e => {
     const { name, value, type, checked } = e.target
     setForm(prev => ({
@@ -48,6 +49,7 @@ export default function InventoryForm({
     }))
   }
 
+  // Simple validation rules
   const validate = () => {
     if (!form.name.trim()) {
       setError('Name is required.')
@@ -73,39 +75,55 @@ export default function InventoryForm({
     return true
   }
 
+  /**
+   * Submit handler. Serializes the form into a payload and sends
+   * either a POST (create) or PUT (update) request. On success the
+   * API is expected to return the updated item; however if the
+   * response is missing we merge the payload with the existing item
+   * and pass that back to onSuccess. After calling onSuccess the
+   * form invokes onClose to dismiss itself.
+   */
   const handleSubmit = async e => {
     e.preventDefault()
     if (!validate()) return
 
     const payload = {
-      client_id:           clientId,
-      name:                form.name.trim(),
-      part_number:         form.part_number.trim(),
-      description:         form.description,
-      quantity:            parseInt(form.quantity, 10),
-      location:            form.location,
-      has_lot:             form.has_lot,
-      lot_number:          form.has_lot ? form.lot_number : '',
+      client_id: clientId,
+      name: form.name.trim(),
+      part_number: form.part_number.trim(),
+      description: form.description,
+      quantity: parseInt(form.quantity, 10),
+      location: form.location,
+      has_lot: form.has_lot,
+      lot_number: form.has_lot ? form.lot_number : '',
       low_stock_threshold: form.low_stock_threshold
-                             ? parseInt(form.low_stock_threshold, 10)
-                             : 0,
-      alert_enabled:       form.alert_enabled,
+        ? parseInt(form.low_stock_threshold, 10)
+        : 0,
+      alert_enabled: form.alert_enabled,
     }
 
     setSubmitting(true)
     try {
+      let resp
       if (item) {
-        await axios.put(`/api/items/${item.id}`, payload)
+        // Editing an existing item
+        resp = await axios.put(`/api/items/${item.id}`, payload)
       } else {
-        await axios.post('/api/items', payload)
+        // Creating a new item
+        resp = await axios.post('/api/items', payload)
       }
-      onSuccess()  // parent will refetch and/or close other modals
-      onClose()    // close this modal
+      // Prefer the returned object, fall back to our own merge
+      const returned = resp?.data
+      const updatedItem =
+        returned && typeof returned === 'object'
+          ? returned
+          : { ...(item || {}), ...payload, id: item?.id }
+      onSuccess(updatedItem)
+      onClose()
     } catch (err) {
       console.error(err)
       setError(
-        err.response?.data?.message ||
-        'There was an error saving. Please try again.'
+        err.response?.data?.message || 'There was an error saving. Please try again.'
       )
     } finally {
       setSubmitting(false)
@@ -114,12 +132,8 @@ export default function InventoryForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <h3 className="text-xl font-semibold">
-        {item ? 'Edit Item' : 'Add Inventory Item'}
-      </h3>
-
+      <h3 className="text-xl font-semibold">{item ? 'Edit Item' : 'Add Inventory Item'}</h3>
       {error && <p className="text-red-600">{error}</p>}
-
       {/* Name */}
       <input
         name="name"
@@ -129,7 +143,6 @@ export default function InventoryForm({
         className="w-full border border-gray-300 px-3 py-2 rounded"
         disabled={submitting}
       />
-
       {/* Part Number */}
       <input
         name="part_number"
@@ -139,7 +152,6 @@ export default function InventoryForm({
         className="w-full border border-gray-300 px-3 py-2 rounded"
         disabled={submitting}
       />
-
       {/* Description */}
       <input
         name="description"
@@ -149,7 +161,6 @@ export default function InventoryForm({
         className="w-full border border-gray-300 px-3 py-2 rounded"
         disabled={submitting}
       />
-
       {/* Quantity */}
       <input
         name="quantity"
@@ -161,7 +172,6 @@ export default function InventoryForm({
         className="w-full border border-gray-300 px-3 py-2 rounded"
         disabled={submitting}
       />
-
       {/* Location */}
       <input
         name="location"
@@ -171,7 +181,6 @@ export default function InventoryForm({
         className="w-full border border-gray-300 px-3 py-2 rounded"
         disabled={submitting}
       />
-
       {/* Track Lot? */}
       <label className="flex items-center space-x-2">
         <input
@@ -183,7 +192,6 @@ export default function InventoryForm({
         />
         <span>Track Lot Number</span>
       </label>
-
       {/* Lot Number (conditional) */}
       {form.has_lot && (
         <input
@@ -195,12 +203,9 @@ export default function InventoryForm({
           disabled={submitting}
         />
       )}
-
-      {/* Low-Stock Threshold */}
+      {/* Low‑Stock Threshold */}
       <div className="space-y-1">
-        <label className="block text-sm font-medium text-gray-700">
-          Low‑Stock Threshold
-        </label>
+        <label className="block text-sm font-medium text-gray-700">Low‑Stock Threshold</label>
         <input
           name="low_stock_threshold"
           type="number"
@@ -212,7 +217,6 @@ export default function InventoryForm({
           disabled={submitting}
         />
       </div>
-
       {/* Enable Alert */}
       <label className="flex items-center space-x-2">
         <input
@@ -224,7 +228,6 @@ export default function InventoryForm({
         />
         <span className="text-sm">Enable Low‑Stock Alert</span>
       </label>
-
       {/* Buttons */}
       <div className="flex justify-end space-x-2 pt-4">
         <button
