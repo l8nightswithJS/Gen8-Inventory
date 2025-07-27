@@ -13,14 +13,15 @@ export default function AlertsPage() {
     async function loadAlerts() {
       if (!clientId) {
         setError('No client specified.')
-        return setLoading(false)
+        setLoading(false)
+        return
       }
       try {
-        const {
-          data: { alerts: fetchedAlerts },
-        } = await axios.get(`/api/clients/${clientId}/alerts`)
-
-        setAlerts(Array.isArray(fetchedAlerts) ? fetchedAlerts : [])
+        // CORRECT: server expects client_id as a query param
+        const { data } = await axios.get('/api/items/alerts', {
+          params: { client_id: parseInt(clientId, 10) },
+        })
+        setAlerts(Array.isArray(data) ? data : [])
         setError('')
       } catch {
         setAlerts([])
@@ -32,19 +33,11 @@ export default function AlertsPage() {
     loadAlerts()
   }, [clientId])
 
-  const acknowledge = async alertId => {
-    // lookup the itemId from the nested object
-    const a = alerts.find(x => x.id === alertId)
-    const itemId = a?.item?.id
-    if (!itemId) {
-      return alert('Cannot acknowledge: item ID missing')
-    }
-
+  const acknowledge = async itemId => {
     try {
-      await axios.post(
-        `/api/items/${itemId}/alerts/${alertId}/acknowledge`
-      )
-      setAlerts(prev => prev.filter(x => x.id !== alertId))
+      // server’s route is POST /api/items/alerts/:itemId/acknowledge
+      await axios.post(`/api/items/alerts/${itemId}/acknowledge`)
+      setAlerts(prev => prev.filter(a => a.items.id !== itemId))
     } catch {
       alert('Failed to acknowledge alert.')
     }
@@ -52,7 +45,7 @@ export default function AlertsPage() {
 
   if (loading) return <p className="p-4">Loading alerts…</p>
   if (error)   return <p className="p-4 text-red-600">{error}</p>
-  if (alerts.length === 0)
+  if (!alerts.length)
     return <p className="p-4 text-gray-700">No active low‑stock alerts.</p>
 
   return (
@@ -83,17 +76,20 @@ export default function AlertsPage() {
           <tbody>
             {alerts.map(a => (
               <tr key={a.id} className="border-t">
-                <td className="px-4 py-2">{a.item.name}</td>
-                <td className="px-4 py-2 text-center">{a.item.quantity}</td>
+                {/* note the nested `items` property */}
+                <td className="px-4 py-2">{a.items.name}</td>
                 <td className="px-4 py-2 text-center">
-                  {a.item.low_stock_threshold}
+                  {a.items.quantity}
+                </td>
+                <td className="px-4 py-2 text-center">
+                  {a.items.low_stock_threshold}
                 </td>
                 <td className="px-4 py-2">
                   {new Date(a.triggered_at).toLocaleString()}
                 </td>
                 <td className="px-4 py-2 text-center">
                   <button
-                    onClick={() => acknowledge(a.id)}
+                    onClick={() => acknowledge(a.items.id)}
                     className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs"
                   >
                     Acknowledge

@@ -1,4 +1,3 @@
-// src/pages/ClientPage.jsx
 import React, { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import axios from '../utils/axiosConfig'
@@ -33,7 +32,7 @@ export default function ClientPage() {
     }
   }, [clientId])
 
-  // Fetch items — response.data is the array we want
+  // Fetch items — response.data is already an array
   const fetchItems = useCallback(async () => {
     try {
       const { data } = await axios.get('/api/items', {
@@ -63,7 +62,7 @@ export default function ClientPage() {
     }
   }
 
-  // Search + safe array
+  // Client‑side search
   const safeItems = Array.isArray(items) ? items : []
   const filtered  = safeItems.filter(i =>
     `${i.name} ${i.part_number}`.toLowerCase().includes(query.toLowerCase())
@@ -78,7 +77,7 @@ export default function ClientPage() {
 
   return (
     <div className="px-4 py-6 max-w-7xl mx-auto">
-      {/* Header */}
+      {/* ← Back + Title */}
       <div className="flex items-center mb-6">
         <button
           onClick={() => navigate('/dashboard')}
@@ -91,14 +90,14 @@ export default function ClientPage() {
         </h2>
       </div>
 
-      {/* Error banner */}
+      {/* Error Banner */}
       {error && (
         <div className="bg-red-100 text-red-700 p-3 mb-4 rounded border border-red-300">
           {error}
         </div>
       )}
 
-      {/* Search & actions */}
+      {/* Search & Action Buttons */}
       <div className="flex flex-col sm:flex-row sm:justify-between mb-4 space-y-2 sm:space-y-0">
         <SearchBar
           value={query}
@@ -135,7 +134,7 @@ export default function ClientPage() {
         </div>
       </div>
 
-      {/* Inventory table */}
+      {/* Inventory Table */}
       <InventoryTable
         items={filtered}
         onDelete={handleDelete}
@@ -152,7 +151,7 @@ export default function ClientPage() {
         </p>
       )}
 
-      {/* Modals (unchanged) */}
+      {/* Add Item Modal */}
       {showAdd && (
         <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-40">
           <div className="bg-white p-6 rounded shadow-md max-w-2xl w-full mx-4 relative">
@@ -171,6 +170,7 @@ export default function ClientPage() {
         </div>
       )}
 
+      {/* Bulk Import Modal */}
       {showImport && (
         <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-40">
           <div className="bg-white p-6 rounded shadow-md max-w-3xl w-full mx-4 relative overflow-y-auto max-h-[90vh]">
@@ -189,6 +189,7 @@ export default function ClientPage() {
         </div>
       )}
 
+      {/* Edit Item Modal */}
       {showEdit && editItem && (
         <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-40">
           <div className="bg-white p-6 rounded shadow-md max-w-2xl w-full mx-4 relative">
@@ -208,5 +209,5 @@ export default function ClientPage() {
         </div>
       )}
     </div>
-)
+  )
 }
