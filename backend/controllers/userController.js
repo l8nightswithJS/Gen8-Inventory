@@ -1,7 +1,6 @@
 // controllers/userController.js
-const bcrypt   = require('bcryptjs');
-const supabase = require('../models/db');
-
+const bcrypt = require('bcryptjs');
+const supabase = require('../lib/supabaseClient');
 /**
  * GET /api/users
  * List all users (admin only).
@@ -43,7 +42,10 @@ exports.getPendingUsers = async (req, res, next) => {
  */
 exports.getUserById = async (req, res, next) => {
   try {
-    const { data: [user], error } = await supabase
+    const {
+      data: [user],
+      error,
+    } = await supabase
       .from('users')
       .select('id, username, role, approved, created_at')
       .eq('id', req.params.id)
@@ -71,12 +73,13 @@ exports.createUser = async (req, res, next) => {
         username,
         password: hash,
         role,
-        approved: true  // direct creation by admin is automatically approved
+        approved: true, // direct creation by admin is automatically approved
       })
       .single();
 
     if (error) {
-      if (error.code === '23505') {  // unique_violation
+      if (error.code === '23505') {
+        // unique_violation
         return res.status(400).json({ message: 'Username already exists' });
       }
       throw error;

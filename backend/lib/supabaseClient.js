@@ -9,7 +9,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   throw new Error(
-    'Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variable'
+    'Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variable',
   );
 }
 
