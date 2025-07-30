@@ -72,7 +72,7 @@ exports.createItem = async (req, res, next) => {
   }
 }
 
-// PUT /api/items/:id
+/// controllers/inventoryController.js
 exports.updateItem = async (req, res, next) => {
   console.log('>>>> updateItem invoked for id', req.params.id)
   try {
@@ -81,6 +81,7 @@ exports.updateItem = async (req, res, next) => {
       return res.status(400).json({ message: 'Invalid item id' })
     }
 
+    // Build our updates object first:
     const updates = {
       name:                req.body.name,
       part_number:         req.body.part_number,
@@ -90,20 +91,27 @@ exports.updateItem = async (req, res, next) => {
       location:            req.body.location || '',
       last_updated:        new Date().toISOString(),
       low_stock_threshold: parseInt(req.body.low_stock_threshold, 10) || 0,
-      alert_enabled:       !!req.body.alert_enabled
+      alert_enabled:       !!req.body.alert_enabled,
+      // If you track has_lot too:
+      has_lot:             !!req.body.has_lot,
     }
 
-    // ← Here’s the crucial change: add .select('*').single()
+    // Now perform the update and return the updated row
     const { data, error } = await supabase
       .from('items')
-      .update(updates)
+      .update(updates)          // <-- uses the declared `updates`
       .eq('id', id)
       .select('*')
       .single()
 
+    console.log('>>>> supabase.update returned', { data, error })
+
     if (error) throw error
-    if (!data) return res.status(404).json({ message: 'Item not found' })
-    // Now data is the updated object, so we return it
+    if (!data) {
+      return res.status(404).json({ message: 'Item not found' })
+    }
+
+    // Send back the single updated object
     res.json(data)
   } catch (err) {
     next(err)
