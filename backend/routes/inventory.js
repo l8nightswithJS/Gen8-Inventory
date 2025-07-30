@@ -109,4 +109,13 @@ router.put(
   controller.updateItem
 )
 
+// DELETE /api/items/:id
+router.delete(
+  '/:id',
+  requireRole('admin'),
+  param('id').isInt().withMessage('Invalid item id').toInt(),
+  handleValidation,
+  controller.deleteItem
+)
+
 module.exports = router

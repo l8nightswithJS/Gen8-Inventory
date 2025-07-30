@@ -1,5 +1,6 @@
+// src/pages/ClientPage.jsx
 import React, { useState, useEffect, useCallback } from 'react'
-import { useParams, useNavigate, data } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import axios from '../utils/axiosConfig'
 
 import InventoryTable from '../components/InventoryTable'
@@ -13,23 +14,23 @@ export default function ClientPage() {
   const navigate     = useNavigate()
   const isAdmin      = localStorage.getItem('role') === 'admin'
 
-  const [client, setClient]     = useState({})
-  const [items, setItems]       = useState([])
-  const [query, setQuery]       = useState('')
-  const [error, setError]       = useState('')
-  const [showAddItem, setShowAddItem]   = useState(false)
-  const [showImport, setShowImport]     = useState(false)
-  const [editItem, setEditItem]         = useState(null)
-  const [deleteItem, setDeleteItem]     = useState(null)
-  const [page, setPage]     = useState(1)
+  const [client, setClient]       = useState({})
+  const [items, setItems]         = useState([])
+  const [query, setQuery]         = useState('')
+  const [error, setError]         = useState('')
+  const [showAddItem, setShowAddItem] = useState(false)
+  const [showImport, setShowImport]   = useState(false)
+  const [editItem, setEditItem]       = useState(null)
+  const [deleteItem, setDeleteItem]   = useState(null)
+  const [page, setPage]               = useState(1)
   const totalPages = 1  // adjust if you later support paging
 
+  // Fetch items for this client
   const fetchItems = useCallback(async () => {
     try {
       const { data } = await axios.get(`/api/items`, {
         params: { client_id: clientId },
       })
-      console.log(data)
       setItems(data)
       setError('')
     } catch (err) {
@@ -38,6 +39,7 @@ export default function ClientPage() {
     }
   }, [clientId])
 
+  // On mount / clientId change
   useEffect(() => {
     // load client name
     axios.get(`/api/clients/${clientId}`)
@@ -47,8 +49,9 @@ export default function ClientPage() {
     fetchItems()
   }, [clientId, fetchItems])
 
-  const handleUpdated = () => {
-    fetchItems(data.items.clientId)
+  // Corrected: just re-fetch items
+  const handleUpdated = async () => {
+    await fetchItems()
   }
 
   const confirmDelete = async () => {
@@ -141,8 +144,8 @@ export default function ClientPage() {
             setShowAddItem(false)
             setEditItem(null)
           }}
-          onUpdated={() => {
-            handleUpdated()
+          onUpdated={async () => {
+            await handleUpdated()
             setShowAddItem(false)
             setEditItem(null)
           }}

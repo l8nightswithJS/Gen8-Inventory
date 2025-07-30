@@ -167,3 +167,25 @@ exports.acknowledgeAlert = async (req, res, next) => {
     next(err)
   }
 }
+
+exports.deleteItem = async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10)
+    if (isNaN(id)) {
+      return res.status(400).json({ message: 'Invalid item id' })
+    }
+
+    // Perform the delete (we don’t need to inspect returned rows)
+    const { error } = await supabase
+      .from('items')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw error
+
+    // Success—tell the client we deleted it
+    res.json({ message: 'Item deleted' })
+  } catch (err) {
+    next(err)
+  }
+}

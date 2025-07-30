@@ -85,13 +85,8 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
     setSubmitting(true)
     try {
       // Perform update and grab the updated row(s)
-      const resp = await axios.put(`/api/items/${item.id}`, payload)
-      // Supabase returns an array of updated rows
-      const updatedItem = Array.isArray(resp.data) ? resp.data[0] : resp.data
-
-      // Notify parent with the updated item
-      // If onUpdated returns a promise, await it; otherwise it'll be no-op
-      await onUpdated(updatedItem)
+      await axios.put(`/api/items/${item.id}`, payload)
+      await onUpdated()
 
       // Now close the modal
       onClose()
