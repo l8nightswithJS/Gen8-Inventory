@@ -5,13 +5,12 @@ export default function InventoryTable({
   page,
   totalPages,
   onPage,
-  onEdit,    // callback(item) to open edit
-  onDelete,  // callback(id) to delete via API + refresh
+  onEdit,    // callback(item)
+  onDelete,  // callback(item)
   role = 'viewer',
 }) {
   const [showRotateNotice, setShowRotateNotice] = useState(false)
 
-  // show rotate notice in narrow/mobile
   useEffect(() => {
     const check = () => setShowRotateNotice(window.innerWidth < 775)
     check()
@@ -19,10 +18,9 @@ export default function InventoryTable({
     return () => window.removeEventListener('resize', check)
   }, [])
 
-  // defensive: ensure items is an array
   const safeItems = Array.isArray(items) ? items : []
   const attributeKeys = Array.from(
-    new Set(safeItems.flatMap(item => Object.keys(item.attributes || {})))
+    new Set(safeItems.flatMap(i => Object.keys(i.attributes || {})))
   )
 
   return (
@@ -110,7 +108,7 @@ export default function InventoryTable({
                           Edit
                         </button>
                         <button
-                          onClick={() => onDelete(item.id)}
+                          onClick={() => onDelete(item)}
                           className="bg-red-600 text-white text-xs px-3 py-1 rounded hover:bg-red-700"
                         >
                           Delete
@@ -125,7 +123,6 @@ export default function InventoryTable({
         </table>
       </div>
 
-      {/* pagination */}
       <div className="flex justify-center mt-4 space-x-4 text-sm text-gray-700">
         <button
           disabled={page <= 1}

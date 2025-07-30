@@ -1,5 +1,5 @@
 // controllers/inventoryController.js
-const supabase = require('../models/db');
+const supabase = require('../models/db')
 
 // GET /api/items?client_id=123
 exports.getAllItems = async (req, res, next) => {
@@ -74,6 +74,15 @@ exports.createItem = async (req, res, next) => {
 
 // PUT /api/items/:id
 exports.updateItem = async (req, res, next) => {
+  console.log('>>>> updateItem invoked for id', req.params.id)
+  // ...
+  const { data, error } = await supabase
+    .from('items')
+    .update(updates)
+    .eq('id', id)
+    .select('*')
+    .single()
+  console.log('>>>> supabase returned:', data, 'error:', error)
   try {
     const id = parseInt(req.params.id, 10)
     if (isNaN(id)) {
@@ -92,14 +101,17 @@ exports.updateItem = async (req, res, next) => {
       alert_enabled:       !!req.body.alert_enabled
     }
 
+    // ← Here’s the crucial change: add .select('*').single()
     const { data, error } = await supabase
       .from('items')
       .update(updates)
       .eq('id', id)
+      .select('*')
       .single()
 
     if (error) throw error
     if (!data) return res.status(404).json({ message: 'Item not found' })
+    // Now data is the updated object, so we return it
     res.json(data)
   } catch (err) {
     next(err)
@@ -107,7 +119,6 @@ exports.updateItem = async (req, res, next) => {
 }
 
 // GET /api/items/alerts?client_id=123
-// Returns [{ id, triggered_at, item:{…} }, …]
 exports.getActiveAlerts = async (req, res, next) => {
   try {
     const clientId = parseInt(req.query.client_id, 10)

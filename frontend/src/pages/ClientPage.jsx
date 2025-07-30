@@ -1,259 +1,161 @@
-import React, {
-  useState,
-  useEffect,
-  useCallback,
-} from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import React, { useState, useEffect, useCallback } from 'react'
+import { useParams, useNavigate, data } from 'react-router-dom'
 import axios from '../utils/axiosConfig'
-import InventoryTable from '../components/InventoryTable'
-import InventoryForm from '../components/InventoryForm'
-import BulkImport from '../components/BulkImport'
-import SearchBar from '../components/SearchBar'
 
-/**
- * ClientPage displays a single client's inventory and allows
- * administrators to add, import, edit and delete items. In the
- * upstream implementation the UI required a hard refresh after
- * updating an item because the parent component always reloaded
- * the entire list via fetchItems(). This refactored version
- * optionally accepts an updated item from child forms and
- * mutates local state, ensuring the table reflects changes
- * immediately without a manual refresh.
- */
+import InventoryTable from '../components/InventoryTable'
+import BulkImport     from '../components/BulkImport'
+import SearchBar      from '../components/SearchBar'
+import EditItemModal  from '../components/EditItemModal'
+import ConfirmModal   from '../components/ConfirmModal'
+
 export default function ClientPage() {
   const { clientId } = useParams()
-  const navigate = useNavigate()
-  const isAdmin = localStorage.getItem('role') === 'admin'
+  const navigate     = useNavigate()
+  const isAdmin      = localStorage.getItem('role') === 'admin'
 
-  const [client, setClient] = useState(null)
-  const [items, setItems] = useState([])
-  const [query, setQuery] = useState('')
-  const [error, setError] = useState('')
+  const [client, setClient]     = useState({})
+  const [items, setItems]       = useState([])
+  const [query, setQuery]       = useState('')
+  const [error, setError]       = useState('')
+  const [showAddItem, setShowAddItem]   = useState(false)
+  const [showImport, setShowImport]     = useState(false)
+  const [editItem, setEditItem]         = useState(null)
+  const [deleteItem, setDeleteItem]     = useState(null)
+  const [page, setPage]     = useState(1)
+  const totalPages = 1  // adjust if you later support paging
 
-  const [showAdd, setShowAdd] = useState(false)
-  const [showImport, setShowImport] = useState(false)
-  const [editItem, setEditItem] = useState(null)
-  const [showEdit, setShowEdit] = useState(false)
-
-  // Fetch client details once when the component mounts or the id changes
-  const fetchClient = useCallback(async () => {
-    try {
-      const { data } = await axios.get(`/api/clients/${clientId}`)
-      setClient(data)
-      setError('')
-    } catch {
-      setError('Unable to load client.')
-    }
-  }, [clientId])
-
-  /**
-   * Fetches the list of items for this client. If the server
-   * responds with an array assign it directly; otherwise fall
-   * back to an empty array and show an error.
-   */
   const fetchItems = useCallback(async () => {
     try {
-      const { data } = await axios.get('/api/items', {
+      const { data } = await axios.get(`/api/items`, {
         params: { client_id: clientId },
       })
-      setItems(Array.isArray(data) ? data : [])
+      console.log(data)
+      setItems(data)
       setError('')
-    } catch {
-      setError('Unable to load items.')
-      setItems([])
+    } catch (err) {
+      console.error(err)
+      setError('Failed to load items.')
     }
   }, [clientId])
 
-  // Initial load of client and items
   useEffect(() => {
-    fetchClient()
+    // load client name
+    axios.get(`/api/clients/${clientId}`)
+      .then(res => setClient(res.data))
+      .catch(() => setClient({ name: '' }))
+
     fetchItems()
-  }, [fetchClient, fetchItems])
+  }, [clientId, fetchItems])
 
-  /**
-   * Delete an item by id. On success the list is re‑fetched.
-   * The confirmation prompt helps prevent accidental deletions.
-   */
-  const handleDelete = async id => {
-    if (!window.confirm('Delete this item?')) return
+  const handleUpdated = () => {
+    fetchItems(data.items.clientId)
+  }
+
+  const confirmDelete = async () => {
     try {
-      await axios.delete(`/api/items/${id}`)
-      fetchItems()
+      await axios.delete(`/api/items/${deleteItem.id}`)
+      setDeleteItem(null)
+      handleUpdated()
     } catch {
-      alert('Failed to delete item.')
+      setError('Failed to delete item.')
     }
   }
 
-  // Filter items based on the search query
-  const safeItems = Array.isArray(items) ? items : []
-  const filtered = safeItems.filter(i =>
-    `${i.name} ${i.part_number}`
-      .toLowerCase()
-      .includes(query.toLowerCase())
+  const filtered = items.filter(i =>
+    i.name.toLowerCase().includes(query.toLowerCase()) ||
+    i.part_number.toLowerCase().includes(query.toLowerCase())
   )
-
-  /**
-   * Close all modals. If an updated item is provided, merge it
-   * directly into the local items state. Otherwise perform a
-   * full refetch to sync state with the server. This prevents
-   * the user from having to manually reload the page after an
-   * edit or add operation.
-   *
-   * @param {object|null} updatedItem An item returned from the
-   *   server after a successful mutation; if undefined the list
-   *   will be refetched from the server.
-   */
-  const closeAllModals = updatedItem => {
-    setShowAdd(false)
-    setShowImport(false)
-    setShowEdit(false)
-    if (updatedItem && typeof updatedItem === 'object') {
-      setItems(prev => {
-        // Check for existing item by id
-        const index = prev.findIndex(i => i.id === updatedItem.id)
-        if (index > -1) {
-          // Replace existing item
-          const next = [...prev]
-          next[index] = updatedItem
-          return next
-        }
-        // Append new item
-        return [...prev, updatedItem]
-      })
-    } else {
-      // No updated item available – refresh from API
-      fetchItems()
-    }
-  }
 
   return (
     <div className="px-4 py-6 max-w-7xl mx-auto">
-      {/* ← Back + Title */}
-      <div className="flex items-center mb-6">
-        <button
-          onClick={() => navigate('/dashboard')}
-          className="text-blue-600 hover:underline mr-4"
-        >
-          ← Back
-        </button>
-        <h2 className="text-2xl font-semibold">
-          {client?.name ?? 'Loading…'}
-        </h2>
-      </div>
-
-      {/* Error Banner */}
-      {error && (
-        <div className="bg-red-100 text-red-700 p-3 mb-4 rounded border border-red-300">
-          {error}
-        </div>
-      )}
-
-      {/* Search & Action Buttons */}
-      <div className="flex flex-col sm:flex-row sm:justify-between mb-4 space-y-2 sm:space-y-0">
-        <SearchBar
-          value={query}
-          onSearch={q => setQuery(q)}
-          className="w-full sm:w-auto"
-        />
-
-        <div className="flex flex-wrap gap-2">
+      <div className="flex justify-between items-center mb-4">
+        <div>
           <button
-            onClick={() => window.open(`/api/items/export?client_id=${clientId}`, '_blank')}
-            className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm"
+            onClick={() => navigate(-1)}
+            className="text-blue-600 hover:underline"
           >
-            Export
+            ← Back
           </button>
+          <h1 className="text-2xl font-bold inline ml-4">
+            {client.name}
+          </h1>
+        </div>
+
+        <div className="flex space-x-2">
+          <SearchBar value={query} onChange={setQuery} />
 
           {isAdmin && (
             <>
               <button
-                onClick={() => setShowAdd(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm"
+                onClick={() => setShowAddItem(true)}
+                className="px-4 py-2 bg-blue-600 text-white rounded"
               >
                 + Add
               </button>
+
               <button
                 onClick={() => setShowImport(true)}
-                className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded text-sm"
+                className="px-4 py-2 bg-purple-600 text-white rounded"
               >
                 Bulk
               </button>
+
+              <a
+                href={`/api/items/export?client_id=${clientId}`}
+                className="px-4 py-2 bg-green-600 text-white rounded"
+              >
+                Export
+              </a>
             </>
           )}
         </div>
       </div>
 
-      {/* Inventory Table */}
+      {error && <p className="text-red-600">{error}</p>}
+
       <InventoryTable
         items={filtered}
-        onDelete={handleDelete}
-        onEdit={item => {
-          setEditItem(item)
-          setShowEdit(true)
-        }}
+        page={page}
+        totalPages={totalPages}
+        onPage={setPage}
+        onEdit={setEditItem}
+        onDelete={setDeleteItem}
         role={isAdmin ? 'admin' : 'viewer'}
       />
 
-      {!filtered.length && !error && (
-        <p className="text-center text-gray-500 mt-6">No inventory items found.</p>
-      )}
-
-      {/* Add Item Modal */}
-      {showAdd && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-40">
-          <div className="bg-white p-6 rounded shadow-md max-w-2xl w-full mx-4 relative">
-            <button
-              onClick={() => setShowAdd(false)}
-              className="absolute top-2 right-2 text-gray-600 hover:text-black text-xl"
-            >
-              &times;
-            </button>
-            <InventoryForm
-              clientId={clientId}
-              onSuccess={updated => closeAllModals(updated)}
-              onClose={() => setShowAdd(false)}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Bulk Import Modal */}
       {showImport && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-40">
-          <div className="bg-white p-6 rounded shadow-md max-w-3xl w-full mx-4 relative overflow-y-auto max-h-[90vh]">
-            <button
-              onClick={() => setShowImport(false)}
-              className="absolute top-2 right-2 text-gray-600 hover:text-black text-xl"
-            >
-              &times;
-            </button>
-            <BulkImport
-              clientId={clientId}
-              refresh={closeAllModals}
-              onClose={() => setShowImport(false)}
-            />
-          </div>
-        </div>
+        <BulkImport
+          clientId={clientId}
+          onClose={() => setShowImport(false)}
+          onSuccess={() => {
+            setShowImport(false)
+            handleUpdated()
+          }}
+        />
       )}
 
-      {/* Edit Item Modal */}
-      {showEdit && editItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-40">
-          <div className="bg-white p-6 rounded shadow-md max-w-2xl w-full mx-4 relative">
-            <button
-              onClick={() => setShowEdit(false)}
-              className="absolute top-2 right-2 text-gray-600 hover:text-black text-xl"
-            >
-              &times;
-            </button>
-            <InventoryForm
-              clientId={clientId}
-              item={editItem}
-              onSuccess={updated => closeAllModals(updated)}
-              onClose={() => setShowEdit(false)}
-            />
-          </div>
-        </div>
+      {(showAddItem || editItem) && (
+        <EditItemModal
+          item={editItem || {}}
+          onClose={() => {
+            setShowAddItem(false)
+            setEditItem(null)
+          }}
+          onUpdated={() => {
+            handleUpdated()
+            setShowAddItem(false)
+            setEditItem(null)
+          }}
+        />
+      )}
+
+      {deleteItem && (
+        <ConfirmModal
+          title="Delete this item?"
+          message={`Are you sure you want to delete “${deleteItem.name}”?`}
+          onCancel={() => setDeleteItem(null)}
+          onConfirm={confirmDelete}
+        />
       )}
     </div>
   )

@@ -17,7 +17,6 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  // Seed form when item loads
   useEffect(() => {
     if (item) {
       setForm({
@@ -51,14 +50,14 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
     }
     const qty = parseInt(form.quantity, 10)
     if (isNaN(qty) || qty < 0) {
-      setError('Quantity must be non‑negative.')
+      setError('Quantity must be non-negative.')
       return false
     }
     const threshold = form.low_stock_threshold
       ? parseInt(form.low_stock_threshold, 10)
       : 0
     if (isNaN(threshold) || threshold < 0) {
-      setError('Threshold must be non‑negative.')
+      setError('Threshold must be non-negative.')
       return false
     }
     setError('')
@@ -85,9 +84,16 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
 
     setSubmitting(true)
     try {
-      await axios.put(`/api/items/${item.id}`, payload)
-      // only fire these after the PUT succeeds
-      onUpdated()
+      // Perform update and grab the updated row(s)
+      const resp = await axios.put(`/api/items/${item.id}`, payload)
+      // Supabase returns an array of updated rows
+      const updatedItem = Array.isArray(resp.data) ? resp.data[0] : resp.data
+
+      // Notify parent with the updated item
+      // If onUpdated returns a promise, await it; otherwise it'll be no-op
+      await onUpdated(updatedItem)
+
+      // Now close the modal
       onClose()
     } catch (err) {
       console.error(err)
@@ -197,7 +203,7 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
               checked={form.has_lot}
               onChange={handleChange}
               disabled={submitting}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              className="h-4 w-4 focus:ring-blue-500 border-gray-300 rounded"
             />
             <label className="text-sm text-gray-700">
               Track Lot Number
@@ -220,10 +226,10 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
             </div>
           )}
 
-          {/* Low‑Stock Threshold */}
+          {/* Low-Stock Threshold */}
           <div>
             <label className="block text-sm font-medium text-gray-700">
-              Low‑Stock Threshold
+              Low-Stock Threshold
             </label>
             <input
               name="low_stock_threshold"
@@ -237,7 +243,7 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
             />
           </div>
 
-          {/* Enable Alert */}
+          {/* Enable Low-Stock Alert */}
           <div className="flex items-center space-x-2">
             <input
               type="checkbox"
@@ -245,10 +251,10 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
               checked={form.alert_enabled}
               onChange={handleChange}
               disabled={submitting}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              className="h-4 w-4 focus:ring-blue-500 border-gray-300 rounded"
             />
             <label className="text-sm text-gray-700">
-              Enable Low‑Stock Alert
+              Enable Low-Stock Alert
             </label>
           </div>
 
