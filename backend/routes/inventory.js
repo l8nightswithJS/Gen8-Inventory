@@ -1,10 +1,10 @@
 // routes/inventory.js
-const express          = require('express')
+const express                 = require('express')
 const { body, param, query } = require('express-validator')
-const controller       = require('../controllers/inventoryController')
-const authenticate     = require('../middleware/authMiddleware')
-const requireRole      = require('../middleware/requireRole')
-const { handleValidation }   = require('../middleware/validationMiddleware')
+const controller              = require('../controllers/inventoryController')
+const authenticate            = require('../middleware/authMiddleware')
+const requireRole             = require('../middleware/requireRole')
+const { handleValidation }    = require('../middleware/validationMiddleware')
 
 const router = express.Router()
 
@@ -29,13 +29,13 @@ router.get(
   controller.getActiveAlerts
 )
 
-// Acknowledge (clear) one alert by item ID
-//    POST /api/items/alerts/:itemId/acknowledge
+// Acknowledge (clear) one alert by alert ID
+//    POST /api/items/alerts/:alertId/acknowledge
 router.post(
-  '/alerts/:itemId/acknowledge',
+  '/alerts/:alertId/acknowledge',
   requireRole('admin'),
-  param('itemId')
-    .isInt().withMessage('Invalid item id')
+  param('alertId')
+    .isInt().withMessage('Invalid alert id')
     .toInt(),
   handleValidation,
   controller.acknowledgeAlert
@@ -75,10 +75,10 @@ router.post(
   body('client_id').isInt().withMessage('client_id is required').toInt(),
   body('name').isString().notEmpty(),
   body('part_number').isString().notEmpty(),
-  body('quantity').isInt({ min: 0 }).withMessage('quantity must be ≥ 0').toInt(),
+  body('quantity').isInt({ min: 0 }).withMessage('quantity must be ≥ 0').toInt(),
   body('low_stock_threshold')
     .optional()
-    .isInt({ min: 0 }).withMessage('Threshold must be ≥ 0')
+    .isInt({ min: 0 }).withMessage('Threshold must be ≥ 0')
     .toInt(),
   body('alert_enabled')
     .optional()
@@ -96,10 +96,10 @@ router.put(
   param('id').isInt().withMessage('Invalid item id').toInt(),
   body('name').isString().notEmpty(),
   body('part_number').isString().notEmpty(),
-  body('quantity').isInt({ min: 0 }).withMessage('quantity must be ≥ 0').toInt(),
+  body('quantity').isInt({ min: 0 }).withMessage('quantity must be ≥ 0').toInt(),
   body('low_stock_threshold')
     .optional()
-    .isInt({ min: 0 }).withMessage('Threshold must be ≥ 0')
+    .isInt({ min: 0 }).withMessage('Threshold must be ≥ 0')
     .toInt(),
   body('alert_enabled')
     .optional()
@@ -109,7 +109,8 @@ router.put(
   controller.updateItem
 )
 
-// DELETE /api/items/:id
+// Delete an item (admin only)
+//    DELETE /api/items/:id
 router.delete(
   '/:id',
   requireRole('admin'),
