@@ -75,14 +75,6 @@ exports.createItem = async (req, res, next) => {
 // PUT /api/items/:id
 exports.updateItem = async (req, res, next) => {
   console.log('>>>> updateItem invoked for id', req.params.id)
-  // ...
-  const { data, error } = await supabase
-    .from('items')
-    .update(updates)
-    .eq('id', id)
-    .select('*')
-    .single()
-  console.log('>>>> supabase returned:', data, 'error:', error)
   try {
     const id = parseInt(req.params.id, 10)
     if (isNaN(id)) {
