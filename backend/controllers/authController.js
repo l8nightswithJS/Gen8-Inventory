@@ -1,8 +1,9 @@
 // controllers/authController.js
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const supabase = require('../models/db');
-const { JWT_SECRET } = require('../config');
+const supabase = require('../lib/supabaseClient');
+const jwt = require('jsonwebtoken');
+const { JWT_SECRET } = process.env;
 
 /**
  * POST /api/auth/register
