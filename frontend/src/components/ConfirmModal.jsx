@@ -1,5 +1,5 @@
-import React from 'react'
-import PropTypes from 'prop-types'
+import React from 'react';
+import PropTypes from 'prop-types';
 
 export default function ConfirmModal({
   title = 'Confirm',
@@ -7,13 +7,14 @@ export default function ConfirmModal({
   cancelText = 'Cancel',
   confirmText = 'Confirm',
   variant = 'danger', // 'danger' | 'success'
+  loading = false, // ← new
   onCancel,
   onConfirm,
 }) {
   const confirmClasses =
     variant === 'success'
       ? 'bg-green-600 hover:bg-green-700 text-white'
-      : 'bg-red-600 hover:bg-red-700 text-white'
+      : 'bg-red-600 hover:bg-red-700 text-white';
 
   return (
     <div
@@ -22,35 +23,36 @@ export default function ConfirmModal({
       aria-modal="true"
     >
       <div className="bg-white rounded-lg shadow-lg w-full max-w-sm p-6">
-        <h3 className="text-xl font-semibold text-gray-800 mb-4">
-          {title}
-        </h3>
+        <h3 className="text-xl font-semibold text-gray-800 mb-4">{title}</h3>
         <p className="text-gray-700 mb-6">{message}</p>
         <div className="flex justify-end space-x-3">
           <button
             onClick={onCancel}
-            className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition"
+            disabled={loading} // disable while loading
+            className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition disabled:opacity-50"
           >
             {cancelText}
           </button>
           <button
             onClick={onConfirm}
-            className={`px-4 py-2 rounded transition ${confirmClasses}`}
+            disabled={loading} // disable while loading
+            className={`px-4 py-2 rounded transition disabled:opacity-50 ${confirmClasses}`}
           >
-            {confirmText}
+            {loading ? 'Processing...' : confirmText} {/* swap text */}
           </button>
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 ConfirmModal.propTypes = {
-  title:       PropTypes.string,
-  message:     PropTypes.string.isRequired,
-  cancelText:  PropTypes.string,
+  title: PropTypes.string,
+  message: PropTypes.string.isRequired,
+  cancelText: PropTypes.string,
   confirmText: PropTypes.string,
-  variant:     PropTypes.oneOf(['danger', 'success']),
-  onCancel:    PropTypes.func.isRequired,
-  onConfirm:   PropTypes.func.isRequired,
-}
+  variant: PropTypes.oneOf(['danger', 'success']),
+  loading: PropTypes.bool, // ← new
+  onCancel: PropTypes.func.isRequired,
+  onConfirm: PropTypes.func.isRequired,
+};
