@@ -164,11 +164,17 @@ exports.updateUser = async (req, res, next) => {
 exports.deleteUser = async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const { data, error } = await supabase.from('users').delete().eq('id', id);
+    const { error, count } = await supabase
+      .from('users')
+      .delete({ count: 'exact' })
+      .eq('id', id);
+
     if (error) throw error;
-    if (!data || data.length === 0) {
+
+    if (count === 0) {
       return res.status(404).json({ message: 'User not found' });
     }
+
     res.json({ message: 'User deleted' });
   } catch (err) {
     next(err);
