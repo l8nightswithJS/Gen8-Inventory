@@ -1,4 +1,3 @@
-// controllers/userController.js
 const bcrypt = require('bcryptjs');
 const supabase = require('../lib/supabaseClient');
 
@@ -96,7 +95,6 @@ exports.createUser = async (req, res, next) => {
 exports.approveUser = async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
-    // Only update when approved is currently false
     const { data, error } = await supabase
       .from('users')
       .update({ approved: true })
@@ -139,17 +137,21 @@ exports.updateUser = async (req, res, next) => {
       .from('users')
       .update(updates)
       .eq('id', id)
-      .single();
+      .select('id, username, role, approved, created_at')
+      .maybeSingle(); // ✅ safe for no-change scenarios
+
     if (error) {
       if (error.code === '23505') {
         return res.status(400).json({ message: 'Username already exists' });
       }
       throw error;
     }
+
     if (!data) {
       return res.status(404).json({ message: 'User not found' });
     }
-    res.json(data);
+
+    res.json({ message: 'User updated', user: data });
   } catch (err) {
     next(err);
   }
