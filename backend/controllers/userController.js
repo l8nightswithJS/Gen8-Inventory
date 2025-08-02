@@ -1,6 +1,7 @@
 // controllers/userController.js
 const bcrypt = require('bcryptjs');
 const supabase = require('../lib/supabaseClient');
+
 /**
  * GET /api/users
  * List all users (admin only).
@@ -42,13 +43,14 @@ exports.getPendingUsers = async (req, res, next) => {
  */
 exports.getUserById = async (req, res, next) => {
   try {
+    const id = parseInt(req.params.id, 10);
     const {
       data: [user],
       error,
     } = await supabase
       .from('users')
       .select('id, username, role, approved, created_at')
-      .eq('id', req.params.id)
+      .eq('id', id)
       .limit(1);
     if (error) throw error;
     if (!user) return res.status(404).json({ message: 'User not found' });
@@ -66,25 +68,21 @@ exports.createUser = async (req, res, next) => {
   try {
     const { username, password, role } = req.body;
     const hash = bcrypt.hashSync(password, 10);
-
     const { data, error } = await supabase
       .from('users')
       .insert({
         username,
         password: hash,
         role,
-        approved: true, // direct creation by admin is automatically approved
+        approved: true, // admin-created accounts auto-approve
       })
       .single();
-
     if (error) {
       if (error.code === '23505') {
-        // unique_violation
         return res.status(400).json({ message: 'Username already exists' });
       }
       throw error;
     }
-
     res.status(201).json(data);
   } catch (err) {
     next(err);
@@ -97,15 +95,22 @@ exports.createUser = async (req, res, next) => {
  */
 exports.approveUser = async (req, res, next) => {
   try {
+    const id = parseInt(req.params.id, 10);
+    // Only update when approved is currently false
     const { data, error } = await supabase
       .from('users')
       .update({ approved: true })
-      .eq('id', req.params.id)
-      .single();
+      .eq('id', id)
+      .eq('approved', false)
+      .select('id, username, role, approved, created_at')
+      .maybeSingle();
 
     if (error) throw error;
-    if (!data) return res.status(404).json({ message: 'User not found' });
-
+    if (!data) {
+      return res
+        .status(404)
+        .json({ message: 'User not found or already approved' });
+    }
     res.json({ message: 'User approved', user: data });
   } catch (err) {
     next(err);
@@ -118,16 +123,13 @@ exports.approveUser = async (req, res, next) => {
  */
 exports.updateUser = async (req, res, next) => {
   try {
+    const id = parseInt(req.params.id, 10);
     const updates = {};
-    if (req.body.username) {
-      updates.username = req.body.username;
-    }
+    if (req.body.username) updates.username = req.body.username;
     if (req.body.password) {
       updates.password = bcrypt.hashSync(req.body.password, 10);
     }
-    if (req.body.role) {
-      updates.role = req.body.role;
-    }
+    if (req.body.role) updates.role = req.body.role;
 
     if (Object.keys(updates).length === 0) {
       return res.json({ message: 'No changes submitted' });
@@ -136,9 +138,8 @@ exports.updateUser = async (req, res, next) => {
     const { data, error } = await supabase
       .from('users')
       .update(updates)
-      .eq('id', req.params.id)
+      .eq('id', id)
       .single();
-
     if (error) {
       if (error.code === '23505') {
         return res.status(400).json({ message: 'Username already exists' });
@@ -148,7 +149,6 @@ exports.updateUser = async (req, res, next) => {
     if (!data) {
       return res.status(404).json({ message: 'User not found' });
     }
-
     res.json(data);
   } catch (err) {
     next(err);
@@ -161,11 +161,12 @@ exports.updateUser = async (req, res, next) => {
  */
 exports.deleteUser = async (req, res, next) => {
   try {
-    const { error } = await supabase
-      .from('users')
-      .delete()
-      .eq('id', req.params.id);
+    const id = parseInt(req.params.id, 10);
+    const { data, error } = await supabase.from('users').delete().eq('id', id);
     if (error) throw error;
+    if (!data || data.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
     res.json({ message: 'User deleted' });
   } catch (err) {
     next(err);
