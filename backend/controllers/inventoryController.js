@@ -1,4 +1,3 @@
-// controllers/inventoryController.js
 const supabase = require('../lib/supabaseClient');
 
 // GET /api/items?client_id=123
@@ -49,15 +48,8 @@ exports.createItem = async (req, res, next) => {
   try {
     const payload = {
       client_id: parseInt(req.body.client_id, 10),
-      name: req.body.name,
-      part_number: req.body.part_number,
-      description: req.body.description || '',
-      lot_number: req.body.lot_number || '',
-      quantity: parseInt(req.body.quantity, 10) || 0,
-      location: req.body.location || '',
+      attributes: req.body.attributes || {},
       last_updated: new Date().toISOString(),
-      low_stock_threshold: parseInt(req.body.low_stock_threshold, 10) || 0,
-      alert_enabled: !!req.body.alert_enabled,
     };
 
     const { data, error } = await supabase
@@ -74,7 +66,6 @@ exports.createItem = async (req, res, next) => {
 
 // PUT /api/items/:id
 exports.updateItem = async (req, res, next) => {
-  console.log('>>>> updateItem invoked for id', req.params.id);
   try {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) {
@@ -82,16 +73,8 @@ exports.updateItem = async (req, res, next) => {
     }
 
     const updates = {
-      name: req.body.name,
-      part_number: req.body.part_number,
-      description: req.body.description || '',
-      lot_number: req.body.lot_number || '',
-      quantity: parseInt(req.body.quantity, 10) || 0,
-      location: req.body.location || '',
+      attributes: req.body.attributes || {},
       last_updated: new Date().toISOString(),
-      low_stock_threshold: parseInt(req.body.low_stock_threshold, 10) || 0,
-      alert_enabled: !!req.body.alert_enabled,
-      has_lot: !!req.body.has_lot,
     };
 
     const { data, error } = await supabase
@@ -100,8 +83,6 @@ exports.updateItem = async (req, res, next) => {
       .eq('id', id)
       .select('*')
       .single();
-
-    console.log('>>>> supabase.update returned', { data, error });
 
     if (error) throw error;
     if (!data) return res.status(404).json({ message: 'Item not found' });
@@ -147,9 +128,7 @@ exports.getActiveAlerts = async (req, res, next) => {
         item:items (
           id,
           client_id,
-          name,
-          quantity,
-          low_stock_threshold
+          attributes
         )
       `,
       )
@@ -191,33 +170,32 @@ exports.bulkImportItems = async (req, res, next) => {
       return res.status(400).json({ message: 'Missing client_id or items' });
     }
 
-    const rows = items
-      .filter((item) => item.name && item.part_number)
+    const validItems = items
+      .filter(
+        (item) =>
+          item.client_id &&
+          item.attributes &&
+          Object.keys(item.attributes).length > 0,
+      )
       .map((item) => ({
         client_id,
-        name: item.name,
-        part_number: item.part_number,
-        description: item.description || '',
-        lot_number: item.lot_number || '',
-        quantity: parseInt(item.quantity, 10) || 0,
-        location: item.location || '',
+        attributes: item.attributes,
         last_updated: new Date().toISOString(),
-        low_stock_threshold: parseInt(item.low_stock_threshold, 10) || 0,
-        alert_enabled: !!item.alert_enabled,
-        has_lot: !!item.has_lot,
       }));
 
-    if (rows.length === 0) {
+    if (validItems.length === 0) {
       return res.status(400).json({ message: 'No valid items to import' });
     }
 
-    const { data, error } = await supabase.from('items').insert(rows);
+    const { data, error } = await supabase.from('items').insert(validItems);
 
     if (error) throw error;
 
-    res
-      .status(201)
-      .json({ message: 'Bulk import successful', count: data.length });
+    res.status(201).json({
+      message: 'Bulk import successful',
+      successCount: data.length,
+      failCount: items.length - data.length,
+    });
   } catch (err) {
     next(err);
   }
