@@ -102,7 +102,6 @@ exports.deleteItem = async (req, res, next) => {
     }
 
     const { error } = await supabase.from('items').delete().eq('id', id);
-
     if (error) throw error;
 
     res.json({ message: 'Item deleted' });
@@ -128,7 +127,8 @@ exports.getActiveAlerts = async (req, res, next) => {
         item:items (
           id,
           client_id,
-          attributes
+          attributes,
+          last_updated
         )
       `,
       )
@@ -153,8 +153,8 @@ exports.acknowledgeAlert = async (req, res, next) => {
       .from('stock_alerts')
       .delete()
       .eq('id', alertId);
-
     if (error) throw error;
+
     res.json({ message: 'Alert acknowledged' });
   } catch (err) {
     next(err);
@@ -170,24 +170,23 @@ exports.bulkImportItems = async (req, res, next) => {
       return res.status(400).json({ message: 'Missing client_id or items' });
     }
 
-    const validItems = items
-      .filter(
-        (item) =>
-          item.client_id &&
-          item.attributes &&
-          Object.keys(item.attributes).length > 0,
-      )
-      .map((item) => ({
-        client_id,
-        attributes: item.attributes,
-        last_updated: new Date().toISOString(),
-      }));
+    const validItems = items.filter((item) => {
+      const name = item.attributes?.item_name || item.attributes?.name;
+      const part = item.attributes?.part_number || item.attributes?.Part_Number;
+      return name && part;
+    });
 
-    if (validItems.length === 0) {
+    const rows = validItems.map((item) => ({
+      client_id,
+      attributes: item.attributes || {},
+      last_updated: new Date().toISOString(),
+    }));
+
+    if (rows.length === 0) {
       return res.status(400).json({ message: 'No valid items to import' });
     }
 
-    const { data, error } = await supabase.from('items').insert(validItems);
+    const { data, error } = await supabase.from('items').insert(rows);
 
     if (error) throw error;
 
