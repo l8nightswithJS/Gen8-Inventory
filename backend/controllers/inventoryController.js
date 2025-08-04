@@ -72,7 +72,7 @@ exports.createItem = async (req, res, next) => {
   }
 };
 
-/// controllers/inventoryController.js
+// PUT /api/items/:id
 exports.updateItem = async (req, res, next) => {
   console.log('>>>> updateItem invoked for id', req.params.id);
   try {
@@ -81,7 +81,6 @@ exports.updateItem = async (req, res, next) => {
       return res.status(400).json({ message: 'Invalid item id' });
     }
 
-    // Build our updates object first:
     const updates = {
       name: req.body.name,
       part_number: req.body.part_number,
@@ -92,14 +91,12 @@ exports.updateItem = async (req, res, next) => {
       last_updated: new Date().toISOString(),
       low_stock_threshold: parseInt(req.body.low_stock_threshold, 10) || 0,
       alert_enabled: !!req.body.alert_enabled,
-      // If you track has_lot too:
       has_lot: !!req.body.has_lot,
     };
 
-    // Now perform the update and return the updated row
     const { data, error } = await supabase
       .from('items')
-      .update(updates) // <-- uses the declared `updates`
+      .update(updates)
       .eq('id', id)
       .select('*')
       .single();
@@ -107,12 +104,27 @@ exports.updateItem = async (req, res, next) => {
     console.log('>>>> supabase.update returned', { data, error });
 
     if (error) throw error;
-    if (!data) {
-      return res.status(404).json({ message: 'Item not found' });
+    if (!data) return res.status(404).json({ message: 'Item not found' });
+
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// DELETE /api/items/:id
+exports.deleteItem = async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) {
+      return res.status(400).json({ message: 'Invalid item id' });
     }
 
-    // Send back the single updated object
-    res.json(data);
+    const { error } = await supabase.from('items').delete().eq('id', id);
+
+    if (error) throw error;
+
+    res.json({ message: 'Item deleted' });
   } catch (err) {
     next(err);
   }
@@ -170,20 +182,42 @@ exports.acknowledgeAlert = async (req, res, next) => {
   }
 };
 
-exports.deleteItem = async (req, res, next) => {
+// POST /api/items/bulk
+exports.bulkImportItems = async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) {
-      return res.status(400).json({ message: 'Invalid item id' });
+    const { client_id, items } = req.body;
+
+    if (!client_id || !Array.isArray(items)) {
+      return res.status(400).json({ message: 'Missing client_id or items' });
     }
 
-    // Perform the delete (we don’t need to inspect returned rows)
-    const { error } = await supabase.from('items').delete().eq('id', id);
+    const rows = items
+      .filter((item) => item.name && item.part_number)
+      .map((item) => ({
+        client_id,
+        name: item.name,
+        part_number: item.part_number,
+        description: item.description || '',
+        lot_number: item.lot_number || '',
+        quantity: parseInt(item.quantity, 10) || 0,
+        location: item.location || '',
+        last_updated: new Date().toISOString(),
+        low_stock_threshold: parseInt(item.low_stock_threshold, 10) || 0,
+        alert_enabled: !!item.alert_enabled,
+        has_lot: !!item.has_lot,
+      }));
+
+    if (rows.length === 0) {
+      return res.status(400).json({ message: 'No valid items to import' });
+    }
+
+    const { data, error } = await supabase.from('items').insert(rows);
 
     if (error) throw error;
 
-    // Success—tell the client we deleted it
-    res.json({ message: 'Item deleted' });
+    res
+      .status(201)
+      .json({ message: 'Bulk import successful', count: data.length });
   } catch (err) {
     next(err);
   }
