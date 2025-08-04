@@ -195,8 +195,8 @@ exports.bulkImportItems = async (req, res, next) => {
 
     res.status(201).json({
       message: 'Bulk import successful',
-      successCount: data.length,
-      failCount: items.length - data.length,
+      successCount: data ? data.length : 0,
+      failCount: items.length - (data ? data.length : 0),
     });
   } catch (err) {
     next(err);
