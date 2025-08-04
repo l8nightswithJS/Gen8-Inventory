@@ -171,9 +171,12 @@ exports.bulkImportItems = async (req, res, next) => {
     }
 
     const validItems = items.filter((item) => {
-      const name = item.attributes?.item_name || item.attributes?.name;
-      const part = item.attributes?.part_number || item.attributes?.Part_Number;
-      return name && part;
+      return (
+        typeof item.attributes === 'object' &&
+        Object.values(item.attributes).some(
+          (val) => val && typeof val === 'string',
+        )
+      );
     });
 
     const rows = validItems.map((item) => ({
