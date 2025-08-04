@@ -1,27 +1,31 @@
-import React, { useEffect, useState } from 'react'
+// src/components/InventoryTable.jsx
+import React, { useEffect, useState } from 'react';
 
 export default function InventoryTable({
   items,
   page,
   totalPages,
   onPage,
-  onEdit,    // callback(item)
-  onDelete,  // callback(item)
+  onEdit,
+  onDelete,
   role = 'viewer',
 }) {
-  const [showRotateNotice, setShowRotateNotice] = useState(false)
+  const [showRotateNotice, setShowRotateNotice] = useState(false);
 
   useEffect(() => {
-    const check = () => setShowRotateNotice(window.innerWidth < 775)
-    check()
-    window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
-  }, [])
+    const check = () => setShowRotateNotice(window.innerWidth < 775);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
-  const safeItems = Array.isArray(items) ? items : []
+  const safeItems = Array.isArray(items)
+    ? items.filter((i) => i.attributes && typeof i.attributes === 'object')
+    : [];
+
   const attributeKeys = Array.from(
-    new Set(safeItems.flatMap(i => Object.keys(i.attributes || {})))
-  )
+    new Set(safeItems.flatMap((i) => Object.keys(i.attributes || {}))),
+  ).sort();
 
   return (
     <div className="relative mt-6">
@@ -35,13 +39,7 @@ export default function InventoryTable({
         <table className="min-w-full text-sm table-auto border-collapse">
           <thead className="bg-gray-100 text-gray-700 uppercase text-xs">
             <tr>
-              <th className="px-4 py-3 border">Name</th>
-              <th className="px-4 py-3 border">Part #</th>
-              <th className="px-4 py-3 border">Description</th>
-              <th className="px-2 py-3 border text-center">Qty</th>
-              <th className="px-2 py-3 border text-center">Location</th>
-              <th className="px-2 py-3 border text-center">Lot #</th>
-              {attributeKeys.map(key => (
+              {attributeKeys.map((key) => (
                 <th key={key} className="px-4 py-3 border capitalize">
                   {key}
                 </th>
@@ -55,17 +53,19 @@ export default function InventoryTable({
             {safeItems.length === 0 ? (
               <tr>
                 <td
-                  colSpan={6 + attributeKeys.length + (role === 'admin' ? 1 : 0)}
+                  colSpan={attributeKeys.length + (role === 'admin' ? 1 : 0)}
                   className="px-6 py-5 text-center text-gray-500 italic"
                 >
                   No items to display.
                 </td>
               </tr>
             ) : (
-              safeItems.map(item => {
+              safeItems.map((item) => {
                 const isLow =
-                  item.alert_enabled &&
-                  item.quantity < item.low_stock_threshold
+                  item.attributes?.alert_enabled &&
+                  item.attributes?.quantity <
+                    item.attributes?.low_stock_threshold;
+
                 return (
                   <tr
                     key={item.id}
@@ -73,28 +73,11 @@ export default function InventoryTable({
                       isLow ? 'bg-red-50' : ''
                     }`}
                   >
-                    <td className="px-4 py-2 border">{item.name}</td>
-                    <td className="px-4 py-2 border whitespace-pre-line">
-                      {item.part_number}
-                    </td>
-                    <td className="px-4 py-2 border whitespace-pre-wrap">
-                      {item.description}
-                    </td>
-                    <td className="px-2 py-2 border text-center flex items-center justify-center space-x-1">
-                      <span>{item.quantity}</span>
-                      {isLow && (
-                        <span className="text-red-600 font-semibold">⚠</span>
-                      )}
-                    </td>
-                    <td className="px-2 py-2 border text-center">
-                      {item.location}
-                    </td>
-                    <td className="px-2 py-2 border text-center italic text-gray-400">
-                      {item.has_lot ? item.lot_number || '—' : 'Disabled'}
-                    </td>
-                    {attributeKeys.map(key => (
+                    {attributeKeys.map((key) => (
                       <td key={key} className="px-4 py-2 border">
-                        {item.attributes?.[key] ?? (
+                        {item.attributes?.[key] !== undefined ? (
+                          String(item.attributes[key])
+                        ) : (
                           <span className="text-gray-400">—</span>
                         )}
                       </td>
@@ -116,7 +99,7 @@ export default function InventoryTable({
                       </td>
                     )}
                   </tr>
-                )
+                );
               })
             )}
           </tbody>
@@ -143,5 +126,5 @@ export default function InventoryTable({
         </button>
       </div>
     </div>
-  )
+  );
 }

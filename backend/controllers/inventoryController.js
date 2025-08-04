@@ -1,5 +1,23 @@
 const supabase = require('../lib/supabaseClient');
 
+// Utility: Normalize attribute keys
+function normalizeKey(key) {
+  return key
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/[^\w]/g, '')
+    .replace(/_+/g, '_');
+}
+
+function normalizeAttributes(attributes) {
+  const result = {};
+  for (const [key, value] of Object.entries(attributes || {})) {
+    const cleanKey = normalizeKey(key);
+    result[cleanKey] = value;
+  }
+  return result;
+}
+
 // GET /api/items?client_id=123
 exports.getAllItems = async (req, res, next) => {
   try {
@@ -48,7 +66,7 @@ exports.createItem = async (req, res, next) => {
   try {
     const payload = {
       client_id: parseInt(req.body.client_id, 10),
-      attributes: req.body.attributes || {},
+      attributes: normalizeAttributes(req.body.attributes),
       last_updated: new Date().toISOString(),
     };
 
@@ -73,7 +91,7 @@ exports.updateItem = async (req, res, next) => {
     }
 
     const updates = {
-      attributes: req.body.attributes || {},
+      attributes: normalizeAttributes(req.body.attributes),
       last_updated: new Date().toISOString(),
     };
 
@@ -181,7 +199,7 @@ exports.bulkImportItems = async (req, res, next) => {
 
     const rows = validItems.map((item) => ({
       client_id,
-      attributes: item.attributes || {},
+      attributes: normalizeAttributes(item.attributes),
       last_updated: new Date().toISOString(),
     }));
 

@@ -1,6 +1,6 @@
 // src/components/EditItemModal.jsx
-import React, { useState, useEffect } from 'react'
-import axios from '../utils/axiosConfig'
+import React, { useState, useEffect } from 'react';
+import axios from '../utils/axiosConfig';
 
 export default function EditItemModal({ item, onClose, onUpdated }) {
   const [form, setForm] = useState({
@@ -13,90 +13,89 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
     lot_number: '',
     low_stock_threshold: '',
     alert_enabled: false,
-  })
-  const [error, setError] = useState('')
-  const [submitting, setSubmitting] = useState(false)
+  });
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (item) {
+    if (item?.attributes) {
+      const attrs = item.attributes;
       setForm({
-        name:                item.name || '',
-        part_number:         item.part_number || '',
-        description:         item.description || '',
-        quantity:            item.quantity != null ? String(item.quantity) : '',
-        location:            item.location || '',
-        has_lot:             !!item.has_lot,
-        lot_number:          item.lot_number || '',
-        low_stock_threshold: item.low_stock_threshold != null
-                               ? String(item.low_stock_threshold)
-                               : '',
-        alert_enabled:       !!item.alert_enabled,
-      })
+        name: attrs.name || '',
+        part_number: attrs.part_number || '',
+        description: attrs.description || '',
+        quantity: attrs.quantity != null ? String(attrs.quantity) : '',
+        location: attrs.location || '',
+        has_lot: !!attrs.has_lot,
+        lot_number: attrs.lot_number || '',
+        low_stock_threshold:
+          attrs.low_stock_threshold != null
+            ? String(attrs.low_stock_threshold)
+            : '',
+        alert_enabled: !!attrs.alert_enabled,
+      });
     }
-  }, [item])
+  }, [item]);
 
-  const handleChange = e => {
-    const { name, type, checked, value } = e.target
-    setForm(prev => ({
+  const handleChange = (e) => {
+    const { name, type, checked, value } = e.target;
+    setForm((prev) => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
-    }))
-  }
+    }));
+  };
 
   const validate = () => {
     if (!form.name.trim() || !form.part_number.trim()) {
-      setError('Name and Part # are required.')
-      return false
+      setError('Name and Part # are required.');
+      return false;
     }
-    const qty = parseInt(form.quantity, 10)
+    const qty = parseInt(form.quantity, 10);
     if (isNaN(qty) || qty < 0) {
-      setError('Quantity must be non-negative.')
-      return false
+      setError('Quantity must be non-negative.');
+      return false;
     }
     const threshold = form.low_stock_threshold
       ? parseInt(form.low_stock_threshold, 10)
-      : 0
+      : 0;
     if (isNaN(threshold) || threshold < 0) {
-      setError('Threshold must be non-negative.')
-      return false
+      setError('Threshold must be non-negative.');
+      return false;
     }
-    setError('')
-    return true
-  }
+    setError('');
+    return true;
+  };
 
-  const handleSubmit = async e => {
-    e.preventDefault()
-    if (!validate()) return
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!validate()) return;
 
-    const payload = {
-      name:                form.name.trim(),
-      part_number:         form.part_number.trim(),
-      description:         form.description.trim(),
-      quantity:            parseInt(form.quantity, 10),
-      location:            form.location.trim(),
-      has_lot:             form.has_lot,
-      lot_number:          form.has_lot ? form.lot_number.trim() : '',
+    const attributes = {
+      name: form.name.trim(),
+      part_number: form.part_number.trim(),
+      description: form.description.trim(),
+      quantity: parseInt(form.quantity, 10),
+      location: form.location.trim(),
+      has_lot: form.has_lot,
+      lot_number: form.has_lot ? form.lot_number.trim() : '',
       low_stock_threshold: form.low_stock_threshold
-                             ? parseInt(form.low_stock_threshold, 10)
-                             : 0,
-      alert_enabled:       form.alert_enabled,
-    }
+        ? parseInt(form.low_stock_threshold, 10)
+        : 0,
+      alert_enabled: form.alert_enabled,
+    };
 
-    setSubmitting(true)
+    setSubmitting(true);
     try {
-      // Perform update and grab the updated row(s)
-      await axios.put(`/api/items/${item.id}`, payload)
-      await onUpdated()
-
-      // Now close the modal
-      onClose()
+      await axios.put(`/api/items/${item.id}`, { attributes });
+      await onUpdated();
+      onClose();
     } catch (err) {
-      console.error(err)
-      setError(err.response?.data?.message || 'Failed to update item.')
+      console.error(err);
+      setError(err.response?.data?.message || 'Failed to update item.');
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
     }
-  }
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
@@ -127,7 +126,7 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
               onChange={handleChange}
               required
               disabled={submitting}
-              className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-300 rounded px-3 py-2"
             />
           </div>
 
@@ -142,7 +141,7 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
               onChange={handleChange}
               required
               disabled={submitting}
-              className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-300 rounded px-3 py-2"
             />
           </div>
 
@@ -156,7 +155,7 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
               value={form.description}
               onChange={handleChange}
               disabled={submitting}
-              className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-300 rounded px-3 py-2"
             />
           </div>
 
@@ -172,7 +171,7 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
               value={form.quantity}
               onChange={handleChange}
               disabled={submitting}
-              className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-300 rounded px-3 py-2"
             />
           </div>
 
@@ -186,7 +185,7 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
               value={form.location}
               onChange={handleChange}
               disabled={submitting}
-              className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-300 rounded px-3 py-2"
             />
           </div>
 
@@ -198,11 +197,9 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
               checked={form.has_lot}
               onChange={handleChange}
               disabled={submitting}
-              className="h-4 w-4 focus:ring-blue-500 border-gray-300 rounded"
+              className="h-4 w-4"
             />
-            <label className="text-sm text-gray-700">
-              Track Lot Number
-            </label>
+            <label className="text-sm text-gray-700">Track Lot Number</label>
           </div>
 
           {/* Lot Number */}
@@ -216,7 +213,7 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
                 value={form.lot_number}
                 onChange={handleChange}
                 disabled={submitting}
-                className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-gray-300 rounded px-3 py-2"
               />
             </div>
           )}
@@ -234,7 +231,7 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
               value={form.low_stock_threshold}
               onChange={handleChange}
               disabled={submitting}
-              className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-300 rounded px-3 py-2"
             />
           </div>
 
@@ -246,7 +243,7 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
               checked={form.alert_enabled}
               onChange={handleChange}
               disabled={submitting}
-              className="h-4 w-4 focus:ring-blue-500 border-gray-300 rounded"
+              className="h-4 w-4"
             />
             <label className="text-sm text-gray-700">
               Enable Low-Stock Alert
@@ -264,5 +261,5 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
         </form>
       </div>
     </div>
-  )
+  );
 }

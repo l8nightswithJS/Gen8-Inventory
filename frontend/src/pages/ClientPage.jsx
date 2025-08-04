@@ -7,6 +7,7 @@ import InventoryTable from '../components/InventoryTable';
 import BulkImport from '../components/BulkImport';
 import SearchBar from '../components/SearchBar';
 import EditItemModal from '../components/EditItemModal';
+import AddItemModal from '../components/AddItemModal';
 import ConfirmModal from '../components/ConfirmModal';
 
 export default function ClientPage() {
@@ -31,6 +32,7 @@ export default function ClientPage() {
         params: { client_id: clientId },
       });
       setItems(data);
+      console.log('Fetched items:', data);
       setError('');
     } catch (err) {
       console.error(err);
@@ -61,14 +63,18 @@ export default function ClientPage() {
     }
   };
 
-  const filtered = items.filter(
-    (i) =>
-      i.name.toLowerCase().includes(query.toLowerCase()) ||
-      i.part_number.toLowerCase().includes(query.toLowerCase()),
-  );
+  const filtered = items.filter((item) => {
+    const attr = item.attributes || {};
+    const q = query.toLowerCase();
+    return (
+      attr.name?.toLowerCase().includes(q) ||
+      attr.part_number?.toLowerCase().includes(q)
+    );
+  });
 
   return (
     <div className="px-4 py-6 max-w-7xl mx-auto">
+      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
         <div>
           <button
@@ -81,22 +87,7 @@ export default function ClientPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Updated search styling */}
-          <div className="flex items-center rounded border border-gray-300 overflow-hidden">
-            <input
-              type="text"
-              placeholder="Search name or part #"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-            <button
-              onClick={() => {}}
-              className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium"
-            >
-              Search
-            </button>
-          </div>
+          <SearchBar onSearch={setQuery} />
 
           {isAdmin && (
             <>
@@ -125,8 +116,10 @@ export default function ClientPage() {
         </div>
       </div>
 
+      {/* Error */}
       {error && <p className="text-red-600">{error}</p>}
 
+      {/* Table */}
       <InventoryTable
         items={filtered}
         page={page}
@@ -137,36 +130,43 @@ export default function ClientPage() {
         role={isAdmin ? 'admin' : 'viewer'}
       />
 
+      {/* Import Modal */}
       {showImport && (
         <BulkImport
           clientId={clientId}
           onClose={() => setShowImport(false)}
-          onSuccess={() => {
-            setShowImport(false);
-            handleUpdated();
-          }}
-        />
-      )}
-
-      {(showAddItem || editItem) && (
-        <EditItemModal
-          item={editItem || {}}
-          onClose={() => {
-            setShowAddItem(false);
-            setEditItem(null);
-          }}
-          onUpdated={async () => {
+          onSuccess={async () => {
             await handleUpdated();
-            setShowAddItem(false);
-            setEditItem(null);
+            setShowImport(false);
           }}
         />
       )}
 
+      {/* Add Item Modal */}
+      {showAddItem && (
+        <AddItemModal
+          clientId={clientId}
+          onClose={() => setShowAddItem(false)}
+          onCreated={handleUpdated}
+        />
+      )}
+
+      {/* Edit Item Modal */}
+      {editItem && (
+        <EditItemModal
+          item={editItem}
+          onClose={() => setEditItem(null)}
+          onUpdated={handleUpdated}
+        />
+      )}
+
+      {/* Confirm Delete */}
       {deleteItem && (
         <ConfirmModal
           title="Delete this item?"
-          message={`Are you sure you want to delete “${deleteItem.name}”?`}
+          message={`Are you sure you want to delete “${
+            deleteItem.attributes?.name || 'Unnamed'
+          }”?`}
           onCancel={() => setDeleteItem(null)}
           onConfirm={confirmDelete}
         />
