@@ -2,86 +2,114 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from '../utils/axiosConfig';
 
-// Utility: turn snake_case → Title Case
-function humanLabel(key) {
-  return key.replace(/_/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
+// ——— Helpers ————————————————————————————————————————————————————————
+
+// normalize any string → snake_case
+function normalizeKey(str) {
+  return str
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/[^\w]/g, '')
+    .replace(/_+/g, '_');
 }
 
-export default function EditItemModal({
-  item,
-  onClose,
-  onUpdated,
-  requiredFields = [], // e.g. ['part_number','qty_in_stock']
-}) {
+// pretty label from any key
+function humanLabel(key) {
+  return normalizeKey(key)
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// add here any JSONB keys that should be numeric
+const NUMERIC_KEYS = new Set([
+  'qty_in_stock',
+  'quantity',
+  'low_stock_threshold',
+  'on_hand',
+  // …etc
+]);
+
+// ——— Component ——————————————————————————————————————————————————————
+
+export default function EditItemModal({ item, onClose, onUpdated }) {
   const [form, setForm] = useState({});
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Derive a stable list of attribute keys
+  // derive the list of attribute keys once
   const attributeKeys = useMemo(
     () => Object.keys(item.attributes || {}),
     [item.attributes],
   );
 
-  // Seed form state whenever item.attributes changes
+  // seed form state from item.attributes
   useEffect(() => {
-    setForm({ ...item.attributes });
+    setForm(item.attributes || {});
     setError('');
   }, [item.attributes]);
 
-  // Handle text/number/checkbox
+  // generic change handler
   const handleChange = (e) => {
-    const { name, type, value, checked } = e.target;
+    const { name, type, checked, value } = e.target;
+    // keep booleans as booleans, everything else as string for now
     setForm((prev) => ({
       ...prev,
-      [name]:
-        type === 'checkbox'
-          ? checked
-          : type === 'number'
-          ? value === ''
-            ? ''
-            : Number(value)
-          : value,
+      [name]: type === 'checkbox' ? checked : value,
     }));
   };
 
-  // Validate only numeric fields (and any requiredFields if passed)
+  // simple non-negative number check
   const validate = () => {
-    // 1) requiredFields
-    for (const key of requiredFields) {
-      if (!form[key] && form[key] !== 0) {
-        setError(`${humanLabel(key)} is required.`);
-        return false;
-      }
-    }
-
-    // 2) number fields
     for (const key of attributeKeys) {
-      const val = form[key];
-      if (typeof val === 'number') {
-        if (isNaN(val) || val < 0) {
+      if (NUMERIC_KEYS.has(normalizeKey(key))) {
+        const val = form[key];
+        if (val === '' || val == null) continue;
+        const n = Number(val);
+        if (isNaN(n) || n < 0) {
           setError(`${humanLabel(key)} must be a non-negative number.`);
           return false;
         }
       }
     }
-
     setError('');
     return true;
   };
 
-  // Submit updated attributes
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
 
+    // build cleaned payload
+    const cleaned = {};
+    for (const [rawKey, rawVal] of Object.entries(form)) {
+      // skip empty / null
+      if (rawVal == null || rawVal === '') continue;
+
+      const key = normalizeKey(rawKey);
+
+      // cast numbers
+      if (NUMERIC_KEYS.has(key)) {
+        cleaned[key] = Number(rawVal);
+      }
+      // booleans stay booleans
+      else if (typeof rawVal === 'boolean') {
+        cleaned[key] = rawVal;
+      }
+      // everything else → trimmed string
+      else {
+        cleaned[key] = String(rawVal).trim();
+      }
+    }
+
     setSubmitting(true);
     try {
-      await axios.put(`/api/items/${item.id}`, { attributes: form });
+      await axios.put(`/api/items/${item.id}`, { attributes: cleaned });
       await onUpdated();
       onClose();
     } catch (err) {
-      console.error(err);
+      console.error('Update error:', err);
       setError(err.response?.data?.message || 'Failed to update item.');
     } finally {
       setSubmitting(false);
@@ -93,8 +121,8 @@ export default function EditItemModal({
       <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-md relative space-y-4">
         <button
           onClick={onClose}
-          className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 text-2xl"
           disabled={submitting}
+          className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 text-2xl"
         >
           &times;
         </button>
@@ -106,47 +134,44 @@ export default function EditItemModal({
         {error && <p className="text-red-600 text-sm">{error}</p>}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {attributeKeys.map((key) => {
-            // infer input type
-            const val = form[key];
-            const isCheckbox = typeof val === 'boolean';
-            const isNumber = typeof val === 'number';
+          {attributeKeys.map((rawKey) => {
+            const key = normalizeKey(rawKey);
+            const val = form[rawKey];
+            const isBool = typeof val === 'boolean';
+            const isNumber = NUMERIC_KEYS.has(key);
 
-            // hide `lot_number` if tracking disabled
-            if (key === 'lot_number' && !form.has_lot) {
-              return null;
-            }
-
-            if (isCheckbox) {
+            // checkbox
+            if (isBool) {
               return (
-                <div key={key} className="flex items-center space-x-2">
+                <div key={rawKey} className="flex items-center space-x-2">
                   <input
-                    id={key}
-                    name={key}
+                    id={rawKey}
+                    name={rawKey}
                     type="checkbox"
                     checked={!!val}
                     onChange={handleChange}
                     disabled={submitting}
                     className="h-4 w-4"
                   />
-                  <label htmlFor={key} className="text-sm text-gray-700">
-                    {humanLabel(key)}
+                  <label htmlFor={rawKey} className="text-sm text-gray-700">
+                    {humanLabel(rawKey)}
                   </label>
                 </div>
               );
             }
 
+            // text or number input
             return (
-              <div key={key}>
+              <div key={rawKey}>
                 <label
-                  htmlFor={key}
+                  htmlFor={rawKey}
                   className="block text-sm font-medium text-gray-700"
                 >
-                  {humanLabel(key)}
+                  {humanLabel(rawKey)}
                 </label>
                 <input
-                  id={key}
-                  name={key}
+                  id={rawKey}
+                  name={rawKey}
                   type={isNumber ? 'number' : 'text'}
                   value={val ?? ''}
                   onChange={handleChange}
