@@ -1,40 +1,39 @@
-// src/components/EditItemModal.jsx
 import React, { useState, useEffect } from 'react';
 import axios from '../utils/axiosConfig';
 
+const FIELDS = [
+  { key: 'name', label: 'Name', type: 'text', required: true },
+  { key: 'part_number', label: 'Part #', type: 'text', required: true },
+  { key: 'description', label: 'Description', type: 'text' },
+  { key: 'quantity', label: 'On Hand', type: 'number' },
+  { key: 'location', label: 'Location', type: 'text' },
+  { key: 'has_lot', label: 'Track Lot Number', type: 'checkbox' },
+  {
+    key: 'lot_number',
+    label: 'Lot Number',
+    type: 'text',
+    dependsOn: 'has_lot',
+  },
+  { key: 'low_stock_threshold', label: 'Low-Stock Threshold', type: 'number' },
+  { key: 'alert_enabled', label: 'Enable Low-Stock Alert', type: 'checkbox' },
+];
+
 export default function EditItemModal({ item, onClose, onUpdated }) {
-  const [form, setForm] = useState({
-    name: '',
-    part_number: '',
-    description: '',
-    quantity: '',
-    location: '',
-    has_lot: false,
-    lot_number: '',
-    low_stock_threshold: '',
-    alert_enabled: false,
-  });
+  const [form, setForm] = useState({});
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (item?.attributes) {
-      const attrs = item.attributes;
-      setForm({
-        name: attrs.name || '',
-        part_number: attrs.part_number || '',
-        description: attrs.description || '',
-        quantity: attrs.quantity != null ? String(attrs.quantity) : '',
-        location: attrs.location || '',
-        has_lot: !!attrs.has_lot,
-        lot_number: attrs.lot_number || '',
-        low_stock_threshold:
-          attrs.low_stock_threshold != null
-            ? String(attrs.low_stock_threshold)
-            : '',
-        alert_enabled: !!attrs.alert_enabled,
-      });
-    }
+    // seed form with existing values (or defaults)
+    const initial = {};
+    FIELDS.forEach((f) => {
+      if (item?.attributes?.[f.key] != null) {
+        initial[f.key] = item.attributes[f.key];
+      } else {
+        initial[f.key] = f.type === 'checkbox' ? false : '';
+      }
+    });
+    setForm(initial);
   }, [item]);
 
   const handleChange = (e) => {
@@ -46,21 +45,21 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
   };
 
   const validate = () => {
-    if (!form.name.trim() || !form.part_number.trim()) {
-      setError('Name and Part # are required.');
-      return false;
-    }
-    const qty = parseInt(form.quantity, 10);
-    if (isNaN(qty) || qty < 0) {
-      setError('Quantity must be non-negative.');
-      return false;
-    }
-    const threshold = form.low_stock_threshold
-      ? parseInt(form.low_stock_threshold, 10)
-      : 0;
-    if (isNaN(threshold) || threshold < 0) {
-      setError('Threshold must be non-negative.');
-      return false;
+    for (const f of FIELDS) {
+      if (f.required) {
+        const val = form[f.key];
+        if (!val?.toString().trim()) {
+          setError(`${f.label} is required.`);
+          return false;
+        }
+      }
+      if (f.type === 'number' && form[f.key] !== '') {
+        const n = Number(form[f.key]);
+        if (isNaN(n) || n < 0) {
+          setError(`${f.label} must be a non-negative number.`);
+          return false;
+        }
+      }
     }
     setError('');
     return true;
@@ -70,23 +69,10 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
     e.preventDefault();
     if (!validate()) return;
 
-    const attributes = {
-      name: form.name.trim(),
-      part_number: form.part_number.trim(),
-      description: form.description.trim(),
-      quantity: parseInt(form.quantity, 10),
-      location: form.location.trim(),
-      has_lot: form.has_lot,
-      lot_number: form.has_lot ? form.lot_number.trim() : '',
-      low_stock_threshold: form.low_stock_threshold
-        ? parseInt(form.low_stock_threshold, 10)
-        : 0,
-      alert_enabled: form.alert_enabled,
-    };
-
     setSubmitting(true);
     try {
-      await axios.put(`/api/items/${item.id}`, { attributes });
+      // send entire attributes object
+      await axios.put(`/api/items/${item.id}`, { attributes: form });
       await onUpdated();
       onClose();
     } catch (err) {
@@ -115,142 +101,49 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
         {error && <p className="text-red-600 text-sm">{error}</p>}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Name */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Name
-            </label>
-            <input
-              name="name"
-              value={form.name}
-              onChange={handleChange}
-              required
-              disabled={submitting}
-              className="w-full border border-gray-300 rounded px-3 py-2"
-            />
-          </div>
+          {FIELDS.map(({ key, label, type, dependsOn }) => {
+            if (dependsOn && !form[dependsOn]) {
+              return null;
+            }
+            if (type === 'checkbox') {
+              return (
+                <div key={key} className="flex items-center space-x-2">
+                  <input
+                    id={key}
+                    name={key}
+                    type="checkbox"
+                    checked={!!form[key]}
+                    onChange={handleChange}
+                    disabled={submitting}
+                    className="h-4 w-4"
+                  />
+                  <label htmlFor={key} className="text-sm text-gray-700">
+                    {label}
+                  </label>
+                </div>
+              );
+            }
+            return (
+              <div key={key}>
+                <label
+                  htmlFor={key}
+                  className="block text-sm font-medium text-gray-700"
+                >
+                  {label}
+                </label>
+                <input
+                  id={key}
+                  name={key}
+                  type={type}
+                  value={form[key] ?? ''}
+                  onChange={handleChange}
+                  disabled={submitting}
+                  className="w-full border border-gray-300 rounded px-3 py-2"
+                />
+              </div>
+            );
+          })}
 
-          {/* Part Number */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Part Number
-            </label>
-            <input
-              name="part_number"
-              value={form.part_number}
-              onChange={handleChange}
-              required
-              disabled={submitting}
-              className="w-full border border-gray-300 rounded px-3 py-2"
-            />
-          </div>
-
-          {/* Description */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Description
-            </label>
-            <input
-              name="description"
-              value={form.description}
-              onChange={handleChange}
-              disabled={submitting}
-              className="w-full border border-gray-300 rounded px-3 py-2"
-            />
-          </div>
-
-          {/* Quantity */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Quantity
-            </label>
-            <input
-              name="quantity"
-              type="number"
-              min="0"
-              value={form.quantity}
-              onChange={handleChange}
-              disabled={submitting}
-              className="w-full border border-gray-300 rounded px-3 py-2"
-            />
-          </div>
-
-          {/* Location */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Location
-            </label>
-            <input
-              name="location"
-              value={form.location}
-              onChange={handleChange}
-              disabled={submitting}
-              className="w-full border border-gray-300 rounded px-3 py-2"
-            />
-          </div>
-
-          {/* Track Lot Number */}
-          <div className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              name="has_lot"
-              checked={form.has_lot}
-              onChange={handleChange}
-              disabled={submitting}
-              className="h-4 w-4"
-            />
-            <label className="text-sm text-gray-700">Track Lot Number</label>
-          </div>
-
-          {/* Lot Number */}
-          {form.has_lot && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Lot Number
-              </label>
-              <input
-                name="lot_number"
-                value={form.lot_number}
-                onChange={handleChange}
-                disabled={submitting}
-                className="w-full border border-gray-300 rounded px-3 py-2"
-              />
-            </div>
-          )}
-
-          {/* Low-Stock Threshold */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Low-Stock Threshold
-            </label>
-            <input
-              name="low_stock_threshold"
-              type="number"
-              min="0"
-              placeholder="e.g. 10"
-              value={form.low_stock_threshold}
-              onChange={handleChange}
-              disabled={submitting}
-              className="w-full border border-gray-300 rounded px-3 py-2"
-            />
-          </div>
-
-          {/* Enable Low-Stock Alert */}
-          <div className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              name="alert_enabled"
-              checked={form.alert_enabled}
-              onChange={handleChange}
-              disabled={submitting}
-              className="h-4 w-4"
-            />
-            <label className="text-sm text-gray-700">
-              Enable Low-Stock Alert
-            </label>
-          </div>
-
-          {/* Submit */}
           <button
             type="submit"
             disabled={submitting}

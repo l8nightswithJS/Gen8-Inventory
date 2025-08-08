@@ -50,6 +50,8 @@ export default function ClientPage() {
   }, [clientId, fetchItems]);
 
   const handleUpdated = async () => {
+    // give Supabase ~250ms to register new inserts before fetch
+    await new Promise((r) => setTimeout(r, 250));
     await fetchItems();
   };
 
@@ -135,10 +137,7 @@ export default function ClientPage() {
         <BulkImport
           clientId={clientId}
           onClose={() => setShowImport(false)}
-          onSuccess={async () => {
-            await handleUpdated();
-            setShowImport(false);
-          }}
+          refresh={handleUpdated}
         />
       )}
 

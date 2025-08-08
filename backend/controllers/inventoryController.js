@@ -1,21 +1,45 @@
 const supabase = require('../lib/supabaseClient');
 
-// Utility: Normalize attribute keys
+// Normalize a single key to snake_case
 function normalizeKey(key) {
   return key
+    .toString()
+    .trim()
     .toLowerCase()
     .replace(/\s+/g, '_')
     .replace(/[^\w]/g, '')
     .replace(/_+/g, '_');
 }
 
-function normalizeAttributes(attributes) {
-  const result = {};
-  for (const [key, value] of Object.entries(attributes || {})) {
-    const cleanKey = normalizeKey(key);
-    result[cleanKey] = value;
+// Normalize an attributes object
+function normalizeAttributes(attributes = {}) {
+  const out = {};
+  for (const [rawKey, rawVal] of Object.entries(attributes)) {
+    const key = normalizeKey(rawKey);
+    out[key] = rawVal;
   }
-  return result;
+  return out;
+}
+
+// Merge normalized attrs into flat columns + JSONB rest
+function buildItemPayload(attrsIn) {
+  const attrs = normalizeAttributes(attrsIn);
+  const { quantity, low_stock_threshold, alert_enabled, ...restAttrs } = attrs;
+
+  const payload = {
+    attributes: restAttrs,
+    last_updated: new Date().toISOString(),
+  };
+  if (quantity != null) {
+    payload.quantity = parseInt(quantity, 10) || 0;
+  }
+  if (low_stock_threshold != null) {
+    payload.low_stock_threshold = parseInt(low_stock_threshold, 10);
+  }
+  if (alert_enabled != null) {
+    payload.alert_enabled = !!alert_enabled;
+  }
+  return payload;
 }
 
 // GET /api/items?client_id=123
@@ -25,13 +49,11 @@ exports.getAllItems = async (req, res, next) => {
     if (isNaN(clientId)) {
       return res.status(400).json({ message: 'client_id is required' });
     }
-
     const { data, error } = await supabase
       .from('items')
       .select('*')
       .eq('client_id', clientId)
       .order('id', { ascending: false });
-
     if (error) throw error;
     res.json(data);
   } catch (err) {
@@ -43,16 +65,13 @@ exports.getAllItems = async (req, res, next) => {
 exports.getItemById = async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) {
-      return res.status(400).json({ message: 'Invalid item id' });
-    }
+    if (isNaN(id)) return res.status(400).json({ message: 'Invalid item id' });
 
     const { data, error } = await supabase
       .from('items')
       .select('*')
       .eq('id', id)
       .single();
-
     if (error) throw error;
     if (!data) return res.status(404).json({ message: 'Item not found' });
     res.json(data);
@@ -64,18 +83,22 @@ exports.getItemById = async (req, res, next) => {
 // POST /api/items
 exports.createItem = async (req, res, next) => {
   try {
+    const client_id = parseInt(req.body.client_id, 10);
+    if (isNaN(client_id)) {
+      return res.status(400).json({ message: 'Invalid client_id' });
+    }
+
     const payload = {
-      client_id: parseInt(req.body.client_id, 10),
-      attributes: normalizeAttributes(req.body.attributes),
-      last_updated: new Date().toISOString(),
+      client_id,
+      ...buildItemPayload(req.body.attributes),
     };
 
     const { data, error } = await supabase
       .from('items')
       .insert(payload)
       .single();
-
     if (error) throw error;
+
     res.status(201).json(data);
   } catch (err) {
     next(err);
@@ -86,14 +109,9 @@ exports.createItem = async (req, res, next) => {
 exports.updateItem = async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) {
-      return res.status(400).json({ message: 'Invalid item id' });
-    }
+    if (isNaN(id)) return res.status(400).json({ message: 'Invalid item id' });
 
-    const updates = {
-      attributes: normalizeAttributes(req.body.attributes),
-      last_updated: new Date().toISOString(),
-    };
+    const updates = buildItemPayload(req.body.attributes);
 
     const { data, error } = await supabase
       .from('items')
@@ -101,7 +119,6 @@ exports.updateItem = async (req, res, next) => {
       .eq('id', id)
       .select('*')
       .single();
-
     if (error) throw error;
     if (!data) return res.status(404).json({ message: 'Item not found' });
 
@@ -115,9 +132,7 @@ exports.updateItem = async (req, res, next) => {
 exports.deleteItem = async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) {
-      return res.status(400).json({ message: 'Invalid item id' });
-    }
+    if (isNaN(id)) return res.status(400).json({ message: 'Invalid item id' });
 
     const { error } = await supabase.from('items').delete().eq('id', id);
     if (error) throw error;
@@ -145,14 +160,17 @@ exports.getActiveAlerts = async (req, res, next) => {
         item:items (
           id,
           client_id,
+          quantity,
+          low_stock_threshold,
+          alert_enabled,
           attributes,
           last_updated
         )
       `,
       )
       .eq('item.client_id', clientId);
-
     if (error) throw error;
+
     res.json(data);
   } catch (err) {
     next(err);
@@ -166,7 +184,6 @@ exports.acknowledgeAlert = async (req, res, next) => {
     if (isNaN(alertId)) {
       return res.status(400).json({ message: 'Invalid alert id' });
     }
-
     const { error } = await supabase
       .from('stock_alerts')
       .delete()
@@ -182,39 +199,30 @@ exports.acknowledgeAlert = async (req, res, next) => {
 // POST /api/items/bulk
 exports.bulkImportItems = async (req, res, next) => {
   try {
-    const { client_id, items } = req.body;
-
-    if (!client_id || !Array.isArray(items)) {
-      return res.status(400).json({ message: 'Missing client_id or items' });
+    const client_id = parseInt(req.body.client_id, 10);
+    const itemsIn = req.body.items;
+    if (isNaN(client_id) || !Array.isArray(itemsIn)) {
+      return res
+        .status(400)
+        .json({ message: 'Missing client_id or items array' });
     }
 
-    const validItems = items.filter((item) => {
-      return (
-        typeof item.attributes === 'object' &&
-        Object.values(item.attributes).some(
-          (val) => val && typeof val === 'string',
-        )
-      );
+    const rows = itemsIn.map((i) => {
+      const { attributes } = i;
+      const payload = {
+        client_id,
+        ...buildItemPayload(attributes),
+      };
+      return payload;
     });
 
-    const rows = validItems.map((item) => ({
-      client_id,
-      attributes: normalizeAttributes(item.attributes),
-      last_updated: new Date().toISOString(),
-    }));
-
-    if (rows.length === 0) {
-      return res.status(400).json({ message: 'No valid items to import' });
-    }
-
     const { data, error } = await supabase.from('items').insert(rows);
-
     if (error) throw error;
 
     res.status(201).json({
       message: 'Bulk import successful',
-      successCount: data ? data.length : 0,
-      failCount: items.length - (data ? data.length : 0),
+      successCount: data.length,
+      failCount: itemsIn.length - data.length,
     });
   } catch (err) {
     next(err);

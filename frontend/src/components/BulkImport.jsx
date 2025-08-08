@@ -104,14 +104,17 @@ export default function BulkImport({ clientId, refresh, onClose }) {
       setSuccess(
         `${resp.data.successCount} imported, ${resp.data.failCount} failed.`,
       );
+
       fileRef.current.value = '';
       setRawRows([]);
       setPreviewRows([]);
       setMapping({});
       setInputValues({});
       setHeaders([]);
-      refresh && refresh();
-      onClose && onClose();
+
+      if (refresh) await refresh();
+      console.log('Refreshed items after import');
+      if (onClose) onClose();
     } catch (err) {
       setError(err.response?.data?.message || 'Bulk import failed');
     }
