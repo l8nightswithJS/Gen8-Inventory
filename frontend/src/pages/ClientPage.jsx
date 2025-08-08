@@ -24,7 +24,7 @@ export default function ClientPage() {
   const [editItem, setEditItem] = useState(null);
   const [deleteItem, setDeleteItem] = useState(null);
   const [page, setPage] = useState(1);
-  const totalPages = 1;
+  const totalPages = 1; // adjust if paging is added
 
   const fetchItems = useCallback(async () => {
     try {
@@ -32,7 +32,6 @@ export default function ClientPage() {
         params: { client_id: clientId },
       });
       setItems(data);
-      console.log('Fetched items:', data);
       setError('');
     } catch (err) {
       console.error(err);
@@ -65,14 +64,18 @@ export default function ClientPage() {
     }
   };
 
+  // ───────────────────────────────────────────────────────────────
+  // Safe, case-insensitive filter of name & part_number:
+  const q = query.trim().toLowerCase();
   const filtered = items.filter((item) => {
     const attr = item.attributes || {};
-    const q = query.toLowerCase();
-    return (
-      attr.name?.toLowerCase().includes(q) ||
-      attr.part_number?.toLowerCase().includes(q)
+    return ['name', 'part_number'].some((key) =>
+      String(attr[key] ?? '')
+        .toLowerCase()
+        .includes(q),
     );
   });
+  // ───────────────────────────────────────────────────────────────
 
   return (
     <div className="px-4 py-6 max-w-7xl mx-auto">
