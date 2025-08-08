@@ -13,19 +13,16 @@ const LEGACY_ORDER = [
   'alert_enabled',
 ];
 
-// Override display labels for specific keys if desired
 const LABEL_OVERRIDES = {
   alert_enabled: 'Enable Low-Stock Alert',
   low_stock_threshold: 'Low-Stock Threshold',
   part_number: 'Part #',
   quantity: 'On Hand',
-  // add more overrides here as needed
 };
 
-function humanLabel(key) {
-  if (LABEL_OVERRIDES[key]) return LABEL_OVERRIDES[key];
-  return key.replace(/_/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
-}
+const humanLabel = (key) =>
+  LABEL_OVERRIDES[key] ||
+  key.replace(/_/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
 
 export default function InventoryTable({
   items,
@@ -38,38 +35,79 @@ export default function InventoryTable({
 }) {
   const [showRotateNotice, setShowRotateNotice] = useState(false);
 
-  // Show rotate notice on narrow viewports
   useEffect(() => {
-    const check = () => setShowRotateNotice(window.innerWidth < 775);
-    check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
+    const updateNotice = () => setShowRotateNotice(window.innerWidth < 775);
+    updateNotice();
+    window.addEventListener('resize', updateNotice);
+    return () => window.removeEventListener('resize', updateNotice);
   }, []);
 
-  // Filter out any bad rows
-  const safeItems = Array.isArray(items)
-    ? items.filter((i) => i.attributes && typeof i.attributes === 'object')
-    : [];
+  const safeItems = useMemo(
+    () =>
+      Array.isArray(items)
+        ? items.filter((i) => i.attributes && typeof i.attributes === 'object')
+        : [],
+    [items],
+  );
 
-  // Compute and sort all attribute keys:
-  //  • Keys in LEGACY_ORDER come first (in that order)
-  //  • All other keys follow, sorted alphabetically
   const attributeKeys = useMemo(() => {
     const allKeys = Array.from(
-      new Set(safeItems.flatMap((i) => Object.keys(i.attributes))),
+      new Set(safeItems.flatMap((item) => Object.keys(item.attributes))),
     );
-
     return allKeys.sort((a, b) => {
       const ia = LEGACY_ORDER.indexOf(a);
       const ib = LEGACY_ORDER.indexOf(b);
-      if (ia !== -1 || ib !== -1) {
-        if (ia === -1) return 1; // a is new, push after
-        if (ib === -1) return -1; // b is new, push after
-        return ia - ib; // both legacy, keep defined order
-      }
-      return a.localeCompare(b); // neither legacy, alphabetical
+      if (ia !== -1 && ib !== -1) return ia - ib;
+      if (ia !== -1) return -1;
+      if (ib !== -1) return 1;
+      return a.localeCompare(b);
     });
   }, [safeItems]);
+
+  const renderCell = (attrs, key) => {
+    const value = attrs[key];
+    return value != null ? (
+      String(value)
+    ) : (
+      <span className="text-gray-400">—</span>
+    );
+  };
+
+  const renderRow = (item) => {
+    const attrs = item.attributes;
+    const isLow =
+      attrs.alert_enabled &&
+      Number(attrs.quantity) < Number(attrs.low_stock_threshold);
+
+    return (
+      <tr
+        key={item.id}
+        className={`border-t hover:bg-gray-50 ${isLow ? 'bg-red-50' : ''}`}
+      >
+        {attributeKeys.map((key) => (
+          <td key={key} className="px-4 py-2 border">
+            {renderCell(attrs, key)}
+          </td>
+        ))}
+        {role === 'admin' && (
+          <td className="px-4 py-2 border text-center whitespace-nowrap">
+            <button
+              onClick={() => onEdit(item)}
+              className="bg-gray-800 text-white text-xs px-3 py-1 rounded mr-2 hover:bg-gray-700"
+            >
+              Edit
+            </button>
+            <button
+              onClick={() => onDelete(item)}
+              className="bg-red-600 text-white text-xs px-3 py-1 rounded hover:bg-red-700"
+            >
+              Delete
+            </button>
+          </td>
+        )}
+      </tr>
+    );
+  };
 
   return (
     <div className="relative mt-6">
@@ -104,47 +142,7 @@ export default function InventoryTable({
                 </td>
               </tr>
             ) : (
-              safeItems.map((item) => {
-                const attrs = item.attributes;
-                const isLow =
-                  attrs.alert_enabled &&
-                  Number(attrs.quantity) < Number(attrs.low_stock_threshold);
-
-                return (
-                  <tr
-                    key={item.id}
-                    className={`border-t hover:bg-gray-50 ${
-                      isLow ? 'bg-red-50' : ''
-                    }`}
-                  >
-                    {attributeKeys.map((key) => (
-                      <td key={key} className="px-4 py-2 border">
-                        {attrs[key] != null ? (
-                          String(attrs[key])
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                    ))}
-                    {role === 'admin' && (
-                      <td className="px-4 py-2 border text-center whitespace-nowrap">
-                        <button
-                          onClick={() => onEdit(item)}
-                          className="bg-gray-800 text-white text-xs px-3 py-1 rounded mr-2 hover:bg-gray-700"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => onDelete(item)}
-                          className="bg-red-600 text-white text-xs px-3 py-1 rounded hover:bg-red-700"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                );
-              })
+              safeItems.map(renderRow)
             )}
           </tbody>
         </table>
