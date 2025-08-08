@@ -27,6 +27,8 @@ const humanLabel = (key) =>
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase());
 
+const isNumericField = (key) => NUMERIC_KEYS.has(normalizeKey(key));
+
 // ────── Component ────── //
 
 export default function EditItemModal({ item, onClose, onUpdated }) {
@@ -44,8 +46,7 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
     setError('');
   }, [item.attributes]);
 
-  const handleChange = (e) => {
-    const { name, type, checked, value } = e.target;
+  const handleChange = ({ target: { name, type, checked, value } }) => {
     setForm((prev) => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
@@ -54,14 +55,11 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
 
   const validate = () => {
     for (const key of attributeKeys) {
-      const normKey = normalizeKey(key);
-      if (!NUMERIC_KEYS.has(normKey)) continue;
+      const value = form[key];
+      if (!isNumericField(key) || value === '' || value == null) continue;
 
-      const val = form[key];
-      if (val == null || val === '') continue;
-
-      const n = Number(val);
-      if (isNaN(n) || n < 0) {
+      const number = Number(value);
+      if (isNaN(number) || number < 0) {
         setError(`${humanLabel(key)} must be a non-negative number.`);
         return false;
       }
@@ -73,18 +71,15 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
   const buildCleanedAttributes = () => {
     const cleaned = {};
     for (const [rawKey, rawVal] of Object.entries(form)) {
-      if (rawVal == null || rawVal === '') continue;
-
       const key = normalizeKey(rawKey);
-      if (!key || key === 'undefined') continue;
+      if (!key || key === 'undefined' || rawVal == null || rawVal === '')
+        continue;
 
-      if (NUMERIC_KEYS.has(key)) {
-        cleaned[key] = Number(rawVal);
-      } else if (typeof rawVal === 'boolean') {
-        cleaned[key] = rawVal;
-      } else {
-        cleaned[key] = String(rawVal).trim();
-      }
+      cleaned[key] = isNumericField(key)
+        ? Number(rawVal)
+        : typeof rawVal === 'boolean'
+        ? rawVal
+        : String(rawVal).trim();
     }
     return cleaned;
   };
@@ -93,11 +88,11 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
     e.preventDefault();
     if (!validate()) return;
 
-    const cleaned = buildCleanedAttributes();
+    const attributes = buildCleanedAttributes();
     setSubmitting(true);
 
     try {
-      await axios.put(`/api/items/${item.id}`, { attributes: cleaned });
+      await axios.put(`/api/items/${item.id}`, { attributes });
       await onUpdated();
       onClose();
     } catch (err) {
@@ -109,25 +104,28 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
   };
 
   const renderField = (rawKey) => {
+    const value = form[rawKey];
     const key = normalizeKey(rawKey);
-    const val = form[rawKey];
-    const isBool = typeof val === 'boolean';
-    const isNumber = NUMERIC_KEYS.has(key);
 
-    if (isBool) {
+    const label = humanLabel(rawKey);
+    const commonProps = {
+      id: rawKey,
+      name: rawKey,
+      disabled: submitting,
+      onChange: handleChange,
+    };
+
+    if (typeof value === 'boolean') {
       return (
         <div key={rawKey} className="flex items-center space-x-2">
           <input
-            id={rawKey}
-            name={rawKey}
             type="checkbox"
-            checked={!!val}
-            onChange={handleChange}
-            disabled={submitting}
+            checked={!!value}
+            {...commonProps}
             className="h-4 w-4"
           />
           <label htmlFor={rawKey} className="text-sm text-gray-700">
-            {humanLabel(rawKey)}
+            {label}
           </label>
         </div>
       );
@@ -139,15 +137,12 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
           htmlFor={rawKey}
           className="block text-sm font-medium text-gray-700"
         >
-          {humanLabel(rawKey)}
+          {label}
         </label>
         <input
-          id={rawKey}
-          name={rawKey}
-          type={isNumber ? 'number' : 'text'}
-          value={val ?? ''}
-          onChange={handleChange}
-          disabled={submitting}
+          type={isNumericField(key) ? 'number' : 'text'}
+          value={value ?? ''}
+          {...commonProps}
           className="w-full border border-gray-300 rounded px-3 py-2"
         />
       </div>

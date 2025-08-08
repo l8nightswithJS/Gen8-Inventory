@@ -1,62 +1,65 @@
-// src/components/BulkImport.jsx
 import React, { useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import axios from '../utils/axiosConfig';
 
-/** normalize any string → snake_case */
-function normalizeKey(str) {
-  return str
-    .toString()
+// ────── Helpers ────── //
+
+const normalizeKey = (str) =>
+  str
+    ?.toString()
     .trim()
     .toLowerCase()
     .replace(/\s+/g, '_')
     .replace(/[^\w]/g, '')
-    .replace(/_+/g, '_');
-}
+    .replace(/_+/g, '_') || '';
 
-/** prettify for labels */
-function humanLabel(key) {
-  return normalizeKey(key)
+const humanLabel = (key) =>
+  normalizeKey(key)
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase());
-}
 
-/** if you have well-known numeric fields, list them here */
 const NUMERIC_KEYS = new Set([
   'qty_in_stock',
   'quantity',
   'low_stock_threshold',
   'on_hand',
-  // …add more as needed
 ]);
+
+// ────── Component ────── //
 
 export default function BulkImport({ clientId, refresh, onClose }) {
   const fileRef = useRef(null);
+
   const [headers, setHeaders] = useState([]);
   const [rawRows, setRawRows] = useState([]);
   const [previewRows, setPreviewRows] = useState([]);
   const [inputValues, setInputValues] = useState({});
-  const [mapping, setMapping] = useState({}); // col → normalizedKey
+  const [mapping, setMapping] = useState({});
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  /** load CSV/XLSX and extract rows + headers */
-  const handleFileChange = (e) => {
-    setError('');
-    setSuccess('');
+  const resetState = () => {
     setHeaders([]);
     setRawRows([]);
     setPreviewRows([]);
     setInputValues({});
     setMapping({});
+  };
+
+  const handleFileChange = (e) => {
+    resetState();
+    setError('');
+    setSuccess('');
 
     const file = e.target.files[0];
     if (!file) return;
 
     const reader = new FileReader();
+
     reader.onload = (evt) => {
       let rows = [];
+
       // CSV
       if (/\.csv$/i.test(file.name)) {
         const text = evt.target.result;
@@ -65,6 +68,7 @@ export default function BulkImport({ clientId, refresh, onClose }) {
           .map((l) => l.replace(/\r/, ''))
           .filter(Boolean);
         const cols = lines[0].split(',').map((h) => h.trim());
+
         rows = lines.slice(1).map((line) => {
           const vals = line.split(',');
           return cols.reduce((acc, col, i) => {
@@ -72,10 +76,10 @@ export default function BulkImport({ clientId, refresh, onClose }) {
             return acc;
           }, {});
         });
+
         setHeaders(cols);
-      }
-      // XLSX
-      else {
+      } else {
+        // XLSX
         const wb = XLSX.read(evt.target.result, { type: 'binary' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
@@ -90,38 +94,30 @@ export default function BulkImport({ clientId, refresh, onClose }) {
     else reader.readAsBinaryString(file);
   };
 
-  /** track mapping input as user types */
   const handleInputChange = (col, val) => {
     setInputValues((prev) => ({ ...prev, [col]: val }));
   };
 
-  /** on blur, normalize and store mapping */
   const handleMappingBlur = (col) => {
     const raw = inputValues[col]?.trim() ?? '';
     if (!raw) {
-      const m = { ...mapping };
-      delete m[col];
-      setMapping(m);
+      const updated = { ...mapping };
+      delete updated[col];
+      setMapping(updated);
     } else {
-      setMapping((prev) => ({
-        ...prev,
-        [col]: normalizeKey(raw),
-      }));
+      setMapping((prev) => ({ ...prev, [col]: normalizeKey(raw) }));
     }
   };
 
-  /** generate and post items */
   const handleImport = async () => {
     setError('');
     setSuccess('');
 
-    const mappedCols = Object.values(mapping);
-    if (mappedCols.length === 0) {
+    if (Object.keys(mapping).length === 0) {
       setError('Please map at least one column.');
       return;
     }
 
-    // build items[]
     const items = rawRows.map((row) => {
       const attributes = {};
       for (const [col, key] of Object.entries(mapping)) {
@@ -139,6 +135,7 @@ export default function BulkImport({ clientId, refresh, onClose }) {
     });
 
     setSubmitting(true);
+
     try {
       const resp = await axios.post('/api/items/bulk', {
         client_id: parseInt(clientId, 10),
@@ -149,11 +146,7 @@ export default function BulkImport({ clientId, refresh, onClose }) {
         `${resp.data.successCount} imported, ${resp.data.failCount} failed.`,
       );
       fileRef.current.value = '';
-      setRawRows([]);
-      setPreviewRows([]);
-      setMapping({});
-      setInputValues({});
-      setHeaders([]);
+      resetState();
 
       if (refresh) await refresh();
       if (onClose) onClose();
@@ -195,7 +188,7 @@ export default function BulkImport({ clientId, refresh, onClose }) {
               {headers.map((col) => (
                 <div key={col} className="flex items-center space-x-2">
                   <label className="w-32 text-gray-700">
-                    Import “{col}” as
+                    Import “{humanLabel(col)}” as
                   </label>
                   <input
                     type="text"
@@ -217,7 +210,7 @@ export default function BulkImport({ clientId, refresh, onClose }) {
                 <tr>
                   {headers.map((h) => (
                     <th key={h} className="px-3 py-2 text-left">
-                      {h}
+                      {humanLabel(h)}
                     </th>
                   ))}
                 </tr>
