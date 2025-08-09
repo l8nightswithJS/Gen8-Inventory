@@ -9,6 +9,17 @@ import SearchBar from '../components/SearchBar';
 import EditItemModal from '../components/EditItemModal';
 import AddItemModal from '../components/AddItemModal';
 import ConfirmModal from '../components/ConfirmModal';
+import ColumnSetupModal from '../components/ColumnSetupModal';
+import { getSavedSchema, saveSchema } from '../context/SchemaContext';
+
+// Icons to match Navbar look
+import {
+  FiSearch,
+  FiPlus,
+  FiLayers,
+  FiDownload,
+  FiColumns,
+} from 'react-icons/fi';
 
 export default function ClientPage() {
   const { clientId } = useParams();
@@ -24,6 +35,9 @@ export default function ClientPage() {
   const [editItem, setEditItem] = useState(null);
   const [deleteItem, setDeleteItem] = useState(null);
   const [page, setPage] = useState(1);
+  const [showSchema, setShowSchema] = useState(false);
+  const [showSearch, setShowSearch] = useState(false); // toggle search input
+
   const totalPages = 1;
 
   const fetchItems = useCallback(async () => {
@@ -33,11 +47,16 @@ export default function ClientPage() {
       });
       setItems(data);
       setError('');
+      // If there are no items and no saved schema -> prompt to create columns
+      const schema = getSavedSchema(clientId);
+      if ((!data || data.length === 0) && schema.length === 0 && isAdmin) {
+        setShowSchema(true);
+      }
     } catch (err) {
       console.error(err);
       setError('Failed to load items.');
     }
-  }, [clientId]);
+  }, [clientId, isAdmin]);
 
   useEffect(() => {
     axios
@@ -73,50 +92,85 @@ export default function ClientPage() {
     );
   });
 
+  // Reusable neutral button to match navbar style
+  const BarButton = ({ onClick, children, className = '' }) => (
+    <button
+      onClick={onClick}
+      className={
+        'h-10 px-3 rounded-xl border border-gray-300 text-sm font-medium text-gray-700 ' +
+        'flex items-center gap-2 hover:bg-gray-50 hover:text-gray-900 shadow-sm focus:outline-none ' +
+        'focus:ring-2 focus:ring-gray-200 ' +
+        className
+      }
+      type="button"
+    >
+      {children}
+    </button>
+  );
+
   return (
     <div className="px-4 py-6 max-w-7xl mx-auto">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
-        <div>
+      {/* Top row: back + actions */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-5 gap-3">
+        <div className="flex items-center gap-3">
           <button
             onClick={() => navigate(-1)}
             className="text-blue-600 hover:underline"
           >
             ← Back
           </button>
-          <h1 className="text-2xl font-bold inline ml-4">{client.name}</h1>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <SearchBar onSearch={setQuery} />
+        {/* Action bar (icon + label, navbar look) */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <BarButton onClick={() => setShowSearch((s) => !s)}>
+            <FiSearch className="text-lg" />
+            <span>Search</span>
+          </BarButton>
 
           {isAdmin && (
             <>
-              <button
-                onClick={() => setShowAddItem(true)}
-                className="px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium"
-              >
-                + Add
-              </button>
+              <BarButton onClick={() => setShowAddItem(true)}>
+                <FiPlus className="text-lg" />
+                <span>Add</span>
+              </BarButton>
 
-              <button
-                onClick={() => setShowImport(true)}
-                className="px-4 py-2 text-white bg-purple-600 hover:bg-purple-700 rounded text-sm font-medium"
-              >
-                Bulk
-              </button>
+              <BarButton onClick={() => setShowImport(true)}>
+                <FiLayers className="text-lg" />
+                <span>Bulk</span>
+              </BarButton>
 
               <a
                 href={`/api/items/export?client_id=${clientId}`}
-                className="px-4 py-2 text-white bg-green-600 hover:bg-green-700 rounded text-sm font-medium text-center"
+                className="h-10 px-3 rounded-xl border border-gray-300 text-sm font-medium text-gray-700 flex items-center gap-2 hover:bg-gray-50 hover:text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-gray-200"
               >
-                Export
+                <FiDownload className="text-lg" />
+                <span>Export</span>
               </a>
+
+              <BarButton
+                onClick={() => setShowSchema(true)}
+                title="Edit visible columns"
+              >
+                <FiColumns className="text-lg" />
+                <span>Columns</span>
+              </BarButton>
             </>
           )}
         </div>
       </div>
 
-      {error && <p className="text-red-600">{error}</p>}
+      {/* Client title under the controls for a clean top row */}
+      <h1 className="text-2xl font-bold mb-2">{client.name}</h1>
+
+      {/* Search bar appears below buttons when toggled */}
+      {showSearch && (
+        <div className="mt-2">
+          <SearchBar onSearch={setQuery} />
+        </div>
+      )}
+
+      {error && <p className="text-red-600 mt-2">{error}</p>}
 
       <InventoryTable
         items={filtered}
@@ -127,6 +181,18 @@ export default function ClientPage() {
         onDelete={setDeleteItem}
         role={isAdmin ? 'admin' : 'viewer'}
       />
+
+      {showSchema && (
+        <ColumnSetupModal
+          isOpen={showSchema}
+          onClose={() => setShowSchema(false)}
+          onSave={(cols) => {
+            saveSchema(clientId, cols);
+            setShowSchema(false);
+          }}
+          initial={getSavedSchema(clientId)}
+        />
+      )}
 
       {showImport && (
         <BulkImport
@@ -146,7 +212,7 @@ export default function ClientPage() {
 
       {editItem && (
         <EditItemModal
-          open={true} // ✅ Required for Material UI Modal
+          open={true}
           item={editItem}
           onClose={() => setEditItem(null)}
           onUpdated={handleUpdated}

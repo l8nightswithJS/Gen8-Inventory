@@ -1,18 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from '../utils/axiosConfig';
+import { getSavedSchema } from '../context/SchemaContext';
 
-// Treat these attribute keys as numbers when cleaning
-const isNumericField = (key) =>
-  [
-    'qty_in_stock',
-    'reorder_point',
-    'reorder_qty',
-    'safety_stock',
-    'low_stock_threshold',
-    'quantity',
-  ].includes(key);
+const NUMERIC_KEYS = new Set([
+  'qty_in_stock',
+  'reorder_point',
+  'reorder_qty',
+  'safety_stock',
+  'low_stock_threshold',
+  'quantity',
+]);
 
-// Normalize keys to snake_case [a-z0-9_]
 const normalizeKey = (str) => {
   if (typeof str !== 'string') return '';
   return str
@@ -26,7 +24,6 @@ const normalizeKey = (str) => {
 const humanLabel = (key) =>
   key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
-// Strings we never want to send as values
 const BAD_STRING_VALUES = new Set(['undefined', 'null', 'nan']);
 
 export default function EditItemModal({ item, onClose, onUpdated }) {
@@ -34,10 +31,23 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // derive values used by hooks
+  const clientId = item?.client_id;
+  const hasItem = !!item;
+
+  // Always call hooks unconditionally
+  const clientSchema = useMemo(
+    () => (clientId ? getSavedSchema(clientId) : []),
+    [clientId],
+  );
+
   useEffect(() => {
-    // Only edit attributes, not top-level legacy columns
     if (item?.attributes && typeof item.attributes === 'object') {
-      setForm({ ...item.attributes });
+      const base = { ...item.attributes };
+      if (!('has_lot' in base)) base.has_lot = !!base.lot_number;
+      if (!('alert_enabled' in base)) base.alert_enabled = true;
+      if (!('low_stock_threshold' in base)) base.low_stock_threshold = '';
+      setForm(base);
     } else {
       setForm({});
     }
@@ -51,17 +61,24 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
     }));
   };
 
-  // Build a cleaned attributes object:
-  // - normalize keys
-  // - drop empty/undefined/null/"undefined"/"null"/"NaN"
-  // - coerce numeric fields to finite numbers
-  // - trim strings
   const buildCleanedAttributes = () => {
     const cleaned = {};
-    for (const [rawKey, rawVal] of Object.entries(form)) {
+    const keys = Array.from(
+      new Set([
+        ...Object.keys(form),
+        ...clientSchema, // keep schema ordering/visibility
+        'has_lot',
+        'lot_number',
+        'low_stock_threshold',
+        'alert_enabled',
+      ]),
+    );
+
+    for (const rawKey of keys) {
       const key = normalizeKey(rawKey);
       if (!key || key === 'undefined' || key === 'null') continue;
 
+      const rawVal = form[rawKey];
       const v = typeof rawVal === 'string' ? rawVal.trim() : rawVal;
 
       if (v == null || v === '') continue;
@@ -73,7 +90,7 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
         continue;
       }
 
-      if (isNumericField(key)) {
+      if (NUMERIC_KEYS.has(key)) {
         const n = Number(v);
         if (Number.isFinite(n)) cleaned[key] = n;
         continue;
@@ -81,7 +98,6 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
 
       cleaned[key] = String(v);
     }
-    // just-in-case cleanup
     delete cleaned.undefined;
     delete cleaned.null;
     return cleaned;
@@ -93,8 +109,13 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
     setError('');
 
     try {
-      const attributes = buildCleanedAttributes();
+      if (!hasItem || !item.id) {
+        setError('No item selected to update.');
+        setSubmitting(false);
+        return;
+      }
 
+      const attributes = buildCleanedAttributes();
       if (!attributes || Object.keys(attributes).length === 0) {
         setError('Nothing to update. Please change a field and try again.');
         setSubmitting(false);
@@ -102,9 +123,6 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
       }
 
       const payload = { attributes };
-
-      // For partial edits, merge into existing attributes server-side
-      console.log('📦 Submitting payload:', payload);
       const res = await axios.put(`/api/items/${item.id}?merge=true`, payload);
 
       if (typeof onUpdated === 'function') await onUpdated(res.data);
@@ -135,7 +153,7 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
     const val = form[key];
     const label = humanLabel(key);
     const normalized = normalizeKey(key);
-    const isNumber = isNumericField(normalized);
+    const isNumber = NUMERIC_KEYS.has(normalized);
     const isBoolean = typeof val === 'boolean';
 
     if (isBoolean) {
@@ -148,7 +166,7 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
             checked={!!val}
             onChange={handleChange}
             className="h-4 w-4"
-            disabled={submitting}
+            disabled={submitting || !hasItem}
           />
           <label htmlFor={key} className="text-sm text-gray-700">
             {label}
@@ -171,14 +189,30 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
           name={key}
           value={val ?? ''}
           onChange={handleChange}
-          disabled={submitting}
+          disabled={submitting || !hasItem}
           className="w-full border border-gray-300 rounded px-3 py-2 mt-1"
         />
       </div>
     );
   };
 
-  if (!item) return null;
+  // Always compute, even if item is missing (keeps hooks order stable)
+  const allKeys = useMemo(() => {
+    const fromAttrs = Object.keys(form || {});
+    const ordered = [
+      ...clientSchema.filter((k) => fromAttrs.includes(k)),
+      ...fromAttrs.filter((k) => !clientSchema.includes(k)),
+    ];
+    for (const k of [
+      'has_lot',
+      'lot_number',
+      'low_stock_threshold',
+      'alert_enabled',
+    ]) {
+      if (!ordered.includes(k)) ordered.push(k);
+    }
+    return ordered;
+  }, [form, clientSchema]);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
@@ -196,14 +230,20 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
           Edit Inventory Item
         </h3>
 
+        {!hasItem && (
+          <p className="text-sm text-gray-600">
+            No item selected. Close this dialog and pick an item to edit.
+          </p>
+        )}
+
         {error && <p className="text-red-600 text-sm">{error}</p>}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {Object.keys(form).map(renderField)}
+          {allKeys.map(renderField)}
 
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || !hasItem}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded disabled:opacity-50"
           >
             {submitting ? 'Saving...' : 'Save Changes'}

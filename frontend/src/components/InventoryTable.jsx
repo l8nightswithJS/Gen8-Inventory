@@ -24,6 +24,32 @@ const humanLabel = (key) =>
   LABEL_OVERRIDES[key] ||
   key.replace(/_/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
 
+// Helpers for flexible attributes
+const getNumber = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : NaN;
+};
+
+const getQty = (attrs) =>
+  getNumber(
+    attrs?.quantity ??
+      attrs?.on_hand ??
+      attrs?.qty_in_stock ??
+      attrs?.stock ??
+      0,
+  );
+
+const getThreshold = (attrs) =>
+  getNumber(
+    attrs?.low_stock_threshold ??
+      attrs?.reorder_point ??
+      attrs?.safety_stock ??
+      0,
+  );
+
+const isAlertEnabled = (attrs) =>
+  attrs?.alert_enabled === false ? false : true;
+
 export default function InventoryTable({
   items,
   page,
@@ -74,19 +100,36 @@ export default function InventoryTable({
   };
 
   const renderRow = (item) => {
-    const attrs = item.attributes;
+    const attrs = item.attributes || {};
+    const enabled = isAlertEnabled(attrs);
+    const qty = getQty(attrs);
+    const threshold = getThreshold(attrs);
     const isLow =
-      attrs.alert_enabled &&
-      Number(attrs.quantity) < Number(attrs.low_stock_threshold);
+      enabled &&
+      Number.isFinite(qty) &&
+      Number.isFinite(threshold) &&
+      qty <= threshold;
 
     return (
       <tr
         key={item.id}
-        className={`border-t hover:bg-gray-50 ${isLow ? 'bg-red-50' : ''}`}
+        className={`border-t hover:bg-gray-50 ${
+          isLow ? 'bg-red-50' : 'bg-white'
+        }`}
       >
-        {attributeKeys.map((key) => (
-          <td key={key} className="px-4 py-2 border">
-            {renderCell(attrs, key)}
+        {attributeKeys.map((key, idx) => (
+          <td key={key} className="px-4 py-2 border align-middle">
+            {/* Add a small Low badge after first column when low */}
+            {idx === 0 && isLow ? (
+              <div className="flex items-center gap-2">
+                <span>{renderCell(attrs, key)}</span>
+                <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+                  Low
+                </span>
+              </div>
+            ) : (
+              renderCell(attrs, key)
+            )}
           </td>
         ))}
         {role === 'admin' && (
@@ -122,7 +165,7 @@ export default function InventoryTable({
           <thead className="bg-gray-100 text-gray-700 uppercase text-xs">
             <tr>
               {attributeKeys.map((key) => (
-                <th key={key} className="px-4 py-3 border">
+                <th key={key} className="px-4 py-3 border text-left">
                   {humanLabel(key)}
                 </th>
               ))}
