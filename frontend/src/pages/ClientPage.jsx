@@ -24,7 +24,7 @@ export default function ClientPage() {
   const [editItem, setEditItem] = useState(null);
   const [deleteItem, setDeleteItem] = useState(null);
   const [page, setPage] = useState(1);
-  const totalPages = 1; // adjust if paging is added
+  const totalPages = 1;
 
   const fetchItems = useCallback(async () => {
     try {
@@ -49,7 +49,6 @@ export default function ClientPage() {
   }, [clientId, fetchItems]);
 
   const handleUpdated = async () => {
-    // give Supabase ~250ms to register new inserts before fetch
     await new Promise((r) => setTimeout(r, 250));
     await fetchItems();
   };
@@ -64,8 +63,6 @@ export default function ClientPage() {
     }
   };
 
-  // ───────────────────────────────────────────────────────────────
-  // Safe, case-insensitive filter of name & part_number:
   const q = query.trim().toLowerCase();
   const filtered = items.filter((item) => {
     const attr = item.attributes || {};
@@ -75,11 +72,9 @@ export default function ClientPage() {
         .includes(q),
     );
   });
-  // ───────────────────────────────────────────────────────────────
 
   return (
     <div className="px-4 py-6 max-w-7xl mx-auto">
-      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
         <div>
           <button
@@ -121,10 +116,8 @@ export default function ClientPage() {
         </div>
       </div>
 
-      {/* Error */}
       {error && <p className="text-red-600">{error}</p>}
 
-      {/* Table */}
       <InventoryTable
         items={filtered}
         page={page}
@@ -135,7 +128,6 @@ export default function ClientPage() {
         role={isAdmin ? 'admin' : 'viewer'}
       />
 
-      {/* Import Modal */}
       {showImport && (
         <BulkImport
           clientId={clientId}
@@ -144,7 +136,6 @@ export default function ClientPage() {
         />
       )}
 
-      {/* Add Item Modal */}
       {showAddItem && (
         <AddItemModal
           clientId={clientId}
@@ -153,16 +144,15 @@ export default function ClientPage() {
         />
       )}
 
-      {/* Edit Item Modal */}
       {editItem && (
         <EditItemModal
+          open={true} // ✅ Required for Material UI Modal
           item={editItem}
           onClose={() => setEditItem(null)}
           onUpdated={handleUpdated}
         />
       )}
 
-      {/* Confirm Delete */}
       {deleteItem && (
         <ConfirmModal
           title="Delete this item?"

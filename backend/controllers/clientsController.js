@@ -2,7 +2,6 @@
 const fs = require('fs');
 const path = require('path');
 const supabase = require('../lib/supabaseClient');
-// your service‑role Supabase client
 
 // GET /api/clients
 exports.getAllClients = async (req, res, next) => {
@@ -146,7 +145,7 @@ exports.deleteClient = async (req, res, next) => {
   }
 };
 
-// ─── NEW ───
+// ─── Alerts for a client (attributes‑only) ─────────────────────────────────────
 // GET /api/clients/:id/alerts
 exports.getClientAlerts = async (req, res, next) => {
   const clientId = parseInt(req.params.id, 10);
@@ -155,30 +154,40 @@ exports.getClientAlerts = async (req, res, next) => {
   }
 
   try {
-    // 1) fetch all items for this client
-    const { data: items, error: itemErr } = await supabase
+    // Fetch items (attributes only)
+    const { data: items, error } = await supabase
       .from('items')
-      .select('id, name, quantity, low_stock_threshold')
+      .select('id, attributes, last_updated')
       .eq('client_id', clientId);
-    if (itemErr) throw itemErr;
-    if (!items.length) return res.json({ alerts: [] });
 
-    // 2) fetch all alerts for those items
-    const itemIds = items.map((i) => i.id);
-    const { data: stockAlerts, error: alertErr } = await supabase
-      .from('stock_alerts')
-      .select('id, item_id, triggered_at')
-      .in('item_id', itemIds);
-    if (alertErr) throw alertErr;
+    if (error) throw error;
 
-    // 3) merge each alert with its item
-    const alerts = stockAlerts.map((a) => {
-      const item = items.find((i) => i.id === a.item_id);
-      return {
-        id: a.id,
-        triggered_at: a.triggered_at,
-        item, // { id, name, quantity, low_stock_threshold }
-      };
+    const alerts = (items || []).flatMap((item) => {
+      const attrs = item.attributes || {};
+
+      // helpers:
+      const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+      const qty = n(attrs.quantity ?? attrs.qty_in_stock);
+      const threshold = n(attrs.low_stock_threshold ?? attrs.reorder_point);
+      const enabledRaw = attrs.alert_enabled ?? attrs.alerts_enabled ?? true;
+      const enabled =
+        typeof enabledRaw === 'boolean'
+          ? enabledRaw
+          : String(enabledRaw).toLowerCase() !== 'false';
+
+      if (enabled && qty != null && threshold != null && qty <= threshold) {
+        return [
+          {
+            id: `${item.id}:${item.last_updated || ''}`,
+            triggered_at: item.last_updated || new Date().toISOString(),
+            item: {
+              id: item.id,
+              attributes: attrs,
+            },
+          },
+        ];
+      }
+      return [];
     });
 
     res.json({ alerts });

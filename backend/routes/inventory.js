@@ -15,8 +15,7 @@ router.use(authenticate);
 // ─── ALERTS ────────────────────────────────────────────────────────────────────
 //
 
-// Fetch all active alerts for a client
-//    GET /api/items/alerts?client_id=123
+// Compute active alerts from item attributes (quantity <= low_stock_threshold)
 router.get(
   '/alerts',
   requireRole('admin'),
@@ -31,8 +30,7 @@ router.get(
   controller.getActiveAlerts,
 );
 
-// Acknowledge (clear) one alert by alert ID
-//    POST /api/items/alerts/:alertId/acknowledge
+// (Optional) Acknowledge endpoint kept for compatibility; it’s a no‑op when alerts are computed
 router.post(
   '/alerts/:alertId/acknowledge',
   requireRole('admin'),
@@ -46,7 +44,6 @@ router.post(
 //
 
 // List items for a client
-//    GET /api/items?client_id=123
 router.get(
   '/',
   query('client_id')
@@ -60,8 +57,7 @@ router.get(
   controller.getAllItems,
 );
 
-// Fetch one item by its ID
-//    GET /api/items/:id
+// Fetch one item
 router.get(
   '/:id',
   param('id').isInt().withMessage('Invalid item id').toInt(),
@@ -69,60 +65,30 @@ router.get(
   controller.getItemById,
 );
 
-// Create a new item (admin only)
-//    POST /api/items
+// Create new item (admin)
 router.post(
   '/',
   requireRole('admin'),
   body('client_id').isInt().withMessage('client_id is required').toInt(),
-  body('name').isString().notEmpty(),
-  body('part_number').isString().notEmpty(),
-  body('quantity')
-    .isInt({ min: 0 })
-    .withMessage('quantity must be ≥ 0')
-    .toInt(),
-  body('low_stock_threshold')
-    .optional()
-    .isInt({ min: 0 })
-    .withMessage('Threshold must be ≥ 0')
-    .toInt(),
-  body('alert_enabled')
-    .optional()
-    .isBoolean()
-    .withMessage('alert_enabled must be boolean')
-    .toBoolean(),
+  body('attributes').isObject().withMessage('attributes must be an object'),
   handleValidation,
   controller.createItem,
 );
 
-// Update an existing item (admin only)
-//    PUT /api/items/:id
+// Update item (admin)
+// By default REPLACES attributes; pass ?merge=true to shallow‑merge into existing attributes
 router.put(
   '/:id',
   requireRole('admin'),
   param('id').isInt().withMessage('Invalid item id').toInt(),
-  body('name').isString().notEmpty(),
-  body('part_number').isString().notEmpty(),
-  body('quantity')
-    .isInt({ min: 0 })
-    .withMessage('quantity must be ≥ 0')
-    .toInt(),
-  body('low_stock_threshold')
-    .optional()
-    .isInt({ min: 0 })
-    .withMessage('Threshold must be ≥ 0')
-    .toInt(),
-  body('alert_enabled')
-    .optional()
-    .isBoolean()
-    .withMessage('alert_enabled must be boolean')
-    .toBoolean(),
+  body('attributes').isObject().withMessage('attributes must be an object'),
+  query('merge').optional().isBoolean().toBoolean(),
+  body('merge').optional().isBoolean().toBoolean(),
   handleValidation,
   controller.updateItem,
 );
 
-// Delete an item (admin only)
-//    DELETE /api/items/:id
+// Delete item (admin)
 router.delete(
   '/:id',
   requireRole('admin'),
@@ -131,8 +97,9 @@ router.delete(
   controller.deleteItem,
 );
 
-// Bulk import items (admin only)
-//    POST /api/items/bulk
+// Bulk import (admin)
+// Accepts: { client_id, items: Array<object> }
+// Each array element can be either a raw attribute map, or { attributes: {...} }
 router.post(
   '/bulk',
   requireRole('admin'),
