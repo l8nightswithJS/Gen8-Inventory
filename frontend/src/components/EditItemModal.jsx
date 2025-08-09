@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import axios from '../utils/axiosConfig';
 
-// Which attribute keys should be treated as numbers
+// Treat these attribute keys as numbers when cleaning
 const isNumericField = (key) =>
-  ['qty_in_stock', 'reorder_point', 'reorder_qty', 'safety_stock'].includes(
-    key,
-  );
+  [
+    'qty_in_stock',
+    'reorder_point',
+    'reorder_qty',
+    'safety_stock',
+    'low_stock_threshold',
+    'quantity',
+  ].includes(key);
 
-// Normalize keys to snake_case alnum+underscore only
+// Normalize keys to snake_case [a-z0-9_]
 const normalizeKey = (str) => {
   if (typeof str !== 'string') return '';
   return str
@@ -30,7 +35,8 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (item?.attributes) {
+    // Only edit attributes, not top-level legacy columns
+    if (item?.attributes && typeof item.attributes === 'object') {
       setForm({ ...item.attributes });
     } else {
       setForm({});
@@ -75,6 +81,7 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
 
       cleaned[key] = String(v);
     }
+    // just-in-case cleanup
     delete cleaned.undefined;
     delete cleaned.null;
     return cleaned;
@@ -94,36 +101,11 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
         return;
       }
 
-      // ----- Legacy-compat bridge for old backend validators -----
-      // Some routes may still expect top-level `name` and/or `quantity`.
-      const legacy = {};
-      if (attributes.name == null) {
-        const fallbackName =
-          item?.attributes?.name ??
-          item?.name ?? // in case item still has legacy top-level
-          attributes.part_number ??
-          'Item';
-        legacy.name = String(fallbackName);
-      }
-      if (
-        attributes.qty_in_stock != null &&
-        Number.isFinite(attributes.qty_in_stock)
-      ) {
-        // Mirror to legacy `quantity` if backend still expects it
-        legacy.quantity = Number(attributes.qty_in_stock);
-      }
-      // -----------------------------------------------------------
+      const payload = { attributes };
 
-      const payload = {
-        client_id: item?.client_id ?? undefined,
-        attributes,
-        ...legacy, // include only if set
-      };
-
+      // For partial edits, merge into existing attributes server-side
       console.log('📦 Submitting payload:', payload);
-      console.log('📦 Keys:', Object.keys(attributes));
-
-      const res = await axios.put(`/api/items/${item.id}`, payload);
+      const res = await axios.put(`/api/items/${item.id}?merge=true`, payload);
 
       if (typeof onUpdated === 'function') await onUpdated(res.data);
       if (typeof onClose === 'function') onClose();
