@@ -2,22 +2,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from '../utils/axiosConfig';
 
-// Show these no matter what (even if they weren't present at import)
-const BASE_FIELDS = [
-  'part_number',
-  'description',
-  'reorder_level',
-  'reorder_qty',
-  'lead_times',
-  'type',
-  'quantity', // shown as "Qty On Hand"
-  'alert_acknowledged_at', // to view/edit/clear the ack timestamp
-  'low_stock_threshold',
-  'location',
-  'lot_number',
-  'has_lot',
-];
-
 const LABELS = {
   part_number: 'Part Number',
   description: 'Description',
@@ -26,24 +10,35 @@ const LABELS = {
   lead_times: 'Lead Times',
   type: 'Type',
   quantity: 'Qty On Hand',
+  on_hand: 'Qty On Hand',
+  qty_in_stock: 'Qty On Hand',
+  stock: 'Qty On Hand',
   alert_acknowledged_at: 'Alert Acknowledged At',
-  low_stock_threshold: 'Low Stock Threshold',
-  location: 'Location',
-  lot_number: 'Lot Number',
-  has_lot: 'Has Lot',
 };
 
-function titleFor(key) {
-  return (
-    LABELS[key] ||
-    key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
-  );
-}
+const BASE_FIELDS = [
+  'part_number',
+  'description',
+  'reorder_level',
+  'reorder_qty',
+  'lead_times',
+  'type',
+  'quantity',
+  'on_hand',
+  'qty_in_stock',
+  'stock',
+  'alert_acknowledged_at',
+];
+
+const titleFor = (key) =>
+  LABELS[key] ||
+  key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
 export default function EditItemModal({ open, item, onClose, onUpdated }) {
-  const attrs = item?.attributes || {};
+  // 1) attrs is derived once per item – safe to memoize
+  const attrs = useMemo(() => item?.attributes || {}, [item]);
 
-  // union of existing keys + base set, stable order
+  // 2) stable, ordered set of keys shown in the form
   const keys = useMemo(() => {
     const union = new Set([...BASE_FIELDS, ...Object.keys(attrs || {})]);
     return Array.from(union);
@@ -51,22 +46,27 @@ export default function EditItemModal({ open, item, onClose, onUpdated }) {
 
   const [form, setForm] = useState({});
 
+  // 3) Seed form when the *item* or the *set of keys* changes.
+  //    (No need to depend on 'attrs' directly – 'keys' already depends on it.)
   useEffect(() => {
-    // seed form with existing values or ""
+    if (!item) return;
     const seeded = {};
     keys.forEach((k) => {
-      // Normalize booleans to checkbox, everything else to string
       const v = attrs[k];
+      // checkboxes & booleans: keep as boolean
       if (typeof v === 'boolean') {
         seeded[k] = v;
       } else if (v == null) {
+        // show empty if missing so user can type one in
         seeded[k] = '';
       } else {
+        // everything else as strings for inputs
         seeded[k] = String(v);
       }
     });
     setForm(seeded);
-  }, [item, keys]); // re-run when switching rows
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item, keys]);
 
   if (!open || !item) return null;
 
@@ -74,21 +74,14 @@ export default function EditItemModal({ open, item, onClose, onUpdated }) {
     setForm((f) => ({ ...f, [key]: val }));
   };
 
-  const save = async () => {
-    // Build payload:
-    // - send every key on the form so missing-at-import fields are persisted
-    // - if the user cleared a field (''), the backend will now drop that key
-    //   from attributes (see updateItem controller).
-    const payload = {};
-    for (const k of keys) {
-      payload[k] = form[k];
-    }
-
+  const onSave = async () => {
     try {
-      await axios.put(`/api/items/${item.id}?merge=true`, {
-        attributes: payload,
-      });
-      if (onUpdated) await onUpdated();
+      // Build payload exactly as typed:
+      // - numeric-like values will be coerced server-side by cleanAttributes
+      // - empty string means "clear this field" (your backend now drops that key)
+      const payload = { attributes: { ...form } };
+      await axios.put(`/api/items/${item.id}?merge=true`, payload);
+      onUpdated?.();
       onClose?.();
     } catch (e) {
       console.error(e);
@@ -96,75 +89,71 @@ export default function EditItemModal({ open, item, onClose, onUpdated }) {
     }
   };
 
-  const Field = ({ k }) => {
-    const label = titleFor(k);
-
-    // boolean -> checkbox
-    if (typeof item.attributes?.[k] === 'boolean' || k === 'has_lot') {
-      return (
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={!!form[k]}
-            onChange={(e) => onChange(k, e.target.checked)}
-            className="h-4 w-4"
-          />
-          <span className="text-sm font-medium text-gray-700">{label}</span>
-        </label>
-      );
-    }
-
-    // text inputs for everything else (keep it simple & consistent)
-    return (
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          {label}
-        </label>
-        <input
-          type="text"
-          value={form[k] ?? ''}
-          onChange={(e) => onChange(k, e.target.value)}
-          placeholder={label}
-          className="w-full rounded border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-        />
-      </div>
-    );
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-full max-w-3xl rounded-lg bg-white shadow-lg">
-        <div className="flex items-center justify-between px-5 py-4 border-b">
+      <div className="w-full max-w-3xl rounded-lg bg-white p-4 shadow-lg">
+        <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Edit Inventory Item</h2>
-          <button onClick={onClose} className="text-xl leading-none px-2">
+          <button
+            onClick={onClose}
+            className="rounded px-2 py-1 text-gray-600 hover:bg-gray-100"
+            aria-label="Close"
+          >
             ×
           </button>
         </div>
 
-        <div className="px-5 py-4">
-          {/* 2-column responsive grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {keys.map((k) => (
-              <Field key={k} k={k} />
-            ))}
-          </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {keys.map((key) => {
+            // keep alert time visible but not editable
+            const readOnly = key === 'alert_acknowledged_at';
 
-          <p className="mt-3 text-xs text-gray-500">
-            Tip: To clear a value entirely, leave the field empty and click
-            Save.
-          </p>
+            // boolean flag -> checkbox
+            if (typeof attrs[key] === 'boolean') {
+              return (
+                <label
+                  key={key}
+                  className="flex items-center gap-2 rounded border p-2"
+                >
+                  <input
+                    type="checkbox"
+                    checked={!!form[key]}
+                    onChange={(e) => onChange(key, e.target.checked)}
+                    disabled={readOnly}
+                  />
+                  <span className="text-sm font-medium">{titleFor(key)}</span>
+                </label>
+              );
+            }
+
+            // everything else -> text input
+            return (
+              <div key={key} className="flex flex-col">
+                <label className="mb-1 text-sm font-medium">
+                  {titleFor(key)}
+                </label>
+                <input
+                  className="rounded border px-3 py-2 outline-none focus:ring"
+                  value={form[key] ?? ''}
+                  onChange={(e) => onChange(key, e.target.value)}
+                  placeholder={titleFor(key)}
+                  readOnly={readOnly}
+                />
+              </div>
+            );
+          })}
         </div>
 
-        <div className="flex justify-end gap-2 px-5 py-4 border-t">
+        <div className="mt-5 flex items-center justify-end gap-2">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded border text-gray-700 hover:bg-gray-50"
+            className="rounded border px-4 py-2 text-gray-700 hover:bg-gray-50"
           >
             Cancel
           </button>
           <button
-            onClick={save}
-            className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
+            onClick={onSave}
+            className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
           >
             Save
           </button>
