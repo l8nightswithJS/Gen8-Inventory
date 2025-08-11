@@ -9,7 +9,7 @@ function rowToItem(row) {
     client_id: row.client_id,
     attributes: row.attributes || {},
     created_at: row.created_at || null,
-    updated_at: row.updated_at || row.last_updated || null,
+    updated_at: row.last_updated || null,
   };
 }
 
@@ -18,7 +18,6 @@ function autoResetAcknowledge(attrs) {
   const a = { ...(attrs || {}) };
   const { low } = computeLowState(a);
   if (!low && 'alert_acknowledged_at' in a) {
-    // Clear suppression when replenished above threshold
     delete a.alert_acknowledged_at;
   }
   return a;
@@ -39,23 +38,21 @@ exports.getActiveAlerts = async (req, res, next) => {
 
     const { data: items, error } = await supabase
       .from('items')
-      .select('id, client_id, attributes, updated_at, last_updated')
+      .select('id, client_id, attributes, last_updated') // IMPORTANT: no updated_at
       .eq('client_id', clientId);
 
     if (error) throw error;
 
     const alerts = (items || []).flatMap((row) => {
       const attrs = row.attributes || {};
-      // Ignore acknowledged alerts
       if (attrs.alert_acknowledged_at) return [];
 
       const { low, reason, threshold, qty } = computeLowState(attrs);
       if (!low) return [];
       return [
         {
-          id: row.id, // use item id; frontend posts to /alerts/:id/acknowledge
-          triggered_at:
-            row.updated_at || row.last_updated || new Date().toISOString(),
+          id: row.id,
+          triggered_at: row.last_updated || new Date().toISOString(),
           item: { id: row.id, client_id: row.client_id, attributes: attrs },
           reason,
           threshold,
@@ -79,7 +76,6 @@ exports.acknowledgeAlert = async (req, res, next) => {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ message: 'Invalid id' });
 
-    // Fetch current attributes
     const { data: existing, error: exErr } = await supabase
       .from('items')
       .select('attributes')
@@ -88,7 +84,6 @@ exports.acknowledgeAlert = async (req, res, next) => {
     if (exErr) throw exErr;
     const attrs = (existing && existing.attributes) || {};
 
-    // If already acknowledged, no-op
     if (attrs.alert_acknowledged_at) {
       return res.json({ message: 'Already acknowledged' });
     }
@@ -164,7 +159,6 @@ exports.createItem = async (req, res, next) => {
       return res.status(400).json({ message: 'attributes object is required' });
     }
 
-    // Clean + auto-reset (in case someone provides a stale ack flag)
     const cleaned = autoResetAcknowledge(cleanAttributes(attributes));
 
     const { data, error } = await supabase
@@ -211,7 +205,6 @@ exports.updateItem = async (req, res, next) => {
       newAttributes = { ...prior, ...cleaned };
     }
 
-    // Auto-reset acknowledgement based on new values
     newAttributes = autoResetAcknowledge(newAttributes);
 
     const { data, error } = await supabase

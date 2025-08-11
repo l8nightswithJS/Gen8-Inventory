@@ -150,7 +150,7 @@ exports.getClientAlerts = async (req, res, next) => {
 
     const { data: items, error } = await supabase
       .from('items')
-      .select('id, client_id, attributes, updated_at, last_updated')
+      .select('id, client_id, attributes, last_updated') // IMPORTANT: no updated_at
       .eq('client_id', id);
 
     if (error) throw error;
@@ -161,9 +161,8 @@ exports.getClientAlerts = async (req, res, next) => {
       if (!low) return [];
       return [
         {
-          id: `${row.id}:${row.updated_at || row.last_updated || ''}`,
-          triggered_at:
-            row.updated_at || row.last_updated || new Date().toISOString(),
+          id: row.id,
+          triggered_at: row.last_updated || new Date().toISOString(),
           item: { id: row.id, attributes: attrs },
           reason,
           threshold,
