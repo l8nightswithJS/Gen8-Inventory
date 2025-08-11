@@ -15,6 +15,7 @@ import UsersPage from './pages/UsersPage';
 import PrivateRoute from './components/PrivateRoute';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
+import StandaloneScanPage from './pages/StandaloneScanPage';
 
 export default function App() {
   return (
@@ -46,6 +47,10 @@ function PrivateLayout() {
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="clients/:clientId" element={<ClientPage />} />
           <Route path="clients/:clientId/alerts" element={<AlertsPage />} />
+          <Route
+            path="/clients/:clientId/scan"
+            element={<StandaloneScanPage />}
+          />
           <Route path="users" element={<UsersPage />} />
           <Route path="*" element={<Navigate to="dashboard" replace />} />
         </Routes>

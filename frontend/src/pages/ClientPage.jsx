@@ -12,6 +12,9 @@ import ConfirmModal from '../components/ConfirmModal';
 import ColumnSetupModal from '../components/ColumnSetupModal';
 import { getSavedSchema, saveSchema } from '../context/SchemaContext';
 
+import ScanButton from '../components/ScanButton';
+import ScanModal from '../components/ScanModal';
+
 import {
   FiSearch,
   FiPlus,
@@ -39,6 +42,9 @@ export default function ClientPage() {
   const [showSchema, setShowSchema] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
 
+  // NEW: scan modal state
+  const [scanOpen, setScanOpen] = useState(false);
+
   const fetchItems = useCallback(async () => {
     try {
       const { data } = await axios.get(`/api/items`, {
@@ -56,6 +62,15 @@ export default function ClientPage() {
       setError('Failed to load items.');
     }
   }, [clientId, isAdmin]);
+
+  useEffect(() => {
+    const picked = sessionStorage.getItem('scan:selectedItemId');
+    if (picked && items.length) {
+      const found = items.find((it) => String(it.id) === picked);
+      if (found) setEditItem(found);
+      sessionStorage.removeItem('scan:selectedItemId');
+    }
+  }, [items]);
 
   useEffect(() => {
     axios
@@ -120,6 +135,11 @@ export default function ClientPage() {
     </button>
   );
 
+  // When a scan selects an item, open Edit modal with that item
+  const handleScanChoose = (item) => {
+    setEditItem(item);
+  };
+
   return (
     // Full-height page; table scrolls inside available space
     <div className="flex h-full min-h-0 flex-col max-w-7xl mx-auto px-4 py-6">
@@ -140,6 +160,9 @@ export default function ClientPage() {
             <FiSearch className="text-lg" />
             <span>Search</span>
           </BarButton>
+
+          {/* NEW: Scan button (works for all roles) */}
+          <ScanButton onClick={() => setScanOpen(true)} />
 
           {isAdmin && (
             <>
@@ -241,6 +264,15 @@ export default function ClientPage() {
           onConfirm={confirmDelete}
         />
       )}
+
+      {/* NEW: Scan modal */}
+      <ScanModal
+        open={scanOpen}
+        clientId={clientId}
+        items={items} // <— pass the items you already loaded
+        onClose={() => setScanOpen(false)}
+        onChooseItem={handleScanChoose}
+      />
     </div>
   );
 }
