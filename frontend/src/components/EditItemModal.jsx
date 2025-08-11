@@ -1,15 +1,34 @@
+// src/components/EditItemModal.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from '../utils/axiosConfig';
 import { getSavedSchema } from '../context/SchemaContext';
 
+const QUANTITY_ALIASES = [
+  'qty_in_stock',
+  'qty_on_hand',
+  'quantity',
+  'on_hand',
+  'stock',
+  'qty',
+];
+
 const NUMERIC_KEYS = new Set([
   'qty_in_stock',
+  'qty_on_hand',
+  'quantity',
   'reorder_point',
   'reorder_qty',
   'safety_stock',
   'low_stock_threshold',
-  'quantity',
 ]);
+
+const CUSTOM_LABELS = {
+  qty_in_stock: 'Qty On Hand',
+  qty_on_hand: 'Qty On Hand',
+  quantity: 'Qty On Hand',
+};
+
+const BAD_STRING_VALUES = new Set(['undefined', 'null', 'nan']);
 
 const normalizeKey = (str) => {
   if (typeof str !== 'string') return '';
@@ -21,35 +40,62 @@ const normalizeKey = (str) => {
     .replace(/_+/g, '_');
 };
 
-const humanLabel = (key) =>
-  key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-
-const BAD_STRING_VALUES = new Set(['undefined', 'null', 'nan']);
+const humanLabel = (key) => {
+  if (CUSTOM_LABELS[key]) return CUSTOM_LABELS[key];
+  return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+};
 
 export default function EditItemModal({ item, onClose, onUpdated }) {
   const [form, setForm] = useState({});
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // derive values used by hooks
+  // Lock background scroll while modal is open
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => (document.body.style.overflow = prev);
+  }, []);
+
+  // Close on ESC
+  useEffect(() => {
+    const onKey = (e) => e.key === 'Escape' && onClose?.();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   const clientId = item?.client_id;
   const hasItem = !!item;
 
-  // Always call hooks unconditionally
   const clientSchema = useMemo(
     () => (clientId ? getSavedSchema(clientId) : []),
     [clientId],
   );
 
+  // Determine which key we should use for "Qty On Hand"
+  const quantityKey = useMemo(() => {
+    const fromSchema = QUANTITY_ALIASES.find((k) => clientSchema.includes(k));
+    const fromForm = QUANTITY_ALIASES.find((k) => k in (form || {}));
+    return fromForm || fromSchema || 'quantity';
+  }, [clientSchema, form]);
+
   useEffect(() => {
     if (item?.attributes && typeof item.attributes === 'object') {
       const base = { ...item.attributes };
+
+      // Ensure standard toggles exist
       if (!('has_lot' in base)) base.has_lot = !!base.lot_number;
       if (!('alert_enabled' in base)) base.alert_enabled = true;
       if (!('low_stock_threshold' in base)) base.low_stock_threshold = '';
+
+      // Ensure a qty field is present even if it didn't exist before
+      const hasAnyQty = QUANTITY_ALIASES.some((k) => k in base);
+      if (!hasAnyQty) base.quantity = ''; // default key if none existed
+
       setForm(base);
     } else {
-      setForm({});
+      // Fresh form: seed qty so the input shows up
+      setForm({ quantity: '', has_lot: false, alert_enabled: true });
     }
   }, [item]);
 
@@ -66,7 +112,8 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
     const keys = Array.from(
       new Set([
         ...Object.keys(form),
-        ...clientSchema, // keep schema ordering/visibility
+        ...clientSchema, // preserve ordering/visibility
+        quantityKey, // ensure our qty key is included
         'has_lot',
         'lot_number',
         'low_stock_threshold',
@@ -98,6 +145,7 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
 
       cleaned[key] = String(v);
     }
+
     delete cleaned.undefined;
     delete cleaned.null;
     return cleaned;
@@ -122,11 +170,12 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
         return;
       }
 
-      const payload = { attributes };
-      const res = await axios.put(`/api/items/${item.id}?merge=true`, payload);
+      const res = await axios.put(`/api/items/${item.id}?merge=true`, {
+        attributes,
+      });
 
-      if (typeof onUpdated === 'function') await onUpdated(res.data);
-      if (typeof onClose === 'function') onClose();
+      await onUpdated?.(res.data);
+      onClose?.();
     } catch (err) {
       const status = err?.response?.status;
       const data = err?.response?.data;
@@ -142,7 +191,6 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
         msg =
           'Update failed (server returned HTML error page). Check server logs.';
       }
-
       setError(msg);
     } finally {
       setSubmitting(false);
@@ -191,18 +239,26 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
           onChange={handleChange}
           disabled={submitting || !hasItem}
           className="w-full border border-gray-300 rounded px-3 py-2 mt-1"
+          step={isNumber ? '1' : undefined}
+          min={isNumber ? '0' : undefined}
         />
       </div>
     );
   };
 
-  // Always compute, even if item is missing (keeps hooks order stable)
   const allKeys = useMemo(() => {
     const fromAttrs = Object.keys(form || {});
+    // Put quantity first if present
     const ordered = [
-      ...clientSchema.filter((k) => fromAttrs.includes(k)),
-      ...fromAttrs.filter((k) => !clientSchema.includes(k)),
+      ...[quantityKey].filter(
+        (k) => fromAttrs.includes(k) || k === quantityKey,
+      ),
+      ...clientSchema.filter((k) => fromAttrs.includes(k) && k !== quantityKey),
+      ...fromAttrs.filter(
+        (k) => !clientSchema.includes(k) && k !== quantityKey,
+      ),
     ];
+
     for (const k of [
       'has_lot',
       'lot_number',
@@ -212,43 +268,61 @@ export default function EditItemModal({ item, onClose, onUpdated }) {
       if (!ordered.includes(k)) ordered.push(k);
     }
     return ordered;
-  }, [form, clientSchema]);
+  }, [form, clientSchema, quantityKey]);
 
+  // ===== Modal UI (scroll-safe) =====
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-md relative space-y-4">
-        <button
-          onClick={onClose}
-          disabled={submitting}
-          className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 text-2xl"
-          aria-label="Close edit modal"
+    <div
+      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm overflow-y-auto"
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+    >
+      <div className="min-h-full w-full flex items-start md:items-center justify-center p-4">
+        <div
+          className="w-full max-w-2xl mx-auto bg-white rounded-2xl shadow-xl relative"
+          onClick={(e) => e.stopPropagation()}
         >
-          &times;
-        </button>
+          {/* Header */}
+          <div className="sticky top-0 z-10 flex items-center justify-between p-4 md:p-6 border-b bg-white rounded-t-2xl">
+            <h3 className="text-lg md:text-xl font-semibold text-gray-800">
+              Edit Inventory Item
+            </h3>
+            <button
+              onClick={onClose}
+              disabled={submitting}
+              className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
+              aria-label="Close edit modal"
+            >
+              &times;
+            </button>
+          </div>
 
-        <h3 className="text-xl font-semibold text-gray-800">
-          Edit Inventory Item
-        </h3>
+          {/* Body (scrollable) */}
+          <div className="p-4 md:p-6 max-h-[75vh] overflow-y-auto space-y-4">
+            {!hasItem && (
+              <p className="text-sm text-gray-600">
+                No item selected. Close this dialog and pick an item to edit.
+              </p>
+            )}
 
-        {!hasItem && (
-          <p className="text-sm text-gray-600">
-            No item selected. Close this dialog and pick an item to edit.
-          </p>
-        )}
+            {error && <p className="text-red-600 text-sm">{error}</p>}
 
-        {error && <p className="text-red-600 text-sm">{error}</p>}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {allKeys.map(renderField)}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {allKeys.map(renderField)}
-
-          <button
-            type="submit"
-            disabled={submitting || !hasItem}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded disabled:opacity-50"
-          >
-            {submitting ? 'Saving...' : 'Save Changes'}
-          </button>
-        </form>
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={submitting || !hasItem}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg disabled:opacity-50"
+                >
+                  {submitting ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       </div>
     </div>
   );
