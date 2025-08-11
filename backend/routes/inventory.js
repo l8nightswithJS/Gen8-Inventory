@@ -11,7 +11,7 @@ const router = express.Router();
 // All inventory routes require authentication
 router.use(authenticate);
 
-// Alerts
+// -------- Alerts --------
 router.get(
   '/alerts',
   query('client_id').isInt().withMessage('client_id is required').toInt(),
@@ -19,7 +19,14 @@ router.get(
   controller.getActiveAlerts,
 );
 
-// List & CRUD
+router.post(
+  '/alerts/:id/acknowledge',
+  param('id').isInt().withMessage('Invalid id').toInt(),
+  handleValidation,
+  controller.acknowledgeAlert,
+);
+
+// -------- List & CRUD --------
 router.get(
   '/',
   query('client_id').isInt().withMessage('client_id is required').toInt(),
@@ -60,7 +67,7 @@ router.delete(
   controller.deleteItem,
 );
 
-// Bulk import (support both /bulk and legacy /import)
+// -------- Bulk import (support both /bulk and legacy /import) --------
 const bulkValidators = [
   body('client_id').isInt().withMessage('client_id is required').toInt(),
   body('items')
