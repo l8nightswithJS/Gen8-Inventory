@@ -45,6 +45,13 @@ const looksBooleanColumn = (key, rows) =>
     );
   });
 
+/** only pin width on numeric-like columns; keep the rest flexible */
+function isNumericLike(key, qtyKey) {
+  if (key === qtyKey) return true;
+  if (QTY_KEYS.includes(key)) return true;
+  return /\b(level|qty|quantity|threshold|count|days|hours)\b/i.test(key);
+}
+
 export default function InventoryTable({
   items,
   page,
@@ -84,7 +91,6 @@ export default function InventoryTable({
     });
   }, [safeItems]);
 
-  // Canonical quantity column; hide duplicates
   const qtyKey = useMemo(
     () => QTY_KEYS.find((k) => allKeys.includes(k)),
     [allKeys],
@@ -101,14 +107,22 @@ export default function InventoryTable({
 
   const renderCell = (attrs, key) => {
     const value = attrs[key];
+    const numeric = isNumericLike(key, qtyKey);
     return value != null ? (
-      <div className="break-words leading-tight">{String(value)}</div>
+      <div
+        className={`leading-tight ${
+          numeric ? 'text-center' : 'text-left'
+        } break-words truncate`}
+        title={String(value)}
+      >
+        {String(value)}
+      </div>
     ) : (
       <span className="text-gray-400">—</span>
     );
   };
 
-  // Theme-consistent buttons (responsive)
+  // buttons
   const btnBase =
     'inline-flex items-center justify-center rounded-md border transition-colors ' +
     'focus:outline-none focus:ring-2 focus:ring-offset-0 ' +
@@ -121,6 +135,7 @@ export default function InventoryTable({
   const renderRow = (item) => {
     const attrs = item.attributes || {};
     const { low } = computeLowState(attrs);
+
     return (
       <tr
         key={item.id}
@@ -128,23 +143,28 @@ export default function InventoryTable({
           low ? 'bg-red-50' : 'bg-white'
         } hover:bg-gray-50`}
       >
-        {visibleKeys.map((key, idx) => (
-          <td
-            key={key}
-            className="px-2 py-1.5 border align-middle text-[13px] whitespace-normal break-words"
-          >
-            {idx === 0 && low ? (
-              <div className="flex items-center gap-2">
-                {renderCell(attrs, key)}
-                <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
-                  Low
-                </span>
-              </div>
-            ) : (
-              renderCell(attrs, key)
-            )}
-          </td>
-        ))}
+        {visibleKeys.map((key, idx) => {
+          const numeric = isNumericLike(key, qtyKey);
+          return (
+            <td
+              key={key}
+              className={`px-2 py-1.5 border align-middle text-[13px] whitespace-normal ${
+                numeric ? 'text-center w-[84px]' : ''
+              }`}
+            >
+              {idx === 0 && low ? (
+                <div className="flex items-center gap-2">
+                  {renderCell(attrs, key)}
+                  <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
+                    Low
+                  </span>
+                </div>
+              ) : (
+                renderCell(attrs, key)
+              )}
+            </td>
+          );
+        })}
 
         {role === 'admin' && (
           <td
@@ -208,12 +228,13 @@ export default function InventoryTable({
         </div>
       )}
 
-      {/* Inner scroll; tiny padding to keep content off the scrollbar without shifting borders */}
+      {/* inner scroll; keep horizontal overflow hidden to avoid layout shift */}
       <div
         className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-white shadow-md rounded-lg pr-1"
         style={{ scrollbarGutter: 'stable' }}
       >
-        <table className="w-full table-auto table-fixed border-collapse text-sm">
+        {/* back to table-auto so non-numeric columns flex naturally */}
+        <table className="w-full table-auto border-collapse text-sm">
           <thead
             className="
               sticky top-0 z-10
@@ -224,19 +245,19 @@ export default function InventoryTable({
             "
           >
             <tr>
-              {visibleKeys.map((key) => (
-                <th
-                  key={key}
-                  className="
-                    px-3 py-2.5
-                    text-left uppercase tracking-wider
-                    text-slate-700 font-semibold text-[11px]
-                    whitespace-nowrap
-                  "
-                >
-                  {humanLabel(key === qtyKey ? 'quantity' : key)}
-                </th>
-              ))}
+              {visibleKeys.map((key) => {
+                const numeric = isNumericLike(key, qtyKey);
+                return (
+                  <th
+                    key={key}
+                    className={`px-3 py-2.5 text-left uppercase tracking-wider text-slate-700 font-semibold text-[11px] ${
+                      numeric ? 'text-center w-[84px] whitespace-nowrap' : ''
+                    }`}
+                  >
+                    {humanLabel(key === qtyKey ? 'quantity' : key)}
+                  </th>
+                );
+              })}
               {role === 'admin' && (
                 <th
                   className="

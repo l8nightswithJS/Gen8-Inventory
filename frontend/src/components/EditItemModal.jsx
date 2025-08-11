@@ -1,327 +1,173 @@
 // src/components/EditItemModal.jsx
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import axios from '../utils/axiosConfig';
-import { getSavedSchema } from '../context/SchemaContext';
 
-const QUANTITY_ALIASES = [
-  'qty_in_stock',
-  'qty_on_hand',
-  'quantity',
-  'on_hand',
-  'stock',
-  'qty',
+// Show these no matter what (even if they weren't present at import)
+const BASE_FIELDS = [
+  'part_number',
+  'description',
+  'reorder_level',
+  'reorder_qty',
+  'lead_times',
+  'type',
+  'quantity', // shown as "Qty On Hand"
+  'alert_acknowledged_at', // to view/edit/clear the ack timestamp
+  'low_stock_threshold',
+  'location',
+  'lot_number',
+  'has_lot',
 ];
 
-const NUMERIC_KEYS = new Set([
-  'qty_in_stock',
-  'qty_on_hand',
-  'quantity',
-  'reorder_point',
-  'reorder_qty',
-  'safety_stock',
-  'low_stock_threshold',
-]);
-
-const CUSTOM_LABELS = {
-  qty_in_stock: 'Qty On Hand',
-  qty_on_hand: 'Qty On Hand',
+const LABELS = {
+  part_number: 'Part Number',
+  description: 'Description',
+  reorder_level: 'Reorder Level',
+  reorder_qty: 'Reorder Qty',
+  lead_times: 'Lead Times',
+  type: 'Type',
   quantity: 'Qty On Hand',
+  alert_acknowledged_at: 'Alert Acknowledged At',
+  low_stock_threshold: 'Low Stock Threshold',
+  location: 'Location',
+  lot_number: 'Lot Number',
+  has_lot: 'Has Lot',
 };
 
-const BAD_STRING_VALUES = new Set(['undefined', 'null', 'nan']);
-
-const normalizeKey = (str) => {
-  if (typeof str !== 'string') return '';
-  return str
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '_')
-    .replace(/[^\w]/g, '')
-    .replace(/_+/g, '_');
-};
-
-const humanLabel = (key) => {
-  if (CUSTOM_LABELS[key]) return CUSTOM_LABELS[key];
-  return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-};
-
-export default function EditItemModal({ item, onClose, onUpdated }) {
-  const [form, setForm] = useState({});
-  const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-
-  // Lock background scroll while modal is open
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => (document.body.style.overflow = prev);
-  }, []);
-
-  // Close on ESC
-  useEffect(() => {
-    const onKey = (e) => e.key === 'Escape' && onClose?.();
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  const clientId = item?.client_id;
-  const hasItem = !!item;
-
-  const clientSchema = useMemo(
-    () => (clientId ? getSavedSchema(clientId) : []),
-    [clientId],
+function titleFor(key) {
+  return (
+    LABELS[key] ||
+    key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
   );
+}
 
-  // Determine which key we should use for "Qty On Hand"
-  const quantityKey = useMemo(() => {
-    const fromSchema = QUANTITY_ALIASES.find((k) => clientSchema.includes(k));
-    const fromForm = QUANTITY_ALIASES.find((k) => k in (form || {}));
-    return fromForm || fromSchema || 'quantity';
-  }, [clientSchema, form]);
+export default function EditItemModal({ open, item, onClose, onUpdated }) {
+  const attrs = item?.attributes || {};
+
+  // union of existing keys + base set, stable order
+  const keys = useMemo(() => {
+    const union = new Set([...BASE_FIELDS, ...Object.keys(attrs || {})]);
+    return Array.from(union);
+  }, [attrs]);
+
+  const [form, setForm] = useState({});
 
   useEffect(() => {
-    if (item?.attributes && typeof item.attributes === 'object') {
-      const base = { ...item.attributes };
-
-      // Ensure standard toggles exist
-      if (!('has_lot' in base)) base.has_lot = !!base.lot_number;
-      if (!('alert_enabled' in base)) base.alert_enabled = true;
-      if (!('low_stock_threshold' in base)) base.low_stock_threshold = '';
-
-      // Ensure a qty field is present even if it didn't exist before
-      const hasAnyQty = QUANTITY_ALIASES.some((k) => k in base);
-      if (!hasAnyQty) base.quantity = ''; // default key if none existed
-
-      setForm(base);
-    } else {
-      // Fresh form: seed qty so the input shows up
-      setForm({ quantity: '', has_lot: false, alert_enabled: true });
-    }
-  }, [item]);
-
-  const handleChange = (e) => {
-    const { name, type, value, checked } = e.target;
-    setForm((prev) => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value,
-    }));
-  };
-
-  const buildCleanedAttributes = () => {
-    const cleaned = {};
-    const keys = Array.from(
-      new Set([
-        ...Object.keys(form),
-        ...clientSchema, // preserve ordering/visibility
-        quantityKey, // ensure our qty key is included
-        'has_lot',
-        'lot_number',
-        'low_stock_threshold',
-        'alert_enabled',
-      ]),
-    );
-
-    for (const rawKey of keys) {
-      const key = normalizeKey(rawKey);
-      if (!key || key === 'undefined' || key === 'null') continue;
-
-      const rawVal = form[rawKey];
-      const v = typeof rawVal === 'string' ? rawVal.trim() : rawVal;
-
-      if (v == null || v === '') continue;
-      if (typeof v === 'string' && BAD_STRING_VALUES.has(v.toLowerCase()))
-        continue;
-
+    // seed form with existing values or ""
+    const seeded = {};
+    keys.forEach((k) => {
+      // Normalize booleans to checkbox, everything else to string
+      const v = attrs[k];
       if (typeof v === 'boolean') {
-        cleaned[key] = v;
-        continue;
+        seeded[k] = v;
+      } else if (v == null) {
+        seeded[k] = '';
+      } else {
+        seeded[k] = String(v);
       }
+    });
+    setForm(seeded);
+  }, [item, keys]); // re-run when switching rows
 
-      if (NUMERIC_KEYS.has(key)) {
-        const n = Number(v);
-        if (Number.isFinite(n)) cleaned[key] = n;
-        continue;
-      }
+  if (!open || !item) return null;
 
-      cleaned[key] = String(v);
-    }
-
-    delete cleaned.undefined;
-    delete cleaned.null;
-    return cleaned;
+  const onChange = (key, val) => {
+    setForm((f) => ({ ...f, [key]: val }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setError('');
+  const save = async () => {
+    // Build payload:
+    // - send every key on the form so missing-at-import fields are persisted
+    // - if the user cleared a field (''), the backend will now drop that key
+    //   from attributes (see updateItem controller).
+    const payload = {};
+    for (const k of keys) {
+      payload[k] = form[k];
+    }
 
     try {
-      if (!hasItem || !item.id) {
-        setError('No item selected to update.');
-        setSubmitting(false);
-        return;
-      }
-
-      const attributes = buildCleanedAttributes();
-      if (!attributes || Object.keys(attributes).length === 0) {
-        setError('Nothing to update. Please change a field and try again.');
-        setSubmitting(false);
-        return;
-      }
-
-      const res = await axios.put(`/api/items/${item.id}?merge=true`, {
-        attributes,
+      await axios.put(`/api/items/${item.id}?merge=true`, {
+        attributes: payload,
       });
-
-      await onUpdated?.(res.data);
+      if (onUpdated) await onUpdated();
       onClose?.();
-    } catch (err) {
-      const status = err?.response?.status;
-      const data = err?.response?.data;
-      console.error('❌ PUT failed', { status, data, err });
-
-      let msg =
-        (data && (data.message || data.error)) ||
-        (typeof data === 'string' && data) ||
-        err.message ||
-        'Failed to update item.';
-
-      if (typeof msg === 'string' && msg.startsWith('<!DOCTYPE html')) {
-        msg =
-          'Update failed (server returned HTML error page). Check server logs.';
-      }
-      setError(msg);
-    } finally {
-      setSubmitting(false);
+    } catch (e) {
+      console.error(e);
+      alert('Failed to save item.');
     }
   };
 
-  const renderField = (key) => {
-    const val = form[key];
-    const label = humanLabel(key);
-    const normalized = normalizeKey(key);
-    const isNumber = NUMERIC_KEYS.has(normalized);
-    const isBoolean = typeof val === 'boolean';
+  const Field = ({ k }) => {
+    const label = titleFor(k);
 
-    if (isBoolean) {
+    // boolean -> checkbox
+    if (typeof item.attributes?.[k] === 'boolean' || k === 'has_lot') {
       return (
-        <div key={key} className="flex items-center space-x-2">
+        <label className="flex items-center gap-2">
           <input
             type="checkbox"
-            id={key}
-            name={key}
-            checked={!!val}
-            onChange={handleChange}
+            checked={!!form[k]}
+            onChange={(e) => onChange(k, e.target.checked)}
             className="h-4 w-4"
-            disabled={submitting || !hasItem}
           />
-          <label htmlFor={key} className="text-sm text-gray-700">
-            {label}
-          </label>
-        </div>
+          <span className="text-sm font-medium text-gray-700">{label}</span>
+        </label>
       );
     }
 
+    // text inputs for everything else (keep it simple & consistent)
     return (
-      <div key={key}>
-        <label
-          htmlFor={key}
-          className="block text-sm font-medium text-gray-700"
-        >
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
           {label}
         </label>
         <input
-          type={isNumber ? 'number' : 'text'}
-          id={key}
-          name={key}
-          value={val ?? ''}
-          onChange={handleChange}
-          disabled={submitting || !hasItem}
-          className="w-full border border-gray-300 rounded px-3 py-2 mt-1"
-          step={isNumber ? '1' : undefined}
-          min={isNumber ? '0' : undefined}
+          type="text"
+          value={form[k] ?? ''}
+          onChange={(e) => onChange(k, e.target.value)}
+          placeholder={label}
+          className="w-full rounded border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
         />
       </div>
     );
   };
 
-  const allKeys = useMemo(() => {
-    const fromAttrs = Object.keys(form || {});
-    // Put quantity first if present
-    const ordered = [
-      ...[quantityKey].filter(
-        (k) => fromAttrs.includes(k) || k === quantityKey,
-      ),
-      ...clientSchema.filter((k) => fromAttrs.includes(k) && k !== quantityKey),
-      ...fromAttrs.filter(
-        (k) => !clientSchema.includes(k) && k !== quantityKey,
-      ),
-    ];
-
-    for (const k of [
-      'has_lot',
-      'lot_number',
-      'low_stock_threshold',
-      'alert_enabled',
-    ]) {
-      if (!ordered.includes(k)) ordered.push(k);
-    }
-    return ordered;
-  }, [form, clientSchema, quantityKey]);
-
-  // ===== Modal UI (scroll-safe) =====
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm overflow-y-auto"
-      role="dialog"
-      aria-modal="true"
-      onClick={onClose}
-    >
-      <div className="min-h-full w-full flex items-start md:items-center justify-center p-4">
-        <div
-          className="w-full max-w-2xl mx-auto bg-white rounded-2xl shadow-xl relative"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Header */}
-          <div className="sticky top-0 z-10 flex items-center justify-between p-4 md:p-6 border-b bg-white rounded-t-2xl">
-            <h3 className="text-lg md:text-xl font-semibold text-gray-800">
-              Edit Inventory Item
-            </h3>
-            <button
-              onClick={onClose}
-              disabled={submitting}
-              className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
-              aria-label="Close edit modal"
-            >
-              &times;
-            </button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="w-full max-w-3xl rounded-lg bg-white shadow-lg">
+        <div className="flex items-center justify-between px-5 py-4 border-b">
+          <h2 className="text-lg font-semibold">Edit Inventory Item</h2>
+          <button onClick={onClose} className="text-xl leading-none px-2">
+            ×
+          </button>
+        </div>
+
+        <div className="px-5 py-4">
+          {/* 2-column responsive grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {keys.map((k) => (
+              <Field key={k} k={k} />
+            ))}
           </div>
 
-          {/* Body (scrollable) */}
-          <div className="p-4 md:p-6 max-h-[75vh] overflow-y-auto space-y-4">
-            {!hasItem && (
-              <p className="text-sm text-gray-600">
-                No item selected. Close this dialog and pick an item to edit.
-              </p>
-            )}
+          <p className="mt-3 text-xs text-gray-500">
+            Tip: To clear a value entirely, leave the field empty and click
+            Save.
+          </p>
+        </div>
 
-            {error && <p className="text-red-600 text-sm">{error}</p>}
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {allKeys.map(renderField)}
-
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  disabled={submitting || !hasItem}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg disabled:opacity-50"
-                >
-                  {submitting ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
-            </form>
-          </div>
+        <div className="flex justify-end gap-2 px-5 py-4 border-t">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded border text-gray-700 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={save}
+            className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
+          >
+            Save
+          </button>
         </div>
       </div>
     </div>

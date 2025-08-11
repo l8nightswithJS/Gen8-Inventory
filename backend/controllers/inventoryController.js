@@ -1,34 +1,24 @@
 // backend/controllers/inventoryController.js
 const supabase = require('../lib/supabaseClient');
-const { computeLowState, cleanAttributes } = require('./_stockLogic');
+const {
+  computeLowState,
+  cleanAttributes,
+  normalizeKey,
+} = require('./_stockLogic');
 
-/** Normalize DB row to API item */
+// ---- Helpers ----
 function rowToItem(row) {
   return {
     id: row.id,
     client_id: row.client_id,
     attributes: row.attributes || {},
     created_at: row.created_at || null,
-    updated_at: row.last_updated || null,
+    updated_at: row.updated_at || row.last_updated || null,
   };
 }
 
-/** Auto-reset alert acknowledgement if item is not currently low */
-function autoResetAcknowledge(attrs) {
-  const a = { ...(attrs || {}) };
-  const { low } = computeLowState(a);
-  if (!low && 'alert_acknowledged_at' in a) {
-    delete a.alert_acknowledged_at;
-  }
-  return a;
-}
-
-// ---------------- Alerts ----------------
-
-/**
- * GET /api/items/alerts?client_id=123
- * Returns only LOW items that are NOT acknowledged.
- */
+// ---- Alerts ----
+// GET /api/items/alerts?client_id=123
 exports.getActiveAlerts = async (req, res, next) => {
   try {
     const clientId = parseInt(req.query.client_id, 10);
@@ -38,21 +28,20 @@ exports.getActiveAlerts = async (req, res, next) => {
 
     const { data: items, error } = await supabase
       .from('items')
-      .select('id, client_id, attributes, last_updated') // IMPORTANT: no updated_at
+      .select('id, client_id, attributes, updated_at, last_updated')
       .eq('client_id', clientId);
 
     if (error) throw error;
 
     const alerts = (items || []).flatMap((row) => {
       const attrs = row.attributes || {};
-      if (attrs.alert_acknowledged_at) return [];
-
       const { low, reason, threshold, qty } = computeLowState(attrs);
       if (!low) return [];
       return [
         {
-          id: row.id,
-          triggered_at: row.last_updated || new Date().toISOString(),
+          id: `${row.id}:${row.updated_at || row.last_updated || ''}`,
+          triggered_at:
+            row.updated_at || row.last_updated || new Date().toISOString(),
           item: { id: row.id, client_id: row.client_id, attributes: attrs },
           reason,
           threshold,
@@ -67,47 +56,8 @@ exports.getActiveAlerts = async (req, res, next) => {
   }
 };
 
-/**
- * POST /api/items/alerts/:id/acknowledge
- * Sets attributes.alert_acknowledged_at = now()
- */
-exports.acknowledgeAlert = async (req, res, next) => {
-  try {
-    const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) return res.status(400).json({ message: 'Invalid id' });
-
-    const { data: existing, error: exErr } = await supabase
-      .from('items')
-      .select('attributes')
-      .eq('id', id)
-      .single();
-    if (exErr) throw exErr;
-    const attrs = (existing && existing.attributes) || {};
-
-    if (attrs.alert_acknowledged_at) {
-      return res.json({ message: 'Already acknowledged' });
-    }
-
-    const newAttrs = {
-      ...attrs,
-      alert_acknowledged_at: new Date().toISOString(),
-    };
-
-    const { error: upErr } = await supabase
-      .from('items')
-      .update({ attributes: newAttrs })
-      .eq('id', id);
-    if (upErr) throw upErr;
-
-    res.json({ message: 'Acknowledged' });
-  } catch (err) {
-    next(err);
-  }
-};
-
-// ---------------- Items CRUD ----------------
-
-/** GET /api/items?client_id=123 */
+// ---- Items CRUD ----
+// GET /api/items?client_id=123
 exports.listItems = async (req, res, next) => {
   try {
     const clientId = parseInt(req.query.client_id, 10);
@@ -127,7 +77,7 @@ exports.listItems = async (req, res, next) => {
   }
 };
 
-/** GET /api/items/:id */
+// GET /api/items/:id
 exports.getItemById = async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -148,7 +98,7 @@ exports.getItemById = async (req, res, next) => {
   }
 };
 
-/** POST /api/items  { client_id, attributes } */
+// POST /api/items  { client_id, attributes }
 exports.createItem = async (req, res, next) => {
   try {
     const { client_id, attributes } = req.body;
@@ -159,7 +109,7 @@ exports.createItem = async (req, res, next) => {
       return res.status(400).json({ message: 'attributes object is required' });
     }
 
-    const cleaned = autoResetAcknowledge(cleanAttributes(attributes));
+    const cleaned = cleanAttributes(attributes);
 
     const { data, error } = await supabase
       .from('items')
@@ -174,12 +124,7 @@ exports.createItem = async (req, res, next) => {
   }
 };
 
-/**
- * PUT /api/items/:id?merge=true
- * { attributes }
- * - merges if ?merge=true
- * - auto-clears alert_acknowledged_at when quantity rises above threshold
- */
+// PUT /api/items/:id?merge=true   { attributes }
 exports.updateItem = async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -191,7 +136,10 @@ exports.updateItem = async (req, res, next) => {
       return res.status(400).json({ message: 'attributes object is required' });
     }
 
+    // Clean the incoming values (coerce numbers, strip obvious junk),
+    // but we still need the raw payload to detect explicit clears.
     const cleaned = cleanAttributes(attributes);
+
     let newAttributes = cleaned;
 
     if (merge) {
@@ -203,9 +151,20 @@ exports.updateItem = async (req, res, next) => {
       if (exErr) throw exErr;
       const prior = (existing && existing.attributes) || {};
       newAttributes = { ...prior, ...cleaned };
-    }
 
-    newAttributes = autoResetAcknowledge(newAttributes);
+      // IMPORTANT: support explicit clears.
+      // If the client sent "" (empty string) or null for a key, drop it.
+      for (const [rawKey, rawVal] of Object.entries(attributes)) {
+        const key = normalizeKey(rawKey);
+        if (!key) continue;
+        if (
+          rawVal === null ||
+          (typeof rawVal === 'string' && rawVal.trim() === '')
+        ) {
+          delete newAttributes[key];
+        }
+      }
+    }
 
     const { data, error } = await supabase
       .from('items')
@@ -221,7 +180,7 @@ exports.updateItem = async (req, res, next) => {
   }
 };
 
-/** DELETE /api/items/:id */
+// DELETE /api/items/:id
 exports.deleteItem = async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -240,12 +199,8 @@ exports.deleteItem = async (req, res, next) => {
   }
 };
 
-/**
- * POST /api/items/bulk  (alias: /api/items/import)
- * Body: { client_id, items: Array<object | {attributes: object}> }
- * - cleans each row
- * - auto-resets acknowledgement per row
- */
+// POST /api/items/bulk  (alias: /api/items/import)
+// Body: { client_id, items: Array<object | {attributes: object}> }
 exports.bulkImportItems = async (req, res, next) => {
   try {
     const clientId = parseInt(req.body.client_id, 10);
@@ -262,7 +217,7 @@ exports.bulkImportItems = async (req, res, next) => {
       .filter((obj) => obj && typeof obj === 'object')
       .map((obj) => ({
         client_id: clientId,
-        attributes: autoResetAcknowledge(cleanAttributes(obj)),
+        attributes: cleanAttributes(obj),
       }));
 
     if (rows.length === 0) {
