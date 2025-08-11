@@ -1,84 +1,64 @@
-// controllers/inventoryController.js
+// backend/controllers/inventoryController.js
 const supabase = require('../lib/supabaseClient');
+const {
+  computeLowState,
+  cleanAttributes,
+  normalizeKey,
+} = require('./_stockLogic');
 
-// ──────────────── Helpers ──────────────── //
-
-const BAD_STRING = new Set(['undefined', 'null', 'nan']);
-
-/** snake_case keys, keep a–z0–9_ only */
-function normalizeKey(key) {
-  if (key == null) return null;
-  return key
-    .toString()
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '_')
-    .replace(/[^\w]/g, '')
-    .replace(/_+/g, '_');
+// ---- Helpers ----
+function rowToItem(row) {
+  return {
+    id: row.id,
+    client_id: row.client_id,
+    attributes: row.attributes || {},
+    created_at: row.created_at || null,
+    updated_at: row.updated_at || row.last_updated || null,
+  };
 }
 
-/** ensure attributes is a plain object of scalars we accept */
-function cleanAttributes(attrs = {}) {
-  if (attrs == null || Array.isArray(attrs) || typeof attrs !== 'object')
-    return {};
-  const out = {};
-  for (const [rawKey, rawVal] of Object.entries(attrs)) {
-    const key = normalizeKey(rawKey);
-    if (!key || key === 'undefined' || key === 'null') continue;
-
-    let v = rawVal;
-    if (typeof v === 'string') {
-      v = v.trim();
-      if (BAD_STRING.has(v.toLowerCase())) continue;
+// ---- Alerts ----
+// GET /api/items/alerts?client_id=123
+exports.getActiveAlerts = async (req, res, next) => {
+  try {
+    const clientId = parseInt(req.query.client_id, 10);
+    if (isNaN(clientId)) {
+      return res.status(400).json({ message: 'client_id is required' });
     }
-    if (v === '' || v === undefined || v === null) continue;
 
-    // Only allow scalar JSON types
-    if (['string', 'number', 'boolean'].includes(typeof v)) {
-      out[key] = v;
-    } else {
-      // ignore arrays/objects to keep schema simple (can relax later)
-      continue;
-    }
+    const { data: items, error } = await supabase
+      .from('items')
+      .select('id, client_id, attributes, updated_at, last_updated')
+      .eq('client_id', clientId);
+
+    if (error) throw error;
+
+    const alerts = (items || []).flatMap((row) => {
+      const attrs = row.attributes || {};
+      const { low, reason, threshold, qty } = computeLowState(attrs);
+      if (!low) return [];
+      return [
+        {
+          id: `${row.id}:${row.updated_at || row.last_updated || ''}`,
+          triggered_at:
+            row.updated_at || row.last_updated || new Date().toISOString(),
+          item: { id: row.id, client_id: row.client_id, attributes: attrs },
+          reason,
+          threshold,
+          qty,
+        },
+      ];
+    });
+
+    res.json(alerts);
+  } catch (err) {
+    next(err);
   }
-  delete out.undefined;
-  delete out.null;
-  return out;
-}
+};
 
-function nowISO() {
-  return new Date().toISOString();
-}
-
-/** coerce potential numeric string to number; returns null if not finite */
-function numOrNull(v) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
-/** read common alert-related fields from attributes with fallbacks */
-function readAlertFields(attributes = {}) {
-  const qty =
-    numOrNull(attributes.quantity) ??
-    numOrNull(attributes.qty_in_stock) ??
-    null;
-  const thresh =
-    numOrNull(attributes.low_stock_threshold) ??
-    numOrNull(attributes.reorder_point) ??
-    null;
-  const enabledRaw =
-    attributes.alert_enabled ?? attributes.alerts_enabled ?? true;
-  const enabled =
-    typeof enabledRaw === 'boolean'
-      ? enabledRaw
-      : String(enabledRaw).toLowerCase() !== 'false';
-  return { qty, thresh, enabled };
-}
-
-// ──────────────── Routes ──────────────── //
-
+// ---- Items CRUD ----
 // GET /api/items?client_id=123
-exports.getAllItems = async (req, res, next) => {
+exports.listItems = async (req, res, next) => {
   try {
     const clientId = parseInt(req.query.client_id, 10);
     if (isNaN(clientId))
@@ -88,10 +68,10 @@ exports.getAllItems = async (req, res, next) => {
       .from('items')
       .select('*')
       .eq('client_id', clientId)
-      .order('id', { ascending: false });
+      .order('id', { ascending: true });
 
     if (error) throw error;
-    res.json(data || []);
+    res.json((data || []).map(rowToItem));
   } catch (err) {
     next(err);
   }
@@ -101,84 +81,84 @@ exports.getAllItems = async (req, res, next) => {
 exports.getItemById = async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) return res.status(400).json({ message: 'Invalid item id' });
+    if (isNaN(id)) return res.status(400).json({ message: 'Invalid id' });
 
     const { data, error } = await supabase
       .from('items')
       .select('*')
       .eq('id', id)
-      .maybeSingle();
+      .single();
 
     if (error) throw error;
-    if (!data) return res.status(404).json({ message: 'Item not found' });
-    res.json(data);
+    if (!data) return res.status(404).json({ message: 'Not found' });
+
+    res.json(rowToItem(data));
   } catch (err) {
     next(err);
   }
 };
 
-// POST /api/items
-// Body: { client_id, attributes: {...} }
+// POST /api/items  { client_id, attributes }
 exports.createItem = async (req, res, next) => {
   try {
-    const client_id = parseInt(req.body.client_id, 10);
-    if (isNaN(client_id))
-      return res.status(400).json({ message: 'Invalid client_id' });
+    const { client_id, attributes } = req.body;
+    const clientId = parseInt(client_id, 10);
+    if (isNaN(clientId))
+      return res.status(400).json({ message: 'client_id is required' });
+    if (!attributes || typeof attributes !== 'object') {
+      return res.status(400).json({ message: 'attributes object is required' });
+    }
 
-    const attributes = cleanAttributes(req.body.attributes);
-    const insert = { client_id, attributes, last_updated: nowISO() };
+    const cleaned = cleanAttributes(attributes);
 
     const { data, error } = await supabase
       .from('items')
-      .insert(insert)
+      .insert([{ client_id: clientId, attributes: cleaned }])
       .select('*')
       .single();
 
     if (error) throw error;
-    res.status(201).json(data);
+    res.status(201).json(rowToItem(data));
   } catch (err) {
     next(err);
   }
 };
 
-// PUT /api/items/:id
-// Body: { attributes: {...}, merge?: boolean } ; also supports ?merge=true
+// PUT /api/items/:id?merge=true   { attributes }
 exports.updateItem = async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) return res.status(400).json({ message: 'Invalid item id' });
+    if (isNaN(id)) return res.status(400).json({ message: 'Invalid id' });
 
-    const incoming = cleanAttributes(req.body.attributes);
-    const merge =
-      req.query.merge === true ||
-      req.query.merge === 'true' ||
-      req.body.merge === true;
+    const merge = String(req.query.merge || '').toLowerCase() === 'true';
+    const { attributes } = req.body || {};
+    if (!attributes || typeof attributes !== 'object') {
+      return res.status(400).json({ message: 'attributes object is required' });
+    }
+    const cleaned = cleanAttributes(attributes);
 
-    let nextAttributes = incoming;
+    let newAttributes = cleaned;
 
     if (merge) {
-      const { data: existing, error: getErr } = await supabase
+      const { data: existing, error: exErr } = await supabase
         .from('items')
         .select('attributes')
         .eq('id', id)
-        .maybeSingle();
-      if (getErr) throw getErr;
-      if (!existing) return res.status(404).json({ message: 'Item not found' });
-      nextAttributes = { ...(existing.attributes || {}), ...incoming };
+        .single();
+      if (exErr) throw exErr;
+      const prior = (existing && existing.attributes) || {};
+      newAttributes = { ...prior, ...cleaned };
     }
-
-    const updates = { attributes: nextAttributes, last_updated: nowISO() };
 
     const { data, error } = await supabase
       .from('items')
-      .update(updates)
+      .update({ attributes: newAttributes })
       .eq('id', id)
       .select('*')
-      .maybeSingle();
+      .single();
 
     if (error) throw error;
-    if (!data) return res.status(404).json({ message: 'Item not found' });
-    res.json(data);
+    res.json(rowToItem(data));
   } catch (err) {
     next(err);
   }
@@ -188,96 +168,44 @@ exports.updateItem = async (req, res, next) => {
 exports.deleteItem = async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) return res.status(400).json({ message: 'Invalid item id' });
+    if (isNaN(id)) return res.status(400).json({ message: 'Invalid id' });
 
-    const { error } = await supabase.from('items').delete().eq('id', id);
+    const { error, count } = await supabase
+      .from('items')
+      .delete({ count: 'exact' })
+      .eq('id', id);
+
     if (error) throw error;
-
+    if (count === 0) return res.status(404).json({ message: 'Not found' });
     res.json({ message: 'Item deleted' });
   } catch (err) {
     next(err);
   }
 };
 
-// GET /api/items/alerts?client_id=123
-// Compute alerts dynamically from attributes
-exports.getActiveAlerts = async (req, res, next) => {
-  try {
-    const clientId = parseInt(req.query.client_id, 10);
-    if (isNaN(clientId))
-      return res.status(400).json({ message: 'client_id is required' });
-
-    const { data: items, error } = await supabase
-      .from('items')
-      .select('id, client_id, attributes, last_updated')
-      .eq('client_id', clientId);
-
-    if (error) throw error;
-
-    const alerts = (items || []).flatMap((item) => {
-      const attrs = item.attributes || {};
-      const { qty, thresh, enabled } = readAlertFields(attrs);
-      if (enabled && qty != null && thresh != null && qty <= thresh) {
-        return [
-          {
-            id: `${item.id}:${item.last_updated || ''}`, // computed key
-            triggered_at: item.last_updated || nowISO(),
-            item: {
-              id: item.id,
-              client_id: item.client_id,
-              attributes: attrs,
-              last_updated: item.last_updated,
-            },
-          },
-        ];
-      }
-      return [];
-    });
-
-    res.json(alerts);
-  } catch (err) {
-    next(err);
-  }
-};
-
-// POST /api/items/alerts/:alertId/acknowledge
-// No‑op when alerts are computed — keep endpoint for compatibility
-exports.acknowledgeAlert = async (req, res, next) => {
-  try {
-    return res.json({
-      acknowledged: true,
-      note: 'Alerts are computed; nothing to persist.',
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-// POST /api/items/bulk
-// Body: { client_id, items: [ {...} or {attributes:{...}} , ... ] }
+// POST /api/items/bulk  (alias: /api/items/import)
+// Body: { client_id, items: Array<object | {attributes: object}> }
 exports.bulkImportItems = async (req, res, next) => {
   try {
-    const client_id = parseInt(req.body.client_id, 10);
-    const itemsIn = req.body.items;
-    if (isNaN(client_id) || !Array.isArray(itemsIn)) {
+    const clientId = parseInt(req.body.client_id, 10);
+    const items = Array.isArray(req.body.items) ? req.body.items : [];
+    if (isNaN(clientId))
+      return res.status(400).json({ message: 'client_id is required' });
+    if (items.length === 0)
       return res
         .status(400)
-        .json({ message: 'Missing client_id or items array' });
-    }
+        .json({ message: 'items must be a non-empty array' });
 
-    const rows = itemsIn.map((row) => {
-      const rawAttrs =
-        row && typeof row === 'object' && !Array.isArray(row)
-          ? row.attributes && typeof row.attributes === 'object'
-            ? row.attributes
-            : row
-          : {};
-      const attributes = cleanAttributes(rawAttrs);
-      return { client_id, attributes, last_updated: nowISO() };
-    });
+    const rows = items
+      .map((row) => (row && row.attributes ? row.attributes : row))
+      .filter((obj) => obj && typeof obj === 'object')
+      .map((obj) => ({
+        client_id: clientId,
+        attributes: cleanAttributes(obj),
+      }));
 
     if (rows.length === 0) {
-      return res.status(400).json({ message: 'No valid rows to import' });
+      return res.status(400).json({ message: 'No valid item rows' });
     }
 
     const { data: inserted, error } = await supabase

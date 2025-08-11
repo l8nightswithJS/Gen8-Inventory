@@ -1,31 +1,42 @@
-// routes/clients.js
-const express           = require('express')
-const clientsController = require('../controllers/clientsController')
-const multer            = require('multer')
-const path              = require('path')
+// backend/routes/clients.js
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const router = express.Router();
 
-const router  = express.Router()
+const clientsController = require('../controllers/clientsController');
+const authenticate = require('../middleware/authMiddleware');
+const requireRole = require('../middleware/requireRole');
 
-// ── Multer upload config ───────────────────────────────────────────────────────
+// Multer temp storage
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, path.join(__dirname, '..', 'uploads'))
-  },
-  filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`)
-  }
-})
-const upload = multer({ storage })
+  destination: (_req, _file, cb) =>
+    cb(null, path.join(__dirname, '..', 'uploads')),
+  filename: (_req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
+});
+const upload = multer({ storage });
 
-// ── CLIENT CRUD ────────────────────────────────────────────────────────────────
-router.get('/',             clientsController.getAllClients)
-router.get('/:id',          clientsController.getClientById)
-router.post('/',   upload.single('logo'), clientsController.createClient)
-router.put('/:id', upload.single('logo'), clientsController.updateClient)
-router.delete('/:id',       clientsController.deleteClient)
+// All client routes require authentication
+router.use(authenticate);
 
-// ── NEW: Alerts for a client ──────────────────────────────────────────────────
-// GET /api/clients/:id/alerts
-router.get('/:id/alerts', clientsController.getClientAlerts)
+// CRUD
+router.get('/', clientsController.getAllClients);
+router.get('/:id', clientsController.getClientById);
+router.post(
+  '/',
+  requireRole('admin'),
+  upload.single('logo'),
+  clientsController.createClient,
+);
+router.put(
+  '/:id',
+  requireRole('admin'),
+  upload.single('logo'),
+  clientsController.updateClient,
+);
+router.delete('/:id', requireRole('admin'), clientsController.deleteClient);
 
-module.exports = router
+// Alerts by client
+router.get('/:id/alerts', clientsController.getClientAlerts);
+
+module.exports = router;

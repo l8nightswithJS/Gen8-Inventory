@@ -1,44 +1,47 @@
-// server.js
+// backend/server.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 
-// Routers
+const authRouter = require('./routes/authRoutes');
+const usersRouter = require('./routes/users');
 const clientsRouter = require('./routes/clients');
 const inventoryRouter = require('./routes/inventory');
-const usersRouter = require('./routes/users');
-const authRouter = require('./routes/authRoutes');
-
-// Pull PORT straight from env, with a fallback
-const PORT = process.env.PORT || 8000;
 
 const app = express();
 
-// CORS & body parsing
-app.use(cors());
-app.use(express.json());
+// CORS
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN;
+app.use(
+  cors({
+    origin: FRONTEND_ORIGIN || '*',
+    credentials: true,
+  }),
+);
+
+// Parsers
+app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Static uploads folder
-const uploadPath = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadPath)) {
-  fs.mkdirSync(uploadPath, { recursive: true });
-}
-app.use('/uploads', express.static(uploadPath));
+// Static uploads dir
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+app.use('/uploads', express.static(uploadDir));
 
-// API routes
+// Routes
 app.use('/api/auth', authRouter);
+app.use('/api/users', usersRouter);
 app.use('/api/clients', clientsRouter);
 app.use('/api/items', inventoryRouter);
-app.use('/api/users', usersRouter);
 
-// Error handler (must come *after* all routes)
+// Health
+app.get('/api/health', (_req, res) => res.json({ ok: true }));
+
+// Error handler (keep last)
 const errorHandler = require('./middleware/errorHandler');
 app.use(errorHandler);
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
-});
+const PORT = process.env.PORT || 8000;
+app.listen(PORT, () => console.log(`✅ API server listening on :${PORT}`));

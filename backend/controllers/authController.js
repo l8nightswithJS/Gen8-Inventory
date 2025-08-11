@@ -1,85 +1,76 @@
-// controllers/authController.js
+// backend/controllers/authController.js
 require('dotenv').config();
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const supabase = require('../lib/supabaseClient');
 
-// Read the JWT secret directly from the environment
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
-  console.error('🚨 Missing JWT_SECRET environment variable!');
-  // Optionally throw here to crash early:
-  // throw new Error('Missing JWT_SECRET')
+  console.error('🚨 Missing JWT_SECRET environment variable');
 }
 
-/**
- * POST /api/auth/register
- * Creates a new user (approved=false) pending admin approval.
- */
 exports.register = async (req, res, next) => {
   try {
-    const { username, password, role } = req.body;
-    const hash = bcrypt.hashSync(password, 10);
-
-    const { data: newUser, error } = await supabase
+    const { username, password, role = 'staff' } = req.body || {};
+    if (!username || !password) {
+      return res
+        .status(400)
+        .json({ message: 'username and password are required' });
+    }
+    const hash = bcrypt.hashSync(String(password), 10);
+    const { data, error } = await supabase
       .from('users')
       .insert({
-        username,
+        username: String(username).trim(),
         password: hash,
         role,
-        approved: false, // pending by default
+        approved: false,
       })
+      .select('id, username, role, approved')
       .single();
-
     if (error) {
       if (error.code === '23505') {
         return res.status(400).json({ message: 'Username already exists' });
       }
       throw error;
     }
-
-    return res
+    res
       .status(201)
-      .json({ message: 'Registration submitted – awaiting admin approval.' });
+      .json({
+        message: 'Registration received. Awaiting approval.',
+        user: data,
+      });
   } catch (err) {
     next(err);
   }
 };
 
-/**
- * POST /api/auth/login
- * Authenticates only approved users.
- */
 exports.login = async (req, res, next) => {
   try {
-    const { username, password } = req.body;
-
-    const {
-      data: [user],
-      error,
-    } = await supabase
+    const { username, password } = req.body || {};
+    if (!username || !password) {
+      return res
+        .status(400)
+        .json({ message: 'username and password are required' });
+    }
+    const { data: user, error } = await supabase
       .from('users')
-      .select('*')
-      .eq('username', username)
-      .limit(1);
-
+      .select('id, username, password, role, approved')
+      .eq('username', String(username).trim())
+      .single();
     if (error) throw error;
-
-    if (!user || !bcrypt.compareSync(password, user.password)) {
+    if (!user || !bcrypt.compareSync(String(password), user.password)) {
       return res.status(401).json({ message: 'Invalid username or password' });
     }
-
     if (user.approved === false) {
       return res.status(403).json({ message: 'Account pending approval' });
     }
-
     const token = jwt.sign(
       { id: user.id, role: user.role, username: user.username },
       JWT_SECRET,
       { expiresIn: '8h' },
     );
-
-    return res.json({ token, role: user.role, username: user.username });
+    res.json({ token, role: user.role, username: user.username });
   } catch (err) {
     next(err);
   }

@@ -1,33 +1,26 @@
-// routes/authRoutes.js
-const express               = require('express');
-const { body }              = require('express-validator');
-const { handleValidation }  = require('../middleware/validationMiddleware');
-const authController        = require('../controllers/authController');
+// backend/routes/authRoutes.js
+const express = require('express');
+const { body } = require('express-validator');
+const { handleValidation } = require('../middleware/validationMiddleware');
+const auth = require('../controllers/authController');
 
 const router = express.Router();
 
-// Registration: creates a pending user
 router.post(
   '/register',
-  body('username')
-    .isString().notEmpty().withMessage('Username is required'),
-  body('password')
-    .isString().isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
-  body('role')
-    .isIn(['admin','staff']).withMessage('Role must be either "admin" or "staff"'),
+  body('username').isString().notEmpty(),
+  body('password').isString().isLength({ min: 6 }),
+  body('role').optional().isIn(['admin', 'staff']),
   handleValidation,
-  authController.register
+  auth.register,
 );
 
-// Login: only approved users may authenticate
 router.post(
   '/login',
-  body('username')
-    .isString().notEmpty().withMessage('Username is required'),
-  body('password')
-    .notEmpty().withMessage('Password is required'),
+  body('username').isString().notEmpty(),
+  body('password').isString().notEmpty(),
   handleValidation,
-  authController.login
+  auth.login,
 );
 
 module.exports = router;
