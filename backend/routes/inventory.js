@@ -1,6 +1,7 @@
 // backend/routes/inventory.js
 const express = require('express');
 const { body, param, query } = require('express-validator');
+
 const controller = require('../controllers/inventoryController');
 const authenticate = require('../middleware/authMiddleware');
 const requireRole = require('../middleware/requireRole');
@@ -8,10 +9,10 @@ const { handleValidation } = require('../middleware/validationMiddleware');
 
 const router = express.Router();
 
-// All inventory routes require authentication
+// everything under /api/items requires auth
 router.use(authenticate);
 
-// -------- Alerts --------
+// ---------- Alerts ----------
 router.get(
   '/alerts',
   query('client_id').isInt().withMessage('client_id is required').toInt(),
@@ -19,6 +20,7 @@ router.get(
   controller.getActiveAlerts,
 );
 
+// acknowledge a single alert (by item id)
 router.post(
   '/alerts/:id/acknowledge',
   param('id').isInt().withMessage('Invalid id').toInt(),
@@ -26,7 +28,7 @@ router.post(
   controller.acknowledgeAlert,
 );
 
-// -------- List & CRUD --------
+// ---------- Items list / CRUD ----------
 router.get(
   '/',
   query('client_id').isInt().withMessage('client_id is required').toInt(),
@@ -67,7 +69,7 @@ router.delete(
   controller.deleteItem,
 );
 
-// -------- Bulk import (support both /bulk and legacy /import) --------
+// ---------- Bulk import (and legacy alias /import) ----------
 const bulkValidators = [
   body('client_id').isInt().withMessage('client_id is required').toInt(),
   body('items')
@@ -87,6 +89,14 @@ router.post(
   requireRole('admin'),
   bulkValidators,
   controller.bulkImportItems,
+);
+
+// ---------- Export (CSV) ----------
+router.get(
+  '/export',
+  query('client_id').isInt().withMessage('client_id is required').toInt(),
+  handleValidation,
+  controller.exportItems,
 );
 
 module.exports = router;
