@@ -9,6 +9,7 @@ const authRouter = require('./routes/authRoutes');
 const usersRouter = require('./routes/users');
 const clientsRouter = require('./routes/clients');
 const inventoryRouter = require('./routes/inventory');
+const barcodeRoutes = require('./routes/barcodes');
 
 const app = express();
 
@@ -35,6 +36,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/clients', clientsRouter);
 app.use('/api/items', inventoryRouter);
+app.use('/api/barcodes', barcodeRoutes);
 
 // Health
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
