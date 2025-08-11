@@ -1,73 +1,48 @@
-import React from 'react'
-import { Link, useNavigate, useLocation, useMatch } from 'react-router-dom'
-import { FiUsers, FiLogOut } from 'react-icons/fi'
+import React from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 
 export default function Navbar() {
-  const navigate = useNavigate()
-  const { pathname } = useLocation()
-  const token = localStorage.getItem('token')
-  const role = localStorage.getItem('role')
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
 
-  // only show Alerts when on a client page
-  const match = useMatch('/clients/:clientId/*')
-  const clientId = match?.params?.clientId
+  // If we're on /clients/:id or /clients/:id/..., build a working Alerts link.
+  const match = pathname.match(/^\/clients\/(\d+)/);
+  const alertsPath = match ? `/clients/${match[1]}/alerts` : '/dashboard';
+
+  const logout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('role');
+    navigate('/login');
+  };
 
   return (
-    <nav className="bg-white shadow-sm px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center sticky top-0 z-50">
-      <Link
-        to={token ? '/dashboard' : '/'}
-        className="text-xl font-bold flex items-center gap-1"
-      >
-        <span className="text-blue-600">Gener8</span>
-        <span className="text-green-500">Inventory</span>
-      </Link>
+    <header className="sticky top-0 z-30 bg-gradient-to-b from-white to-slate-50 border-b backdrop-blur supports-[backdrop-filter]:bg-white/85">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-12 flex items-center justify-between">
+        <div className="text-[18px] font-semibold tracking-tight">
+          <span className="text-blue-600">Gener8</span> Inventory
+        </div>
 
-      <div className="flex items-center space-x-2">
-        {!token && (
+        <nav className="flex items-center gap-1.5 text-sm">
           <Link
-            to="/login"
-            className="text-gray-700 hover:underline text-sm font-medium"
-          >
-            Login
-          </Link>
-        )}
-
-        {token && clientId && (
-          <Link
-            to={`/clients/${clientId}/alerts`}
-            className="text-gray-700 hover:text-gray-900 text-sm font-medium px-2"
+            to={alertsPath}
+            className="px-2.5 py-1.5 rounded-md hover:bg-gray-100"
           >
             Alerts
           </Link>
-        )}
-
-        {token && role === 'admin' && pathname !== '/users' && (
-          <button
-            onClick={() => navigate('/users')}
-            className="flex items-center text-gray-700 hover:text-gray-900 p-2 rounded transition"
+          <Link
+            to="/users"
+            className="px-2.5 py-1.5 rounded-md hover:bg-gray-100"
           >
-            <FiUsers className="text-lg" />
-            <span className="hidden sm:inline ml-1 text-sm font-medium">
-              Manage Users
-            </span>
-          </button>
-        )}
-
-        {token && (
+            Manage Users
+          </Link>
           <button
-            onClick={() => {
-              localStorage.clear()
-              navigate('/login')
-            }}
-            className="flex items-center text-gray-700 hover:text-gray-900 p-2 rounded transition"
+            onClick={logout}
+            className="px-2.5 py-1.5 rounded-md text-gray-700 hover:bg-gray-100"
           >
-            <FiLogOut className="text-lg" />
-            <span className="hidden sm:inline ml-1 text-sm font-medium">
-              Logout
-            </span>
+            Logout
           </button>
-        )}
+        </nav>
       </div>
-    </nav>
-)
+    </header>
+  );
 }

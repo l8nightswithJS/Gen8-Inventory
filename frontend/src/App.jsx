@@ -22,8 +22,6 @@ export default function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
-
-        {/* anything else is behind auth */}
         <Route
           path="/*"
           element={
@@ -39,10 +37,11 @@ export default function App() {
 
 function PrivateLayout() {
   return (
-    <div className="flex flex-col h-screen bg-white">
+    <div className="flex h-screen flex-col bg-white">
       <Navbar />
-
-      <main className="flex-1 overflow-auto px-4 sm:px-6 lg:px-8 py-4">
+      {/* main takes only the space between navbar and footer */}
+      <main className="flex-1 min-h-0 overflow-hidden px-4 py-4 sm:px-6 lg:px-8">
+        {/* pages can create their own scroll inside this box */}
         <Routes>
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="clients/:clientId" element={<ClientPage />} />
@@ -51,7 +50,6 @@ function PrivateLayout() {
           <Route path="*" element={<Navigate to="dashboard" replace />} />
         </Routes>
       </main>
-
       <Footer />
     </div>
   );

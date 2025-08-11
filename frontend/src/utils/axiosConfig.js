@@ -1,33 +1,68 @@
 // src/utils/axiosConfig.js
 import axios from 'axios';
 
-const API_HOST = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const baseURL =
+  process.env.REACT_APP_API_URL || process.env.NEXT_PUBLIC_API_URL || '';
 
-const instance = axios.create({
-  baseURL: API_HOST,
+const api = axios.create({
+  baseURL,
+  timeout: 30000,
+  withCredentials: false, // we're using Bearer tokens, not cookies
 });
 
-// attach JWT
-instance.interceptors.request.use((cfg) => {
-  const token = localStorage.getItem('token');
-  if (token) cfg.headers.Authorization = `Bearer ${token}`;
-  return cfg;
+// Read token from storage (covers a few common keys)
+function getAuthToken() {
+  return (
+    localStorage.getItem('token') ||
+    sessionStorage.getItem('token') ||
+    localStorage.getItem('jwt') ||
+    sessionStorage.getItem('jwt') ||
+    localStorage.getItem('access_token') ||
+    sessionStorage.getItem('access_token') ||
+    ''
+  );
+}
+
+// Attach Authorization header on every request
+api.interceptors.request.use((config) => {
+  const token = getAuthToken();
+  if (token) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = token.startsWith('Bearer ')
+      ? token
+      : `Bearer ${token}`;
+  } else if (config.headers && 'Authorization' in config.headers) {
+    delete config.headers.Authorization;
+  }
+  return config;
 });
 
-// *** new: log every error response ***
-instance.interceptors.response.use(
-  (res) => res,
-  (err) => {
-    console.error('❌ API error:', {
-      url: err.config?.url,
-      method: err.config?.method,
-      status: err.response?.status,
-      responseData: err.response?.data,
-      headers: err.response?.headers,
-      message: err.message,
-    });
-    return Promise.reject(err);
+// Keep console noise minimal; allow { meta: { silent: true } } to suppress logs
+api.interceptors.response.use(
+  (resp) => resp,
+  (error) => {
+    const cfg = error?.config || {};
+    const silent = cfg.meta && cfg.meta.silent;
+
+    if (!silent) {
+      console.error('❌ API error:', {
+        url: cfg.url,
+        method: cfg.method,
+        status: error?.response?.status,
+        responseData: error?.response?.data,
+        headers: error?.response?.headers,
+      });
+    }
+
+    // Optional: auto-logout on 401 (uncomment if you want this behavior)
+    // if (error?.response?.status === 401) {
+    //   localStorage.removeItem('token');
+    //   sessionStorage.removeItem('token');
+    //   window.location.assign('/login');
+    // }
+
+    return Promise.reject(error);
   },
 );
 
-export default instance;
+export default api;
