@@ -13,14 +13,29 @@ const barcodeRoutes = require('./routes/barcodes');
 
 const app = express();
 
-// CORS
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN;
-app.use(
-  cors({
-    origin: FRONTEND_ORIGIN || '*',
-    credentials: true,
-  }),
-);
+/**
+ * CORS
+ * - If FRONTEND_ORIGIN is provided, it can be a single origin or a comma-separated list.
+ * - If not provided, we mirror the request origin (origin: true) so dev + prod just work.
+ * - credentials: true retained to match your current config.
+ */
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || '';
+const allowlist = FRONTEND_ORIGIN.split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+const corsOptions = {
+  origin: allowlist.length
+    ? (origin, cb) => {
+        // allow no-origin (curl/health checks) and any in the allowlist
+        if (!origin || allowlist.includes(origin)) return cb(null, true);
+        return cb(new Error('Not allowed by CORS'));
+      }
+    : true, // mirror request origin when no env is set
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
 
 // Parsers
 app.use(express.json({ limit: '2mb' }));
