@@ -46,7 +46,10 @@ export default function AddItemModal({ clientId, onClose, onCreated }) {
 
   const handleChange = (e) => {
     const { name, type, checked, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+    setForm((prev) => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value,
+    }));
   };
 
   const validate = () => {
@@ -73,6 +76,13 @@ export default function AddItemModal({ clientId, onClose, onCreated }) {
         attrs[key] = typeof raw === 'string' ? raw.trim() : raw;
       }
     }
+
+    // Include barcode even if not in schema (avoid duplicate if it is).
+    if (!schema.includes('barcode') && form.barcode) {
+      const code = String(form.barcode).trim();
+      if (code) attrs.barcode = code;
+    }
+
     // Always include these controls (even if not in schema)
     if ('has_lot' in form) attrs.has_lot = !!form.has_lot;
     if (attrs.has_lot) {
@@ -133,7 +143,9 @@ export default function AddItemModal({ clientId, onClose, onCreated }) {
               &times;
             </button>
 
-            <h3 className="text-xl font-semibold text-gray-800">Add Inventory Item</h3>
+            <h3 className="text-xl font-semibold text-gray-800">
+              Add Inventory Item
+            </h3>
 
             {error && <p className="text-red-600 text-sm">{error}</p>}
 
@@ -147,11 +159,25 @@ export default function AddItemModal({ clientId, onClose, onCreated }) {
                   min={NUMERIC_KEYS.has(key) ? '0' : undefined}
                   value={form[key] ?? ''}
                   onChange={handleChange}
-                  placeholder={key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+                  placeholder={key
+                    .replace(/_/g, ' ')
+                    .replace(/\b\w/g, (c) => c.toUpperCase())}
                   className="w-full border px-3 py-2 rounded"
                   disabled={submitting}
                 />
               ))}
+
+              {/* Barcode (only if user didn't already include it in schema) */}
+              {!schema.includes('barcode') && (
+                <input
+                  name="barcode"
+                  value={form.barcode ?? ''}
+                  onChange={handleChange}
+                  placeholder="Barcode"
+                  className="w-full border px-3 py-2 rounded"
+                  disabled={submitting}
+                />
+              )}
 
               {/* Always-present controls */}
               <div className="flex items-center space-x-2">
@@ -162,7 +188,9 @@ export default function AddItemModal({ clientId, onClose, onCreated }) {
                   onChange={handleChange}
                   disabled={submitting}
                 />
-                <label className="text-sm text-gray-700">Track Lot Number</label>
+                <label className="text-sm text-gray-700">
+                  Track Lot Number
+                </label>
               </div>
 
               {form.has_lot && (
@@ -195,7 +223,9 @@ export default function AddItemModal({ clientId, onClose, onCreated }) {
                   onChange={handleChange}
                   disabled={submitting}
                 />
-                <label className="text-sm text-gray-700">Enable Low-Stock Alert</label>
+                <label className="text-sm text-gray-700">
+                  Enable Low-Stock Alert
+                </label>
               </div>
 
               <button
@@ -207,7 +237,7 @@ export default function AddItemModal({ clientId, onClose, onCreated }) {
               </button>
 
               <div className="text-xs text-gray-500 text-center">
-                Need to change columns?{" "}
+                Need to change columns?{' '}
                 <button
                   type="button"
                   className="underline"

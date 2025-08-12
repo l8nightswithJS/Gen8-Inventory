@@ -64,6 +64,12 @@ exports.createClient = async (req, res, next) => {
   try {
     const name = (req.body.name || '').trim();
     if (!name) return res.status(400).json({ message: 'name is required' });
+
+    // optional barcode; empty string -> null
+    let barcode =
+      typeof req.body.barcode === 'string' ? req.body.barcode.trim() : null;
+    if (barcode === '') barcode = null;
+
     let logoUrl = req.body.logo_url || null;
 
     if (req.file) {
@@ -76,12 +82,25 @@ exports.createClient = async (req, res, next) => {
       } catch {}
     }
 
+    const insertObj = { name, logo_url: logoUrl };
+    if (barcode != null) insertObj.barcode = barcode;
+
     const { data, error } = await supabase
       .from('clients')
-      .insert([{ name, logo_url: logoUrl }])
+      .insert([insertObj])
       .select('*')
       .single();
-    if (error) throw error;
+
+    if (error) {
+      if (
+        error.code === '23505' ||
+        /duplicate key value/i.test(error.message || '')
+      ) {
+        return res.status(409).json({ message: 'Barcode already in use' });
+      }
+      throw error;
+    }
+
     res.status(201).json(data);
   } catch (err) {
     next(err);
@@ -96,6 +115,16 @@ exports.updateClient = async (req, res, next) => {
 
     const fields = {};
     if (typeof req.body.name === 'string') fields.name = req.body.name.trim();
+
+    // allow updating/clearing barcode
+    if (Object.prototype.hasOwnProperty.call(req.body, 'barcode')) {
+      if (typeof req.body.barcode === 'string') {
+        const v = req.body.barcode.trim();
+        fields.barcode = v === '' ? null : v;
+      } else if (req.body.barcode == null) {
+        fields.barcode = null;
+      }
+    }
 
     if (req.file) {
       const fileName = `${Date.now()}_${req.file.originalname}`;
@@ -115,7 +144,17 @@ exports.updateClient = async (req, res, next) => {
       .eq('id', id)
       .select('*')
       .single();
-    if (error) throw error;
+
+    if (error) {
+      if (
+        error.code === '23505' ||
+        /duplicate key value/i.test(error.message || '')
+      ) {
+        return res.status(409).json({ message: 'Barcode already in use' });
+      }
+      throw error;
+    }
+
     res.json(data);
   } catch (err) {
     next(err);
@@ -150,7 +189,7 @@ exports.getClientAlerts = async (req, res, next) => {
 
     const { data: items, error } = await supabase
       .from('items')
-      .select('id, client_id, attributes, last_updated') // IMPORTANT: no updated_at
+      .select('id, client_id, attributes, last_updated')
       .eq('client_id', id);
 
     if (error) throw error;
@@ -172,6 +211,27 @@ exports.getClientAlerts = async (req, res, next) => {
     });
 
     res.json({ alerts });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// OPTIONAL: GET /api/clients/lookup?barcode=CODE
+exports.lookupByBarcode = async (req, res, next) => {
+  try {
+    const code = String(req.query.barcode || '').trim();
+    if (!code) return res.status(400).json({ message: 'barcode is required' });
+
+    const { data, error } = await supabase
+      .from('clients')
+      .select('id')
+      .eq('barcode', code)
+      .single();
+
+    if (error && error.code !== 'PGRST116') throw error; // PGRST116: no rows
+    if (!data) return res.status(404).json({ message: 'Not found' });
+
+    res.json({ id: data.id });
   } catch (err) {
     next(err);
   }
