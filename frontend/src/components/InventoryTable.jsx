@@ -1,12 +1,12 @@
 // src/components/InventoryTable.jsx
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { FiEdit2, FiTrash2 } from 'react-icons/fi';
 import { computeLowState } from '../utils/stockLogic';
 
-const LEGACY_ORDER = [
+const DEFAULT_ORDER = [
   'part_number',
   'description',
-  'quantity',
+  'quantity', // we accept alias "quantity"
   'reorder_level',
   'reorder_qty',
   'lead_times',
@@ -21,39 +21,37 @@ const LEGACY_ORDER = [
 
 const LABEL_OVERRIDES = {
   part_number: 'Part #',
-  quantity: 'On Hand',
+  quantity: 'On Hand', // header for alias
   reorder_level: 'Reorder Level',
   reorder_qty: 'Reorder Qty',
   low_stock_threshold: 'Low-Stock Threshold',
   alert_enabled: 'Enable Low-Stock Alert',
 };
 
+const HIDE_FORCE = new Set(['alert_enabled', 'has_lot', 'low_stock_threshold']);
+const QTY_KEYS = ['quantity', 'on_hand', 'qty_in_stock', 'stock'];
+
 const humanLabel = (k) =>
   LABEL_OVERRIDES[k] ||
   k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
-const HIDE_FORCE = new Set(['alert_enabled', 'has_lot', 'low_stock_threshold']);
-const QTY_KEYS = ['quantity', 'on_hand', 'qty_in_stock', 'stock'];
+/** single value resolver for the "quantity" alias */
+function readQuantity(attrs) {
+  for (const k of QTY_KEYS) {
+    if (attrs && attrs[k] != null && attrs[k] !== '') return attrs[k];
+  }
+  return null;
+}
 
-const looksBooleanColumn = (key, rows) =>
-  rows.every((it) => {
-    const v = it.attributes?.[key];
-    return (
-      v == null ||
-      typeof v === 'boolean' ||
-      (typeof v === 'string' && /^(true|false)$/i.test(v))
-    );
-  });
-
-/** only pin width on numeric-like columns; keep the rest flexible */
-function isNumericLike(key, qtyKey) {
-  if (key === qtyKey) return true;
+function isNumericLike(key) {
+  if (key === 'quantity') return true;
   if (QTY_KEYS.includes(key)) return true;
   return /\b(level|qty|quantity|threshold|count|days|hours)\b/i.test(key);
 }
 
 export default function InventoryTable({
   items,
+  columns, // <-- NEW: stable column ids (may include "quantity" alias)
   page,
   totalPages,
   onPage,
@@ -77,37 +75,37 @@ export default function InventoryTable({
     [items],
   );
 
-  const allKeys = useMemo(() => {
+  // Final visible keys come from parent if provided; otherwise derive (legacy behavior)
+  const visibleKeys = useMemo(() => {
+    if (Array.isArray(columns) && columns.length) {
+      return columns.filter((k) => !HIDE_FORCE.has(k)).slice(); // stable copy
+    }
+
+    // Fallback: derive from current set (kept for backward compatibility)
     const keys = Array.from(
       new Set(safeItems.flatMap((i) => Object.keys(i.attributes))),
     );
-    return keys.sort((a, b) => {
-      const ia = LEGACY_ORDER.indexOf(a),
-        ib = LEGACY_ORDER.indexOf(b);
+    keys.sort((a, b) => {
+      const ia = DEFAULT_ORDER.indexOf(a);
+      const ib = DEFAULT_ORDER.indexOf(b);
       if (ia !== -1 && ib !== -1) return ia - ib;
       if (ia !== -1) return -1;
       if (ib !== -1) return 1;
       return a.localeCompare(b);
     });
-  }, [safeItems]);
 
-  const qtyKey = useMemo(
-    () => QTY_KEYS.find((k) => allKeys.includes(k)),
-    [allKeys],
-  );
-
-  const visibleKeys = useMemo(
-    () =>
-      allKeys
-        .filter((k) => !HIDE_FORCE.has(k))
-        .filter((k) => (qtyKey ? k === qtyKey || !QTY_KEYS.includes(k) : true))
-        .filter((k) => !looksBooleanColumn(k, safeItems)),
-    [allKeys, safeItems, qtyKey],
-  );
+    // prefer a single quantity alias when possible
+    const hasQty = QTY_KEYS.some((k) => keys.includes(k));
+    const filtered = keys.filter(
+      (k) => !HIDE_FORCE.has(k) && !QTY_KEYS.includes(k),
+    );
+    return hasQty ? ['quantity', ...filtered] : filtered;
+  }, [columns, safeItems]);
 
   const renderCell = (attrs, key) => {
-    const value = attrs[key];
-    const numeric = isNumericLike(key, qtyKey);
+    const value = key === 'quantity' ? readQuantity(attrs) : attrs[key];
+
+    const numeric = isNumericLike(key);
     return value != null ? (
       <div
         className={`leading-tight ${
@@ -122,7 +120,6 @@ export default function InventoryTable({
     );
   };
 
-  // buttons
   const btnBase =
     'inline-flex items-center justify-center rounded-md border transition-colors ' +
     'focus:outline-none focus:ring-2 focus:ring-offset-0 ' +
@@ -144,7 +141,7 @@ export default function InventoryTable({
         } hover:bg-gray-50`}
       >
         {visibleKeys.map((key, idx) => {
-          const numeric = isNumericLike(key, qtyKey);
+          const numeric = isNumericLike(key);
           return (
             <td
               key={key}
@@ -228,12 +225,10 @@ export default function InventoryTable({
         </div>
       )}
 
-      {/* inner scroll; keep horizontal overflow hidden to avoid layout shift */}
       <div
         className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-white shadow-md rounded-lg pr-1"
         style={{ scrollbarGutter: 'stable' }}
       >
-        {/* back to table-auto so non-numeric columns flex naturally */}
         <table className="w-full table-auto border-collapse text-sm">
           <thead
             className="
@@ -246,7 +241,8 @@ export default function InventoryTable({
           >
             <tr>
               {visibleKeys.map((key) => {
-                const numeric = isNumericLike(key, qtyKey);
+                const numeric = isNumericLike(key);
+                const headerKey = key === 'quantity' ? 'quantity' : key;
                 return (
                   <th
                     key={key}
@@ -254,7 +250,7 @@ export default function InventoryTable({
                       numeric ? 'text-center w-[84px] whitespace-nowrap' : ''
                     }`}
                   >
-                    {humanLabel(key === qtyKey ? 'quantity' : key)}
+                    {humanLabel(headerKey)}
                   </th>
                 );
               })}

@@ -24,6 +24,18 @@ import {
 } from 'react-icons/fi';
 
 const PAGE_SIZE = 20;
+const QTY_KEYS = ['quantity', 'on_hand', 'qty_in_stock', 'stock'];
+const ORDER_HINT = [
+  'part_number',
+  'description',
+  'quantity',
+  'reorder_level',
+  'reorder_qty',
+  'lead_times',
+  'type',
+  'name',
+  'location',
+];
 
 export default function ClientPage() {
   const { clientId } = useParams();
@@ -41,6 +53,7 @@ export default function ClientPage() {
   const [page, setPage] = useState(1);
   const [showSchema, setShowSchema] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [schemaRev, setSchemaRev] = useState(0);
 
   // NEW: scan modal state
   const [scanOpen, setScanOpen] = useState(false);
@@ -96,6 +109,7 @@ export default function ClientPage() {
     }
   };
 
+  // Filter
   const q = query.trim().toLowerCase();
   const filtered = useMemo(() => {
     if (!q) return items;
@@ -109,6 +123,7 @@ export default function ClientPage() {
     });
   }, [items, q]);
 
+  // Pagination
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -118,6 +133,35 @@ export default function ClientPage() {
     const start = (page - 1) * PAGE_SIZE;
     return filtered.slice(start, start + PAGE_SIZE);
   }, [filtered, page]);
+
+  // Stable column list:
+  // 1) if user saved a schema, use it as-is (they may include "quantity" alias)
+  // 2) else union of ALL item keys (not just current page),
+  //    replace any qty synonyms with a single "quantity" alias,
+  //    then order by ORDER_HINT.
+  const columns = useMemo(() => {
+    const saved = getSavedSchema(clientId);
+    if (saved.length) return saved;
+
+    const union = new Set(
+      (items || []).flatMap((it) => Object.keys(it.attributes || {})),
+    );
+
+    // if any qty-like keys exist, show the single "quantity" alias
+    const hasQty = QTY_KEYS.some((k) => union.has(k));
+    const withoutQty = [...union].filter((k) => !QTY_KEYS.includes(k));
+    const base = hasQty ? ['quantity', ...withoutQty] : withoutQty;
+
+    // order: hint first, then alpha
+    return base.sort((a, b) => {
+      const ia = ORDER_HINT.indexOf(a);
+      const ib = ORDER_HINT.indexOf(b);
+      if (ia !== -1 && ib !== -1) return ia - ib;
+      if (ia !== -1) return -1;
+      if (ib !== -1) return 1;
+      return a.localeCompare(b);
+    });
+  }, [clientId, items, schemaRev]);
 
   const BarButton = ({ onClick, children, className = '', ...rest }) => (
     <button
@@ -135,15 +179,10 @@ export default function ClientPage() {
     </button>
   );
 
-  // When a scan selects an item, open Edit modal with that item
-  const handleScanChoose = (item) => {
-    setEditItem(item);
-  };
+  const handleScanChoose = (item) => setEditItem(item);
 
   return (
-    // Full-height page; table scrolls inside available space
     <div className="flex h-full min-h-0 flex-col max-w-7xl mx-auto px-4 py-6">
-      {/* clean header (no pager here) */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-4">
         <div className="flex items-center gap-3">
           <button
@@ -161,7 +200,6 @@ export default function ClientPage() {
             <span>Search</span>
           </BarButton>
 
-          {/* NEW: Scan button (works for all roles) */}
           <ScanButton onClick={() => setScanOpen(true)} />
 
           {isAdmin && (
@@ -207,9 +245,10 @@ export default function ClientPage() {
       <div className="flex-1 min-h-0">
         <InventoryTable
           items={pageItems}
+          columns={columns}
+          onPage={setPage}
           page={page}
           totalPages={totalPages}
-          onPage={setPage}
           onEdit={setEditItem}
           onDelete={setDeleteItem}
           role={isAdmin ? 'admin' : 'viewer'}
@@ -223,6 +262,7 @@ export default function ClientPage() {
           onClose={() => setShowSchema(false)}
           onSave={(cols) => {
             saveSchema(clientId, cols);
+            setSchemaRev((n) => n + 1); // <-- refresh columns
             setShowSchema(false);
           }}
           initial={getSavedSchema(clientId)}
@@ -265,11 +305,10 @@ export default function ClientPage() {
         />
       )}
 
-      {/* NEW: Scan modal */}
       <ScanModal
         open={scanOpen}
         clientId={clientId}
-        items={items} // <— pass the items you already loaded
+        items={items}
         onClose={() => setScanOpen(false)}
         onChooseItem={handleScanChoose}
       />

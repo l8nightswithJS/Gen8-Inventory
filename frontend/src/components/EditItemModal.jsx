@@ -9,60 +9,61 @@ const LABELS = {
   reorder_qty: 'Reorder Qty',
   lead_times: 'Lead Times',
   type: 'Type',
-  quantity: 'Qty On Hand',
-  on_hand: 'Qty On Hand',
-  qty_in_stock: 'Qty On Hand',
-  stock: 'Qty On Hand',
   alert_acknowledged_at: 'Alert Acknowledged At',
+  barcode: 'Barcode',
 };
 
-const BASE_FIELDS = [
-  'part_number',
-  'description',
-  'reorder_level',
-  'reorder_qty',
-  'lead_times',
-  'type',
-  'quantity',
-  'on_hand',
-  'qty_in_stock',
-  'stock',
-  'alert_acknowledged_at',
-];
+const QTY_KEYS = ['quantity', 'on_hand', 'qty_in_stock', 'stock'];
 
 const titleFor = (key) =>
   LABELS[key] ||
   key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
 export default function EditItemModal({ open, item, onClose, onUpdated }) {
-  // 1) attrs is derived once per item – safe to memoize
   const attrs = useMemo(() => item?.attributes || {}, [item]);
 
-  // 2) stable, ordered set of keys shown in the form
+  // choose a single quantity key to display
+  const qtyKey = useMemo(
+    () => QTY_KEYS.find((k) => Object.hasOwn(attrs, k)),
+    [attrs],
+  );
+
+  // final, ordered keys for the form (no duplicates)
   const keys = useMemo(() => {
-    const union = new Set([...BASE_FIELDS, ...Object.keys(attrs || {})]);
-    return Array.from(union);
-  }, [attrs]);
+    if (!attrs) return [];
+    const base = [
+      'part_number',
+      'description',
+      'reorder_level',
+      'reorder_qty',
+      'lead_times',
+      'type',
+      // only one qty field, if present
+      ...(qtyKey ? [qtyKey] : []),
+      'alert_acknowledged_at',
+      // include barcode if present (trigger will add one after insert)
+      ...(Object.hasOwn(attrs, 'barcode') ? ['barcode'] : []),
+    ];
+
+    // include any additional custom keys not already covered
+    const extra = Object.keys(attrs).filter(
+      (k) => !base.includes(k) && !QTY_KEYS.includes(k),
+    );
+
+    // final order: base first, then extras alphabetically
+    return [...base, ...extra.sort()];
+  }, [attrs, qtyKey]);
 
   const [form, setForm] = useState({});
 
-  // 3) Seed form when the *item* or the *set of keys* changes.
-  //    (No need to depend on 'attrs' directly – 'keys' already depends on it.)
   useEffect(() => {
     if (!item) return;
     const seeded = {};
     keys.forEach((k) => {
       const v = attrs[k];
-      // checkboxes & booleans: keep as boolean
-      if (typeof v === 'boolean') {
-        seeded[k] = v;
-      } else if (v == null) {
-        // show empty if missing so user can type one in
-        seeded[k] = '';
-      } else {
-        // everything else as strings for inputs
-        seeded[k] = String(v);
-      }
+      if (typeof v === 'boolean') seeded[k] = v;
+      else if (v == null) seeded[k] = '';
+      else seeded[k] = String(v);
     });
     setForm(seeded);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -70,15 +71,10 @@ export default function EditItemModal({ open, item, onClose, onUpdated }) {
 
   if (!open || !item) return null;
 
-  const onChange = (key, val) => {
-    setForm((f) => ({ ...f, [key]: val }));
-  };
+  const onChange = (key, val) => setForm((f) => ({ ...f, [key]: val }));
 
   const onSave = async () => {
     try {
-      // Build payload exactly as typed:
-      // - numeric-like values will be coerced server-side by cleanAttributes
-      // - empty string means "clear this field" (your backend now drops that key)
       const payload = { attributes: { ...form } };
       await axios.put(`/api/items/${item.id}?merge=true`, payload);
       onUpdated?.();
@@ -105,11 +101,14 @@ export default function EditItemModal({ open, item, onClose, onUpdated }) {
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {keys.map((key) => {
-            // keep alert time visible but not editable
             const readOnly = key === 'alert_acknowledged_at';
+            const isBool =
+              typeof attrs[key] === 'boolean' || typeof form[key] === 'boolean';
 
-            // boolean flag -> checkbox
-            if (typeof attrs[key] === 'boolean') {
+            const label =
+              qtyKey && key === qtyKey ? 'Qty On Hand' : titleFor(key);
+
+            if (isBool) {
               return (
                 <label
                   key={key}
@@ -121,22 +120,19 @@ export default function EditItemModal({ open, item, onClose, onUpdated }) {
                     onChange={(e) => onChange(key, e.target.checked)}
                     disabled={readOnly}
                   />
-                  <span className="text-sm font-medium">{titleFor(key)}</span>
+                  <span className="text-sm font-medium">{label}</span>
                 </label>
               );
             }
 
-            // everything else -> text input
             return (
               <div key={key} className="flex flex-col">
-                <label className="mb-1 text-sm font-medium">
-                  {titleFor(key)}
-                </label>
+                <label className="mb-1 text-sm font-medium">{label}</label>
                 <input
                   className="rounded border px-3 py-2 outline-none focus:ring"
                   value={form[key] ?? ''}
                   onChange={(e) => onChange(key, e.target.value)}
-                  placeholder={titleFor(key)}
+                  placeholder={label}
                   readOnly={readOnly}
                 />
               </div>
