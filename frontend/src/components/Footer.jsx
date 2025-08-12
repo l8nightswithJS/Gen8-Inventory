@@ -4,31 +4,36 @@ export default function Footer() {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="sticky bottom-0 z-20 bg-gradient-to-t from-white to-slate-50 border-t backdrop-blur supports-[backdrop-filter]:bg-white/85">
+    <footer className="sticky bottom-0 z-20 bg-white/95 border-t backdrop-blur">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-12 flex items-center justify-between">
-        {/* Left: logo + quote */}
         <div className="flex items-center gap-3 min-w-0">
-          <img
-            src="/logo192.png"
-            alt="Gener8"
-            className="h-6 w-6 rounded-[6px] ring-1 ring-gray-200"
-            loading="lazy"
-          />
-          <p className="text-[12px] text-gray-600 truncate">
+          <span className="inline-flex items-center justify-center rounded-md bg-white ring-1 ring-gray-300 p-[2px]">
+            <img
+              src="/logo192.png"
+              alt="Gener8"
+              className="h-6 w-6 md:h-7 md:w-7 object-contain"
+              style={{
+                filter:
+                  'drop-shadow(0 0 1px rgba(0,0,0,.45)) contrast(1.18) saturate(1.05)',
+              }}
+              loading="lazy"
+            />
+          </span>
+
+          <p className="text-xs sm:text-sm text-gray-600 truncate">
             “Inventory accuracy is the hallmark of operational excellence.”
             <span className="ml-2 text-gray-500">— Gener8 Team</span>
           </p>
         </div>
 
-        {/* Right: compact feedback + copyright */}
         <div className="flex items-center gap-3 shrink-0">
           <a
             href="/feedback"
-            className="text-[12px] px-2 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+            className="text-xs sm:text-sm px-2 py-1 rounded-md border border-gray-300 hover:bg-gray-50"
           >
             Feedback
           </a>
-          <span className="text-[12px] text-gray-500">
+          <span className="text-xs sm:text-sm text-gray-500">
             © {year} Gener8 Inventory
           </span>
         </div>

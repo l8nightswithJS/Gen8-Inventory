@@ -6,11 +6,8 @@ export default function Navbar() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
-  // If we're on /clients/:id or deeper, route Scan/Alerts within that client.
   const match = pathname.match(/^\/clients\/(\d+)/);
   const clientId = match ? match[1] : null;
-
-  const scanPath = clientId ? `/clients/${clientId}/scan` : '/scan';
   const alertsPath = clientId ? `/clients/${clientId}/alerts` : '/dashboard';
 
   const logout = () => {
@@ -19,21 +16,25 @@ export default function Navbar() {
     navigate('/login');
   };
 
+  const onClientPage = Boolean(clientId);
+
   return (
-    <header className="sticky top-0 z-30 bg-gradient-to-b from-white to-slate-50 border-b backdrop-blur supports-[backdrop-filter]:bg-white/85">
+    <header className="sticky top-0 z-30 bg-white/95 border-b backdrop-blur">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-12 flex items-center justify-between">
-        <div className="text-[18px] font-semibold tracking-tight">
+        <div className="font-semibold">
           <span className="text-blue-600">Gener8</span> Inventory
         </div>
 
-        <nav className="flex items-center gap-1.5 text-sm">
-          <NavLink
-            to={scanPath}
-            className="inline-flex items-center gap-2 rounded-2xl border px-3 py-2 font-medium hover:bg-gray-50"
-          >
-            <FiCamera className="text-base" />
-            <span>Scan</span>
-          </NavLink>
+        <nav className="flex items-center gap-2 text-sm">
+          {!onClientPage && (
+            <NavLink
+              to="/scan"
+              className="inline-flex items-center gap-2 rounded-2xl border px-3 py-2 font-medium hover:bg-gray-50"
+            >
+              <FiCamera className="text-base" />
+              <span>Scan</span>
+            </NavLink>
+          )}
 
           <Link
             to={alertsPath}
@@ -51,7 +52,7 @@ export default function Navbar() {
 
           <button
             onClick={logout}
-            className="px-2.5 py-1.5 rounded-md text-gray-700 hover:bg-gray-100"
+            className="px-2.5 py-1.5 rounded-md hover:bg-gray-100"
           >
             Logout
           </button>

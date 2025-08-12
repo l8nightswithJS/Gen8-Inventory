@@ -3,10 +3,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { FiEdit2, FiTrash2 } from 'react-icons/fi';
 import { computeLowState } from '../utils/stockLogic';
 
-const DEFAULT_ORDER = [
+const LEGACY_ORDER = [
   'part_number',
   'description',
-  'quantity', // we accept alias "quantity"
+  'quantity',
   'reorder_level',
   'reorder_qty',
   'lead_times',
@@ -16,42 +16,59 @@ const DEFAULT_ORDER = [
   'lot_number',
   'low_stock_threshold',
   'has_lot',
-  'alert_enabled',
+  'alert_acknowledged_at',
+  'barcode',
 ];
 
 const LABEL_OVERRIDES = {
   part_number: 'Part #',
-  quantity: 'On Hand', // header for alias
+  quantity: 'On Hand',
   reorder_level: 'Reorder Level',
   reorder_qty: 'Reorder Qty',
   low_stock_threshold: 'Low-Stock Threshold',
   alert_enabled: 'Enable Low-Stock Alert',
+  alert_acknowledged_at: 'Noted',
+  barcode: 'Barcode',
 };
 
 const HIDE_FORCE = new Set(['alert_enabled', 'has_lot', 'low_stock_threshold']);
 const QTY_KEYS = ['quantity', 'on_hand', 'qty_in_stock', 'stock'];
 
+// columns that should not wrap (always single line)
+const NO_WRAP_COLS = new Set([
+  'part_number',
+  'alert_acknowledged_at',
+  'barcode',
+]);
+
 const humanLabel = (k) =>
   LABEL_OVERRIDES[k] ||
   k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
-/** single value resolver for the "quantity" alias */
-function readQuantity(attrs) {
-  for (const k of QTY_KEYS) {
-    if (attrs && attrs[k] != null && attrs[k] !== '') return attrs[k];
-  }
-  return null;
-}
-
-function isNumericLike(key) {
-  if (key === 'quantity') return true;
+function isNumericLike(key, qtyKey) {
+  if (key === qtyKey) return true;
   if (QTY_KEYS.includes(key)) return true;
   return /\b(level|qty|quantity|threshold|count|days|hours)\b/i.test(key);
 }
 
+function shouldNoWrap(key, qtyKey) {
+  return NO_WRAP_COLS.has(key) || isNumericLike(key, qtyKey);
+}
+
+// Short, locale-aware date for “Noted”
+function formatShortDate(value) {
+  if (value == null || value === '') return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  try {
+    return new Intl.DateTimeFormat(undefined, { dateStyle: 'short' }).format(d);
+  } catch {
+    return d.toLocaleDateString();
+  }
+}
+
 export default function InventoryTable({
   items,
-  columns, // <-- NEW: stable column ids (may include "quantity" alias)
   page,
   totalPages,
   onPage,
@@ -75,42 +92,59 @@ export default function InventoryTable({
     [items],
   );
 
-  // Final visible keys come from parent if provided; otherwise derive (legacy behavior)
-  const visibleKeys = useMemo(() => {
-    if (Array.isArray(columns) && columns.length) {
-      return columns.filter((k) => !HIDE_FORCE.has(k)).slice(); // stable copy
-    }
-
-    // Fallback: derive from current set (kept for backward compatibility)
+  const allKeys = useMemo(() => {
     const keys = Array.from(
       new Set(safeItems.flatMap((i) => Object.keys(i.attributes))),
     );
-    keys.sort((a, b) => {
-      const ia = DEFAULT_ORDER.indexOf(a);
-      const ib = DEFAULT_ORDER.indexOf(b);
+    return keys.sort((a, b) => {
+      const ia = LEGACY_ORDER.indexOf(a),
+        ib = LEGACY_ORDER.indexOf(b);
       if (ia !== -1 && ib !== -1) return ia - ib;
       if (ia !== -1) return -1;
       if (ib !== -1) return 1;
       return a.localeCompare(b);
     });
+  }, [safeItems]);
 
-    // prefer a single quantity alias when possible
-    const hasQty = QTY_KEYS.some((k) => keys.includes(k));
-    const filtered = keys.filter(
-      (k) => !HIDE_FORCE.has(k) && !QTY_KEYS.includes(k),
-    );
-    return hasQty ? ['quantity', ...filtered] : filtered;
-  }, [columns, safeItems]);
+  const qtyKey = useMemo(
+    () => QTY_KEYS.find((k) => allKeys.includes(k)),
+    [allKeys],
+  );
+
+  const visibleKeys = useMemo(
+    () =>
+      allKeys
+        .filter((k) => !HIDE_FORCE.has(k))
+        .filter((k) => (qtyKey ? k === qtyKey || !QTY_KEYS.includes(k) : true)),
+    [allKeys, qtyKey],
+  );
 
   const renderCell = (attrs, key) => {
-    const value = key === 'quantity' ? readQuantity(attrs) : attrs[key];
+    const value = attrs[key];
 
-    const numeric = isNumericLike(key);
+    // special formatting for "Noted"
+    if (key === 'alert_acknowledged_at') {
+      const short = formatShortDate(value);
+      return short ? (
+        <div
+          className="leading-tight text-left whitespace-nowrap"
+          title={String(value)}
+        >
+          {short}
+        </div>
+      ) : (
+        <span className="text-gray-400">—</span>
+      );
+    }
+
+    const numeric = isNumericLike(key, qtyKey);
+    const nowrap = shouldNoWrap(key, qtyKey);
+
     return value != null ? (
       <div
-        className={`leading-tight ${
-          numeric ? 'text-center' : 'text-left'
-        } break-words truncate`}
+        className={`leading-tight ${numeric ? 'text-center' : 'text-left'} ${
+          nowrap ? 'whitespace-nowrap' : 'whitespace-normal break-words'
+        }`}
         title={String(value)}
       >
         {String(value)}
@@ -120,6 +154,7 @@ export default function InventoryTable({
     );
   };
 
+  // Buttons (original look)
   const btnBase =
     'inline-flex items-center justify-center rounded-md border transition-colors ' +
     'focus:outline-none focus:ring-2 focus:ring-offset-0 ' +
@@ -141,13 +176,23 @@ export default function InventoryTable({
         } hover:bg-gray-50`}
       >
         {visibleKeys.map((key, idx) => {
-          const numeric = isNumericLike(key);
+          const numeric = isNumericLike(key, qtyKey);
+          const isAck = key === 'alert_acknowledged_at';
+          const isBarcode = key === 'barcode';
+
+          // Fixed widths at md+ keep desktop alignment; mobile remains flexible
+          const widthClasses = [
+            numeric ? 'md:w-[84px] md:whitespace-nowrap' : '',
+            isAck ? 'md:w-[128px] md:whitespace-nowrap' : '',
+            isBarcode ? 'md:w-[120px] md:whitespace-nowrap' : '',
+          ].join(' ');
+
           return (
             <td
               key={key}
-              className={`px-2 py-1.5 border align-middle text-[13px] whitespace-normal ${
-                numeric ? 'text-center w-[84px]' : ''
-              }`}
+              className={`px-2 py-1.5 border align-middle text-[13px] ${
+                numeric ? 'text-center' : ''
+              } ${widthClasses}`}
             >
               {idx === 0 && low ? (
                 <div className="flex items-center gap-2">
@@ -167,7 +212,7 @@ export default function InventoryTable({
           <td
             className="
               px-2 md:px-3 py-1.5 border text-center whitespace-nowrap align-middle
-              w-[112px] md:w-[136px] lg:w-[152px]
+              md:w-[152px]
               overflow-hidden
             "
           >
@@ -225,10 +270,8 @@ export default function InventoryTable({
         </div>
       )}
 
-      <div
-        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-white shadow-md rounded-lg pr-1"
-        style={{ scrollbarGutter: 'stable' }}
-      >
+      {/* horizontal scroll on very small screens; preserves your original styling */}
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto bg-white shadow-md rounded-lg pr-1">
         <table className="w-full table-auto border-collapse text-sm">
           <thead
             className="
@@ -241,16 +284,26 @@ export default function InventoryTable({
           >
             <tr>
               {visibleKeys.map((key) => {
-                const numeric = isNumericLike(key);
-                const headerKey = key === 'quantity' ? 'quantity' : key;
+                const numeric = isNumericLike(key, qtyKey);
+                const isAck = key === 'alert_acknowledged_at';
+                const isBarcode = key === 'barcode';
+                const noWrap = shouldNoWrap(key, qtyKey);
+
+                const widthClasses = [
+                  numeric ? 'md:w-[84px] md:whitespace-nowrap' : '',
+                  isAck ? 'md:w-[128px] md:whitespace-nowrap' : '',
+                  isBarcode ? 'md:w-[120px] md:whitespace-nowrap' : '',
+                ].join(' ');
+
                 return (
                   <th
                     key={key}
-                    className={`px-3 py-2.5 text-left uppercase tracking-wider text-slate-700 font-semibold text-[11px] ${
-                      numeric ? 'text-center w-[84px] whitespace-nowrap' : ''
+                    className={`px-3 py-2.5 text-left uppercase tracking-wider text-slate-700 font-semibold text-[11px]
+                      ${numeric ? 'md:text-center' : ''} ${widthClasses} ${
+                      noWrap ? 'whitespace-nowrap' : 'whitespace-normal'
                     }`}
                   >
-                    {humanLabel(headerKey)}
+                    {humanLabel(key === qtyKey ? 'quantity' : key)}
                   </th>
                 );
               })}
@@ -259,7 +312,7 @@ export default function InventoryTable({
                   className="
                     px-3 py-2.5 text-center uppercase tracking-wider
                     text-slate-700 font-semibold text-[11px] whitespace-nowrap
-                    w-[112px] md:w-[136px] lg:w-[152px]
+                    md:w-[152px]
                   "
                 >
                   Actions

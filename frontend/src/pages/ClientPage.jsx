@@ -21,6 +21,7 @@ import {
   FiLayers,
   FiDownload,
   FiColumns,
+  FiPrinter, // ⬅️ NEW
 } from 'react-icons/fi';
 
 const PAGE_SIZE = 20;
@@ -55,7 +56,7 @@ export default function ClientPage() {
   const [showSearch, setShowSearch] = useState(false);
   const [schemaRev, setSchemaRev] = useState(0);
 
-  // NEW: scan modal state
+  // Scan modal state
   const [scanOpen, setScanOpen] = useState(false);
 
   const fetchItems = useCallback(async () => {
@@ -134,11 +135,7 @@ export default function ClientPage() {
     return filtered.slice(start, start + PAGE_SIZE);
   }, [filtered, page]);
 
-  // Stable column list:
-  // 1) if user saved a schema, use it as-is (they may include "quantity" alias)
-  // 2) else union of ALL item keys (not just current page),
-  //    replace any qty synonyms with a single "quantity" alias,
-  //    then order by ORDER_HINT.
+  // Stable column list (saved schema > inferred union)
   const columns = useMemo(() => {
     const saved = getSavedSchema(clientId);
     if (saved.length) return saved;
@@ -147,12 +144,10 @@ export default function ClientPage() {
       (items || []).flatMap((it) => Object.keys(it.attributes || {})),
     );
 
-    // if any qty-like keys exist, show the single "quantity" alias
     const hasQty = QTY_KEYS.some((k) => union.has(k));
     const withoutQty = [...union].filter((k) => !QTY_KEYS.includes(k));
     const base = hasQty ? ['quantity', ...withoutQty] : withoutQty;
 
-    // order: hint first, then alpha
     return base.sort((a, b) => {
       const ia = ORDER_HINT.indexOf(a);
       const ib = ORDER_HINT.indexOf(b);
@@ -181,6 +176,19 @@ export default function ClientPage() {
 
   const handleScanChoose = (item) => setEditItem(item);
 
+  // === NEW: Print All Labels via BarTender ===
+  const handlePrintAll = async () => {
+    try {
+      await axios.post('/api/labels/print/all', {
+        client_id: Number(clientId),
+      });
+      alert('✅ Sent all labels to BarTender.');
+    } catch (e) {
+      console.error(e);
+      alert('❌ Failed to send labels to BarTender.');
+    }
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col max-w-7xl mx-auto px-4 py-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-4">
@@ -200,6 +208,7 @@ export default function ClientPage() {
             <span>Search</span>
           </BarButton>
 
+          {/* Scan for all roles */}
           <ScanButton onClick={() => setScanOpen(true)} />
 
           {isAdmin && (
@@ -221,6 +230,15 @@ export default function ClientPage() {
                 <FiDownload className="text-lg" />
                 <span>Export</span>
               </a>
+
+              {/* NEW: Print All */}
+              <BarButton
+                onClick={handlePrintAll}
+                title="Print all labels for this client"
+              >
+                <FiPrinter className="text-lg" />
+                <span>Print</span>
+              </BarButton>
 
               <BarButton
                 onClick={() => setShowSchema(true)}
@@ -262,7 +280,7 @@ export default function ClientPage() {
           onClose={() => setShowSchema(false)}
           onSave={(cols) => {
             saveSchema(clientId, cols);
-            setSchemaRev((n) => n + 1); // <-- refresh columns
+            setSchemaRev((n) => n + 1);
             setShowSchema(false);
           }}
           initial={getSavedSchema(clientId)}
@@ -310,7 +328,7 @@ export default function ClientPage() {
         clientId={clientId}
         items={items}
         onClose={() => setScanOpen(false)}
-        onChooseItem={handleScanChoose}
+        onChooseItem={(it) => setEditItem(it)}
       />
     </div>
   );
