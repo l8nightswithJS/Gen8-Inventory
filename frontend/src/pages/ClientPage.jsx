@@ -252,6 +252,7 @@ export default function ClientPage() {
   // ---- saved schema (recompute when client or schemaRev changes)
   const savedSchema = useMemo(
     () => getSavedSchema(clientId),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [clientId, schemaRev],
   );
 
