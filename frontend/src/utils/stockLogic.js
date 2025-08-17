@@ -1,55 +1,21 @@
 // src/utils/stockLogic.js
-export const numOrNull = (v) => {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-};
-
-export const qtyFrom = (attrs = {}) =>
-  numOrNull(
-    attrs.quantity ?? attrs.on_hand ?? attrs.qty_in_stock ?? attrs.stock,
-  );
-
-export const thresholdsFrom = (attrs = {}) => {
-  const lowStock = numOrNull(attrs.low_stock_threshold);
-  const reorder = numOrNull(
-    attrs.reorder_level ?? attrs.reorder_point ?? attrs.safety_stock,
-  );
-  return { lowStock, reorder };
-};
-
-export const alertOn = (attrs = {}) =>
-  attrs.alert_enabled === false ? false : true;
-
 /**
- * Consistent low-stock decision for table, alerts page, exports, etc.
- * Returns { low, reason, threshold, qty }
- * - reason: "low_stock_threshold" | "reorder_level" | null
+ * Decide "low" / "out" from common inventory fields safely.
  */
-export const computeLowState = (attrs = {}) => {
-  const qty = qtyFrom(attrs);
-  const { lowStock, reorder } = thresholdsFrom(attrs);
-  const enabled = alertOn(attrs);
+export function computeLowState(attrs = {}) {
+  const num = (v) =>
+    v === '' || v == null || isNaN(Number(v)) ? null : Number(v);
+  const quantity =
+    num(attrs.quantity) ??
+    num(attrs.on_hand) ??
+    num(attrs.qty_in_stock) ??
+    num(attrs.stock);
+  const reorderLevel =
+    num(attrs.reorder_level) ?? num(attrs.min) ?? num(attrs.threshold);
 
-  if (!enabled || qty == null) {
-    return { low: false, reason: null, threshold: null, qty };
-  }
-
-  // pick the strictest available threshold
-  let reason = null;
-  let threshold = null;
-
-  if (lowStock != null && reorder != null) {
-    threshold = Math.min(lowStock, reorder);
-    reason = threshold === lowStock ? 'low_stock_threshold' : 'reorder_level';
-  } else if (lowStock != null) {
-    threshold = lowStock;
-    reason = 'low_stock_threshold';
-  } else if (reorder != null) {
-    threshold = reorder;
-    reason = 'reorder_level';
-  }
-
-  if (threshold == null)
-    return { low: false, reason: null, threshold: null, qty };
-  return { low: qty <= threshold, reason, threshold, qty };
-};
+  if (quantity == null) return { low: false, status: 'unknown' };
+  if (quantity <= 0) return { low: true, status: 'out' };
+  if (reorderLevel != null && quantity <= reorderLevel)
+    return { low: true, status: 'low' };
+  return { low: false, status: 'ok' };
+}

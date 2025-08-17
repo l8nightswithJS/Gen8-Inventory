@@ -1,35 +1,45 @@
-html, body, #root {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-}
+/* Tailwind layers first (unchanged) */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* Root document – allow normal page scroll (the previous overflow:hidden caused collapse) */
+html, body, #root {
+  height: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;   /* keep horizontal leaks in check */
+  overflow-y: auto;     /* allow vertical scroll everywhere */
+}
+
+/* Optional: hide scrollbars for horizontal chip rows */
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* If you use a vertical client carousel in portrait */
 @media (orientation: portrait) {
   .client-carousel {
+    display: flex;
     flex-direction: column;
     overflow-y: auto;
     overflow-x: hidden;
     max-height: 80vh;
   }
-  .client-carousel > * {
-    margin-bottom: 1rem;
-  }
 }
 
-/* Landscape: horizontal as before */
+/* Landscape: horizontal carousel */
 @media (orientation: landscape) {
   .client-carousel {
+    display: flex;
     flex-direction: row;
     overflow-x: auto;
     overflow-y: hidden;
   }
 }
 
-.shadow-t-sm {
-  box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.05);
-}
+/* Small shadow helper some parts of the UI use */
+.shadow-t-sm { box-shadow: 0 -1px 4px rgba(0,0,0,0.05); }
 
+/* Slightly tighter leading on phones for better density */
+@media (max-width: 767px) { body { line-height: 1.35; } }
