@@ -1,12 +1,12 @@
 // src/components/UserForm.jsx
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import axios from '../utils/axiosConfig';
 
 export default function UserForm({ onSuccess, userToEdit, onClose }) {
   const [username, setUsername] = useState('');
-  const [role, setRole]         = useState('staff');
+  const [role, setRole] = useState('staff');
   const [password, setPassword] = useState('');
-  const [error, setError]       = useState('');
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (userToEdit) {
@@ -49,9 +49,7 @@ export default function UserForm({ onSuccess, userToEdit, onClose }) {
       if (onClose) onClose();
     } catch (err) {
       setError(
-        err.response?.data?.message ||
-        err.message ||
-        'Failed to submit user.'
+        err.response?.data?.message || err.message || 'Failed to submit user.',
       );
     }
   };
@@ -67,7 +65,7 @@ export default function UserForm({ onSuccess, userToEdit, onClose }) {
         <input
           type="text"
           value={username}
-          onChange={e => setUsername(e.target.value)}
+          onChange={(e) => setUsername(e.target.value)}
           placeholder="Username"
           className="w-full border border-gray-300 px-3 py-2 rounded"
           required
@@ -76,7 +74,7 @@ export default function UserForm({ onSuccess, userToEdit, onClose }) {
         <input
           type="password"
           value={password}
-          onChange={e => setPassword(e.target.value)}
+          onChange={(e) => setPassword(e.target.value)}
           placeholder={userToEdit ? 'New Password (optional)' : 'Password'}
           className="w-full border border-gray-300 px-3 py-2 rounded"
           required={!userToEdit}
@@ -84,7 +82,7 @@ export default function UserForm({ onSuccess, userToEdit, onClose }) {
 
         <select
           value={role}
-          onChange={e => setRole(e.target.value)}
+          onChange={(e) => setRole(e.target.value)}
           className="w-full border border-gray-300 px-3 py-2 rounded"
         >
           <option value="admin">Admin</option>

@@ -1,5 +1,5 @@
 // src/components/SearchBar.jsx
-import React, { useState } from 'react';
+import { useState } from 'react';
 
 export default function SearchBar({ onSearch }) {
   const [q, setQ] = useState('');

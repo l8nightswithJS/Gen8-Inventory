@@ -1,5 +1,4 @@
 // src/components/ScanButton.jsx
-import React from 'react';
 
 export default function ScanButton({ onClick, className = '', children }) {
   return (

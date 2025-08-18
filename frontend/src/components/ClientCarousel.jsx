@@ -1,4 +1,5 @@
-import React, { useRef, useState, useEffect } from 'react';
+// src/components/ClientCarousel.jsx
+import { useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import EditClientModal from './EditClientModal';
 import ConfirmModal from './ConfirmModal';
@@ -10,7 +11,7 @@ export default function ClientCarousel({
   onAddClient,
 }) {
   const navigate = useNavigate();
-  const carouselRef = useRef();
+  const carouselRef = useRef(null);
 
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
@@ -18,6 +19,7 @@ export default function ClientCarousel({
   const [isPortrait, setIsPortrait] = useState(
     window.matchMedia('(orientation: portrait)').matches,
   );
+
   useEffect(() => {
     const mql = window.matchMedia('(orientation: portrait)');
     const handler = (e) => setIsPortrait(e.matches);
@@ -43,16 +45,18 @@ export default function ClientCarousel({
         className={containerClasses}
         aria-label="Client carousel"
       >
-        {/* Add Client tile */}
-        <div
+        {/* Add Client tile (button for proper a11y) */}
+        <button
+          type="button"
           onClick={onAddClient}
+          aria-label="Add client"
           className="snap-start flex-shrink-0 w-64 h-48 border-2 border-dashed
                      border-gray-400 rounded-lg flex flex-col items-center justify-center
-                     cursor-pointer hover:bg-gray-50 transition"
+                     hover:bg-gray-50 transition focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <div className="text-4xl text-gray-600">+</div>
           <div className="mt-1 text-sm text-gray-500">Add Client</div>
-        </div>
+        </button>
 
         {/* Client cards */}
         {clients.map((c) => (
@@ -79,22 +83,27 @@ export default function ClientCarousel({
 
             <div className="flex justify-around mt-auto pt-2">
               <button
+                type="button"
                 onClick={() => navigate(`/clients/${c.id}`)}
                 className="text-blue-600 hover:underline text-sm"
               >
                 Inventory
               </button>
               <button
+                type="button"
                 onClick={() => setEditing(c)}
                 className="text-gray-600 hover:text-gray-800 text-sm"
                 title="Edit"
+                aria-label={`Edit ${c.name}`}
               >
                 ✏️
               </button>
               <button
+                type="button"
                 onClick={() => setDeleting(c)}
                 className="text-gray-600 hover:text-gray-800 text-sm"
                 title="Delete"
+                aria-label={`Delete ${c.name}`}
               >
                 🗑️
               </button>
@@ -107,9 +116,9 @@ export default function ClientCarousel({
         <EditClientModal
           client={editing}
           onClose={() => setEditing(null)}
-          onUpdated={(c) => {
+          onUpdated={(updated) => {
             setEditing(null);
-            onClientUpdated(c);
+            onClientUpdated(updated);
           }}
         />
       )}

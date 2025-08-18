@@ -1,16 +1,8 @@
-import React, { useState, useEffect } from 'react';
+// src/components/AddItemModal.jsx
+import { useState, useEffect } from 'react';
 import axios from '../utils/axiosConfig';
 import ColumnSetupModal from './ColumnSetupModal';
 import { getSavedSchema, saveSchema } from '../context/SchemaContext';
-
-const normalizeKey = (str) =>
-  (str || '')
-    .toString()
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '_')
-    .replace(/[^\w]/g, '')
-    .replace(/_+/g, '_');
 
 const NUMERIC_KEYS = new Set([
   'qty_in_stock',
@@ -32,9 +24,7 @@ export default function AddItemModal({ clientId, onClose, onCreated }) {
   // Seed schema from localStorage on mount
   useEffect(() => {
     const s = getSavedSchema(clientId);
-    if (!s.length) {
-      setShowSchema(true);
-    }
+    if (!s.length) setShowSchema(true);
     setSchema(s);
   }, [clientId]);
 
@@ -139,6 +129,7 @@ export default function AddItemModal({ clientId, onClose, onCreated }) {
               onClick={onClose}
               className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 text-2xl"
               disabled={submitting}
+              aria-label="Close add item modal"
             >
               &times;
             </button>
@@ -152,78 +143,108 @@ export default function AddItemModal({ clientId, onClose, onCreated }) {
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Dynamic fields */}
               {schema.map((key) => (
-                <input
-                  key={key}
-                  name={key}
-                  type={NUMERIC_KEYS.has(key) ? 'number' : 'text'}
-                  min={NUMERIC_KEYS.has(key) ? '0' : undefined}
-                  value={form[key] ?? ''}
-                  onChange={handleChange}
-                  placeholder={key
-                    .replace(/_/g, ' ')
-                    .replace(/\b\w/g, (c) => c.toUpperCase())}
-                  className="w-full border px-3 py-2 rounded"
-                  disabled={submitting}
-                />
+                <div key={key} className="space-y-1">
+                  <label htmlFor={`fld-${key}`} className="sr-only">
+                    {key
+                      .replace(/_/g, ' ')
+                      .replace(/\b\w/g, (c) => c.toUpperCase())}
+                  </label>
+                  <input
+                    id={`fld-${key}`}
+                    name={key}
+                    type={NUMERIC_KEYS.has(key) ? 'number' : 'text'}
+                    min={NUMERIC_KEYS.has(key) ? '0' : undefined}
+                    value={form[key] ?? ''}
+                    onChange={handleChange}
+                    placeholder={key
+                      .replace(/_/g, ' ')
+                      .replace(/\b\w/g, (c) => c.toUpperCase())}
+                    className="w-full border px-3 py-2 rounded"
+                    disabled={submitting}
+                  />
+                </div>
               ))}
 
               {/* Barcode (only if user didn't already include it in schema) */}
               {!schema.includes('barcode') && (
-                <input
-                  name="barcode"
-                  value={form.barcode ?? ''}
-                  onChange={handleChange}
-                  placeholder="Barcode"
-                  className="w-full border px-3 py-2 rounded"
-                  disabled={submitting}
-                />
+                <div className="space-y-1">
+                  <label htmlFor="fld-barcode" className="sr-only">
+                    Barcode
+                  </label>
+                  <input
+                    id="fld-barcode"
+                    name="barcode"
+                    value={form.barcode ?? ''}
+                    onChange={handleChange}
+                    placeholder="Barcode"
+                    className="w-full border px-3 py-2 rounded"
+                    disabled={submitting}
+                  />
+                </div>
               )}
 
               {/* Always-present controls */}
               <div className="flex items-center space-x-2">
                 <input
+                  id="fld-has_lot"
                   type="checkbox"
                   name="has_lot"
                   checked={!!form.has_lot}
                   onChange={handleChange}
                   disabled={submitting}
                 />
-                <label className="text-sm text-gray-700">
+                <label htmlFor="fld-has_lot" className="text-sm text-gray-700">
                   Track Lot Number
                 </label>
               </div>
 
               {form.has_lot && (
+                <div className="space-y-1">
+                  <label htmlFor="fld-lot_number" className="sr-only">
+                    Lot Number
+                  </label>
+                  <input
+                    id="fld-lot_number"
+                    name="lot_number"
+                    value={form.lot_number ?? ''}
+                    onChange={handleChange}
+                    placeholder="Lot Number"
+                    className="w-full border px-3 py-2 rounded"
+                    disabled={submitting}
+                  />
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <label htmlFor="fld-low_stock_threshold" className="sr-only">
+                  Low Stock Threshold
+                </label>
                 <input
-                  name="lot_number"
-                  value={form.lot_number ?? ''}
+                  id="fld-low_stock_threshold"
+                  name="low_stock_threshold"
+                  type="number"
+                  min="0"
+                  value={form.low_stock_threshold ?? ''}
                   onChange={handleChange}
-                  placeholder="Lot Number"
+                  placeholder="Low Stock Threshold"
                   className="w-full border px-3 py-2 rounded"
                   disabled={submitting}
                 />
-              )}
-
-              <input
-                name="low_stock_threshold"
-                type="number"
-                min="0"
-                value={form.low_stock_threshold ?? ''}
-                onChange={handleChange}
-                placeholder="Low Stock Threshold"
-                className="w-full border px-3 py-2 rounded"
-                disabled={submitting}
-              />
+              </div>
 
               <div className="flex items-center space-x-2">
                 <input
+                  id="fld-alert_enabled"
                   type="checkbox"
                   name="alert_enabled"
                   checked={!!form.alert_enabled}
                   onChange={handleChange}
                   disabled={submitting}
                 />
-                <label className="text-sm text-gray-700">
+                <label
+                  htmlFor="fld-alert_enabled"
+                  className="text-sm text-gray-700"
+                >
                   Enable Low-Stock Alert
                 </label>
               </div>
@@ -231,7 +252,7 @@ export default function AddItemModal({ clientId, onClose, onCreated }) {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+                className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-60"
               >
                 {submitting ? 'Saving...' : 'Add Item'}
               </button>

@@ -1,28 +1,32 @@
 // src/components/SignupModal.jsx
-import React, { useState } from 'react'
-import axios from '../utils/axiosConfig'
+import { useState } from 'react';
+import axios from '../utils/axiosConfig';
 
 export default function SignupModal({ onClose }) {
-  const [form, setForm] = useState({ username: '', password: '', role: 'staff' })
-  const [msg, setMsg]   = useState('')
+  const [form, setForm] = useState({
+    username: '',
+    password: '',
+    role: 'staff',
+  });
+  const [msg, setMsg] = useState('');
 
-  const handleChange = e => {
-    const { name, value } = e.target
-    setForm(f => ({ ...f, [name]: value }))
-  }
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm((f) => ({ ...f, [name]: value }));
+  };
 
-  const submit = async e => {
-    e.preventDefault()
-    setMsg('')
+  const submit = async (e) => {
+    e.preventDefault();
+    setMsg('');
     try {
-      const { data } = await axios.post('/api/auth/register', form)
-      setMsg(data.message)
+      const { data } = await axios.post('/api/auth/register', form);
+      setMsg(data.message);
       // Automatically close after a successful request:
-      setTimeout(onClose, 1500)
+      setTimeout(onClose, 1500);
     } catch (err) {
-      setMsg(err.response?.data?.message || 'Signup failed')
+      setMsg(err.response?.data?.message || 'Signup failed');
     }
-  }
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -31,11 +35,7 @@ export default function SignupModal({ onClose }) {
         className="w-full max-w-md bg-white p-6 sm:p-8 rounded-lg shadow-lg space-y-4"
       >
         <h2 className="text-xl font-semibold text-center">Request Access</h2>
-        {msg && (
-          <div className="text-center text-green-700 text-sm">
-            {msg}
-          </div>
-        )}
+        {msg && <div className="text-center text-green-700 text-sm">{msg}</div>}
 
         <input
           name="username"
@@ -83,5 +83,5 @@ export default function SignupModal({ onClose }) {
         </div>
       </form>
     </div>
-  )
+  );
 }

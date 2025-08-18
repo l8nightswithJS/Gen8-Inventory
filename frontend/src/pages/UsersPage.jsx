@@ -1,5 +1,5 @@
 // src/pages/UsersPage.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import axios from '../utils/axiosConfig';
 import ConfirmModal from '../components/ConfirmModal';
 import UserForm from '../components/UserForm';

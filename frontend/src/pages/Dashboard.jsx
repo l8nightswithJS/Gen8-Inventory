@@ -1,36 +1,36 @@
-import React, { useState, useEffect, useCallback } from 'react'
-import axios from '../utils/axiosConfig'
-import ClientCarousel from '../components/ClientCarousel'
-import AddClientModal from '../components/AddClientModal'
+import { useState, useEffect, useCallback } from 'react';
+import axios from '../utils/axiosConfig';
+import ClientCarousel from '../components/ClientCarousel';
+import AddClientModal from '../components/AddClientModal';
 
 export default function Dashboard() {
-  const [clients, setClients] = useState([])
-  const [error, setError] = useState('')
-  const [showAddModal, setShowAddModal] = useState(false)
+  const [clients, setClients] = useState([]);
+  const [error, setError] = useState('');
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const fetchClients = useCallback(async () => {
     try {
-      const res = await axios.get('/api/clients')
-      setClients(res.data)
-      setError('')
+      const res = await axios.get('/api/clients');
+      setClients(res.data);
+      setError('');
     } catch {
-      setError('Could not load clients.')
+      setError('Could not load clients.');
     }
-  }, [])
+  }, []);
 
   useEffect(() => {
-    fetchClients()
-  }, [fetchClients])
+    fetchClients();
+  }, [fetchClients]);
 
-  const handleDelete = async id => {
-    if (!window.confirm('Delete this client?')) return
+  const handleDelete = async (id) => {
+    if (!window.confirm('Delete this client?')) return;
     try {
-      await axios.delete(`/api/clients/${id}`)
-      fetchClients()
+      await axios.delete(`/api/clients/${id}`);
+      fetchClients();
     } catch {
-      setError('Failed to delete client.')
+      setError('Failed to delete client.');
     }
-  }
+  };
 
   return (
     <div className="px-4 py-8 max-w-screen-xl mx-auto">
@@ -48,10 +48,10 @@ export default function Dashboard() {
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
         onClientAdded={() => {
-          fetchClients()
-          setShowAddModal(false)
+          fetchClients();
+          setShowAddModal(false);
         }}
       />
     </div>
-  )
+  );
 }

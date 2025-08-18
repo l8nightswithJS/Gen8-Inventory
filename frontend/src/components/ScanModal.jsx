@@ -1,11 +1,10 @@
 // src/components/ScanModal.jsx
-import React, { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { Scanner } from '@yudiel/react-qr-scanner';
 
 function findItemByCode(items, code) {
   if (!code) return null;
   const q = String(code).trim().toLowerCase();
-  // Try common keys; extend freely
   const keys = [
     'barcode',
     'qr_code',
@@ -18,9 +17,7 @@ function findItemByCode(items, code) {
     const a = item?.attributes || {};
     for (const k of keys) {
       const val = k === 'id' ? item.id : a[k];
-      if (val != null && String(val).trim().toLowerCase() === q) {
-        return item;
-      }
+      if (val != null && String(val).trim().toLowerCase() === q) return item;
     }
   }
   return null;
@@ -28,7 +25,7 @@ function findItemByCode(items, code) {
 
 export default function ScanModal({
   open,
-  clientId,
+  // clientId,  // removed: unused
   items = [],
   onClose,
   onChooseItem,
@@ -36,10 +33,12 @@ export default function ScanModal({
   const [manual, setManual] = useState('');
   const [error, setError] = useState('');
 
+  // accessible id for Manual entry
+  const manualId = useId();
+
   const constraints = useMemo(
     () => ({
       facingMode: 'environment',
-      // You can tweak resolution if devices underperform
       // width: { ideal: 1280 }, height: { ideal: 720 },
     }),
     [],
@@ -48,12 +47,14 @@ export default function ScanModal({
   if (!open) return null;
 
   const handleDetected = (results) => {
-    // results may be array; normalize
-    const text = Array.isArray(results)
-      ? results[0]?.rawValue
-      : results?.[0]?.rawValue;
-    const code = text ?? results?.[0] ?? results; // lib returns various shapes
-    const str = code ? String(code) : '';
+    // normalize library return shapes
+    const raw =
+      (Array.isArray(results) && results[0]?.rawValue) ??
+      results?.[0]?.rawValue ??
+      results?.rawValue ??
+      (Array.isArray(results) ? results[0] : results);
+
+    const str = raw ? String(raw) : '';
     if (!str) return;
 
     const match = findItemByCode(items, str);
@@ -99,10 +100,7 @@ export default function ScanModal({
           <div className="rounded-lg overflow-hidden border">
             {/* Camera preview + scanning */}
             <Scanner
-              components={{
-                audio: false,
-                finder: true,
-              }}
+              components={{ audio: false, finder: true }}
               onScan={handleDetected}
               onError={(e) => setError(e?.message || 'Camera error')}
               constraints={constraints}
@@ -118,9 +116,12 @@ export default function ScanModal({
               <code>lot_number</code>, <code>name</code>, or <code>id</code>).
             </p>
 
-            <label className="text-sm font-medium">Manual entry</label>
+            <label htmlFor={manualId} className="text-sm font-medium">
+              Manual entry
+            </label>
             <div className="flex gap-2">
               <input
+                id={manualId}
                 type="text"
                 value={manual}
                 onChange={(e) => setManual(e.target.value)}
@@ -128,6 +129,7 @@ export default function ScanModal({
                 placeholder="Type or paste a code…"
               />
               <button
+                type="button"
                 onClick={doManual}
                 className="rounded bg-blue-600 text-white px-3 py-2 hover:bg-blue-700"
               >
@@ -135,7 +137,11 @@ export default function ScanModal({
               </button>
             </div>
 
-            {error && <p className="text-sm text-red-600">{error}</p>}
+            {error && (
+              <p className="text-sm text-red-600" aria-live="polite">
+                {error}
+              </p>
+            )}
 
             <div className="mt-auto">
               <p className="text-xs text-gray-500">

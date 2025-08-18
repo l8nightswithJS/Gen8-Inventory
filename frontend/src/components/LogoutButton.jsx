@@ -1,4 +1,3 @@
-import React from 'react';
 import { useNavigate } from 'react-router-dom';
 
 export default function LogoutButton() {
@@ -11,7 +10,17 @@ export default function LogoutButton() {
   };
 
   return (
-    <button onClick={handleLogout} style={{ padding: '0.5rem 1rem', background: '#e63946', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
+    <button
+      onClick={handleLogout}
+      style={{
+        padding: '0.5rem 1rem',
+        background: '#e63946',
+        color: '#fff',
+        border: 'none',
+        borderRadius: '5px',
+        cursor: 'pointer',
+      }}
+    >
       Logout
     </button>
   );

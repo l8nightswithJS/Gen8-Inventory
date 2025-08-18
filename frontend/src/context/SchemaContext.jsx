@@ -1,5 +1,5 @@
 // src/context/SchemaContext.jsx
-import React, { createContext, useContext, useMemo, useCallback } from "react";
+import { createContext, useContext, useMemo, useCallback } from 'react';
 
 const SchemaCtx = createContext(null);
 
@@ -15,7 +15,7 @@ function storageKey(clientId) {
 export function getSavedSchema(clientId) {
   try {
     const raw = localStorage.getItem(storageKey(clientId));
-    const arr = JSON.parse(raw || "[]");
+    const arr = JSON.parse(raw || '[]');
     return Array.isArray(arr) ? arr : [];
   } catch {
     return [];
@@ -33,7 +33,7 @@ export function SchemaProvider({ clientId, children }) {
 
   const setSchema = useCallback(
     (cols) => saveSchema(clientId, cols),
-    [clientId]
+    [clientId],
   );
 
   const value = useMemo(() => ({ schema, setSchema }), [schema, setSchema]);
@@ -44,7 +44,7 @@ export function SchemaProvider({ clientId, children }) {
 export function useSchema() {
   const ctx = useContext(SchemaCtx);
   if (!ctx) {
-    throw new Error("useSchema must be used inside <SchemaProvider/>");
+    throw new Error('useSchema must be used inside <SchemaProvider/>');
   }
   return ctx;
 }

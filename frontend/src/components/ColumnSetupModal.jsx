@@ -1,28 +1,31 @@
 // src/components/ColumnSetupModal.jsx
-import React, { useState } from "react";
+import { useState } from 'react';
 
 const normalizeKey = (str) =>
-  (str || "")
+  (str || '')
     .toString()
     .trim()
     .toLowerCase()
-    .replace(/\s+/g, "_")
-    .replace(/[^\w]/g, "")
-    .replace(/_+/g, "_");
+    .replace(/\s+/g, '_')
+    .replace(/[^\w]/g, '')
+    .replace(/_+/g, '_');
 
 /**
  * A tiny modal to define the attribute columns for a client's table
  * when they don't have any items yet.
  */
-export default function ColumnSetupModal({ isOpen, onClose, onSave, initial = [] }) {
-  const [cols, setCols] = useState(initial.length ? initial : [
-    "name",
-    "part_number",
-    "description",
-    "quantity",
-    "location"
-  ]);
-  const [input, setInput] = useState("");
+export default function ColumnSetupModal({
+  isOpen,
+  onClose,
+  onSave,
+  initial = [],
+}) {
+  const [cols, setCols] = useState(
+    initial.length
+      ? initial
+      : ['name', 'part_number', 'description', 'quantity', 'location'],
+  );
+  const [input, setInput] = useState('');
 
   if (!isOpen) return null;
 
@@ -30,7 +33,7 @@ export default function ColumnSetupModal({ isOpen, onClose, onSave, initial = []
     const k = normalizeKey(input);
     if (!k) return;
     if (!cols.includes(k)) setCols([...cols, k]);
-    setInput("");
+    setInput('');
   };
 
   const remove = (key) => {
@@ -90,9 +93,9 @@ export default function ColumnSetupModal({ isOpen, onClose, onSave, initial = []
 
         <div className="border-t pt-4 space-y-2 text-sm">
           <p className="text-gray-600">
-            We’ll always include <code>has_lot</code>, <code>lot_number</code>,{" "}
-            <code>low_stock_threshold</code>, and <code>alert_enabled</code> controls on every item,
-            even if they are not in your list.
+            We’ll always include <code>has_lot</code>, <code>lot_number</code>,{' '}
+            <code>low_stock_threshold</code>, and <code>alert_enabled</code>{' '}
+            controls on every item, even if they are not in your list.
           </p>
         </div>
 
@@ -100,7 +103,10 @@ export default function ColumnSetupModal({ isOpen, onClose, onSave, initial = []
           <button onClick={onClose} className="px-4 py-2 bg-gray-200 rounded">
             Cancel
           </button>
-          <button onClick={save} className="px-4 py-2 bg-green-600 text-white rounded">
+          <button
+            onClick={save}
+            className="px-4 py-2 bg-green-600 text-white rounded"
+          >
             Save Columns
           </button>
         </div>

@@ -1,5 +1,5 @@
 // src/components/EditItemModal.jsx
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import axios from '../utils/axiosConfig';
 
 const LABELS = {

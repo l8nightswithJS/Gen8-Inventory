@@ -1,5 +1,5 @@
 // src/components/EditClientModal.jsx
-import React, { useState } from 'react';
+import { useId, useState } from 'react';
 import axios from '../utils/axiosConfig';
 
 export default function EditClientModal({ client, onClose, onUpdated }) {
@@ -12,6 +12,11 @@ export default function EditClientModal({ client, onClose, onUpdated }) {
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // stable ids for label ↔ input
+  const nameId = useId();
+  const barcodeId = useId();
+  const logoId = useId();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -56,30 +61,43 @@ export default function EditClientModal({ client, onClose, onUpdated }) {
         </button>
 
         <h2 className="text-xl font-semibold mb-4">Edit Client</h2>
-        {error && <p className="text-red-600 mb-3 text-sm">{error}</p>}
+        {error && (
+          <p className="text-red-600 mb-3 text-sm" aria-live="polite">
+            {error}
+          </p>
+        )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           {/* Client name */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor={nameId}
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Client Name
             </label>
             <input
+              id={nameId}
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full border px-3 py-2 rounded"
               placeholder="Acme Bio"
               disabled={loading}
+              required
             />
           </div>
 
           {/* Client barcode */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor={barcodeId}
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Barcode (Client)
             </label>
             <input
+              id={barcodeId}
               type="text"
               value={barcode}
               onChange={(e) => setBarcode(e.target.value)}
@@ -94,10 +112,14 @@ export default function EditClientModal({ client, onClose, onUpdated }) {
 
           {/* Logo upload */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor={logoId}
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Logo (optional)
             </label>
             <input
+              id={logoId}
               type="file"
               accept="image/*"
               onChange={(e) => setLogoFile(e.target.files?.[0] || null)}

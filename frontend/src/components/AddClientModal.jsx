@@ -1,4 +1,3 @@
-import React from 'react';
 import AddClientForm from './AddClientForm';
 
 export default function AddClientModal({ isOpen, onClose, onClientAdded }) {

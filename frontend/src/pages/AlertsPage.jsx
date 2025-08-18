@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+// src/pages/AlertsPage.jsx
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from '../utils/axiosConfig';
 import { computeLowState } from '../utils/stockLogic';
@@ -13,16 +14,19 @@ const ROWS_PER_PAGE = 12;
 export default function AlertsPage() {
   const { clientId } = useParams();
   const navigate = useNavigate();
+
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
 
+  // Map backend rows/items → alert rows we render
   const toRow = (row) => {
     const itemObj = row?.item ?? row ?? {};
     const attrs = itemObj.attributes ?? itemObj ?? {};
     const { low, reason, threshold, qty } = computeLowState(attrs);
     if (!low) return null;
+
     return {
       id: itemObj.id,
       name: attrs.name ?? attrs.part_number ?? `Item ${itemObj.id}`,
@@ -33,51 +37,70 @@ export default function AlertsPage() {
     };
   };
 
-  useEffect(() => {
-    async function loadAlerts() {
-      if (!clientId) {
-        setError('No client specified.');
-        setLoading(false);
-        return;
-      }
+  // Centralized loader, reused by useEffect and on-error resyncs
+  const loadAlerts = useCallback(async () => {
+    if (!clientId) {
+      setError('No client specified.');
+      setAlerts([]);
+      setLoading(false);
+      return;
+    }
+    try {
+      const { data } = await axios.get('/api/items/alerts', {
+        params: { client_id: Number(clientId) },
+        meta: { silent: true },
+      });
+      setAlerts((Array.isArray(data) ? data : []).map(toRow).filter(Boolean));
+      setError('');
+    } catch (err1) {
+      // Fallback: derive alerts from /api/items if the alerts endpoint isn’t available
       try {
-        const { data } = await axios.get('/api/items/alerts', {
+        const { data: items } = await axios.get('/api/items', {
           params: { client_id: Number(clientId) },
           meta: { silent: true },
         });
-        setAlerts((Array.isArray(data) ? data : []).map(toRow).filter(Boolean));
+        setAlerts(
+          (Array.isArray(items) ? items : []).map(toRow).filter(Boolean),
+        );
         setError('');
-      } catch {
-        try {
-          const { data: items } = await axios.get('/api/items', {
-            params: { client_id: Number(clientId) },
-            meta: { silent: true },
-          });
-          setAlerts(
-            (Array.isArray(items) ? items : []).map(toRow).filter(Boolean),
-          );
-          setError('');
-        } catch {
-          setAlerts([]);
-          setError('Failed to load alerts.');
-        }
-      } finally {
-        setLoading(false);
-        setPage(1);
+      } catch (err2) {
+        console.error('Failed to load alerts', err1, err2);
+        setAlerts([]);
+        setError('Failed to load alerts.');
       }
+    } finally {
+      setLoading(false);
+      setPage(1);
     }
-    loadAlerts();
   }, [clientId]);
 
+  // Initial + client change
+  useEffect(() => {
+    setLoading(true);
+    loadAlerts();
+  }, [loadAlerts]);
+
+  // Acknowledge one alert (optimistic), resync if it fails
   const acknowledge = async (itemId) => {
-    setAlerts((prev) => prev.filter((a) => a.id !== itemId));
+    setAlerts((prev) => prev.filter((a) => a.id !== itemId)); // optimistic UI
     try {
       await axios.post(`/api/items/alerts/${itemId}/acknowledge`, null, {
         meta: { silent: true },
       });
-    } catch {}
+    } catch (err) {
+      console.error('Failed to acknowledge alert', err);
+      setError(
+        `Failed to acknowledge alert for item ${itemId}: ${
+          err?.message || 'Unknown error'
+        }`,
+      );
+      // Re-sync from backend in case optimistic update was wrong
+      setLoading(true);
+      await loadAlerts();
+    }
   };
 
+  // Pagination bookkeeping
   const totalPages = Math.max(1, Math.ceil(alerts.length / ROWS_PER_PAGE));
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);

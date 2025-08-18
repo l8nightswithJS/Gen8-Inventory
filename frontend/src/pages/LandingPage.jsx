@@ -1,12 +1,12 @@
 // src/pages/LandingPage.jsx
-import React, { useState } from 'react'
-import { Link }            from 'react-router-dom'
-import SignupModal         from '../components/SignupModal'
-import illustration        from '../assets/landing.png'
-import logoImg             from '../assets/logo.svg'
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import SignupModal from '../components/SignupModal';
+import illustration from '../assets/landing.png';
+import logoImg from '../assets/logo.svg';
 
 export default function LandingPage() {
-  const [showSignup, setShowSignup] = useState(false)
+  const [showSignup, setShowSignup] = useState(false);
 
   return (
     <div className="bg-white flex flex-col">
@@ -18,7 +18,10 @@ export default function LandingPage() {
           <span className="text-green-500">Inventory</span>
         </h1>
 
-        <Link to="/login" className="text-base font-medium text-gray-800 hover:underline">
+        <Link
+          to="/login"
+          className="text-base font-medium text-gray-800 hover:underline"
+        >
           Login
         </Link>
       </header>
@@ -26,13 +29,16 @@ export default function LandingPage() {
       {/* Hero */}
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center py-12 sm:py-16 lg:py-20">
-          
           {/* Left Column */}
           <div className="space-y-4 max-w-2xl mx-auto lg:mx-0 text-left">
             {/* Overline with inline logo */}
             <h3 className="flex items-center gap-2 text-indigo-600 uppercase tracking-wide font-semibold text-sm sm:text-base">
               The
-              <img src={logoImg} alt="Gener8" className="h-5 sm:h-6 inline-block"/>
+              <img
+                src={logoImg}
+                alt="Gener8"
+                className="h-5 sm:h-6 inline-block"
+              />
               Approach
             </h3>
 
@@ -43,7 +49,8 @@ export default function LandingPage() {
 
             {/* Sub‑text */}
             <p className="text-base sm:text-lg text-gray-600">
-              Streamline tracking of parts, clients, and users under one unified dashboard.
+              Streamline tracking of parts, clients, and users under one unified
+              dashboard.
             </p>
 
             {/* CTAs */}
@@ -79,5 +86,5 @@ export default function LandingPage() {
       {/* Signup Modal */}
       {showSignup && <SignupModal onClose={() => setShowSignup(false)} />}
     </div>
-  )
+  );
 }

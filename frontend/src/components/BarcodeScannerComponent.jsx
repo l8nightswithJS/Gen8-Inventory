@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Scanner } from '@yudiel/react-qr-scanner';
 
 export default function BarcodeScannerComponent({

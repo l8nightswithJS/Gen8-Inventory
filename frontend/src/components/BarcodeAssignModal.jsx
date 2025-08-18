@@ -1,5 +1,5 @@
 // src/components/BarcodeAssignModal.jsx
-import React, { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import {
   assignBarcode,
   listItemBarcodes,
@@ -25,6 +25,10 @@ export default function BarcodeAssignModal({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
 
+  // stable, unique ids for inputs
+  const codeId = useId();
+  const symId = useId();
+
   useEffect(() => {
     if (!isOpen || !item?.id) return;
     (async () => {
@@ -32,7 +36,9 @@ export default function BarcodeAssignModal({
         const rows = await listItemBarcodes(item.id);
         setList(rows || []);
       } catch (e) {
-        // ignore
+        // surface a soft message, but don't block modal
+        console.error('Failed to load item barcodes', e);
+        setMsg('Failed to load existing barcodes.');
       }
     })();
   }, [isOpen, item?.id]);
@@ -57,6 +63,7 @@ export default function BarcodeAssignModal({
       onAssigned?.();
     } catch (e) {
       const m = e?.response?.data?.message || e.message || 'Failed to assign';
+      console.error('Assign barcode failed', e);
       setMsg(m);
     } finally {
       setBusy(false);
@@ -69,7 +76,11 @@ export default function BarcodeAssignModal({
       await deleteBarcode(id);
       const rows = await listItemBarcodes(item.id);
       setList(rows || []);
-    } catch {}
+      setMsg('Barcode removed ✓');
+    } catch (e) {
+      console.error('Delete barcode failed', e);
+      setMsg('Failed to remove barcode.');
+    }
   };
 
   return (
@@ -85,6 +96,7 @@ export default function BarcodeAssignModal({
           <button
             onClick={onClose}
             className="text-sm text-blue-600 hover:underline"
+            aria-label="Close barcode assignment modal"
           >
             Close
           </button>
@@ -99,10 +111,14 @@ export default function BarcodeAssignModal({
               onClose={onClose}
             />
             <div className="p-3 border-t bg-gray-50">
-              <label className="block text-xs text-gray-600 mb-1">
+              <label
+                htmlFor={codeId}
+                className="block text-xs text-gray-600 mb-1"
+              >
                 Detected code
               </label>
               <input
+                id={codeId}
                 className="w-full border rounded px-2 py-1"
                 placeholder="Scan or paste code…"
                 value={scanned.code}
@@ -111,23 +127,37 @@ export default function BarcodeAssignModal({
                 }
               />
               <div className="flex items-center gap-2 mt-2">
-                <input
-                  className="w-full border rounded px-2 py-1"
-                  placeholder="Symbology (optional)"
-                  value={scanned.symbology}
-                  onChange={(e) =>
-                    setScanned((s) => ({ ...s, symbology: e.target.value }))
-                  }
-                />
+                <div className="flex-1">
+                  <label
+                    htmlFor={symId}
+                    className="block text-xs text-gray-600 mb-1"
+                  >
+                    Symbology (optional)
+                  </label>
+                  <input
+                    id={symId}
+                    className="w-full border rounded px-2 py-1"
+                    placeholder="Symbology (optional)"
+                    value={scanned.symbology}
+                    onChange={(e) =>
+                      setScanned((s) => ({ ...s, symbology: e.target.value }))
+                    }
+                  />
+                </div>
                 <button
                   disabled={!scanned.code || busy}
                   onClick={doAssign}
-                  className="px-3 py-1 rounded bg-blue-600 text-white disabled:opacity-50"
+                  className="px-3 py-2 rounded bg-blue-600 text-white disabled:opacity-50 self-end"
                 >
                   {busy ? 'Saving…' : 'Assign'}
                 </button>
               </div>
-              {msg && <p className="text-sm mt-2">{msg}</p>}
+
+              {msg && (
+                <p className="text-sm mt-2" aria-live="polite">
+                  {msg}
+                </p>
+              )}
             </div>
           </div>
 

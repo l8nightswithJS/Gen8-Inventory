@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+// src/components/InventoryTable.jsx
+import { useEffect, useMemo, useState } from 'react';
 import { FiEdit2, FiTrash2, FiMoreVertical } from 'react-icons/fi';
 import Button from './ui/Button';
 import { computeLowState } from '../utils/stockLogic';
@@ -67,7 +68,7 @@ function formatShortDate(value) {
 // ---------- Mobile Card ----------
 function MobileCard({ item, onEdit, onDelete }) {
   const a = item.attributes || {};
-  const { low, status } = computeLowState(a);
+  const { low } = computeLowState(a); // removed unused `status`
   const part = a.part_number || a.name || '—';
   const onHand = a.quantity ?? a.on_hand ?? a.qty_in_stock ?? a.stock ?? '—';
 

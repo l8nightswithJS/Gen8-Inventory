@@ -1,47 +1,50 @@
 // src/pages/Login.jsx
-import React, { useState, useEffect } from 'react'
-import { useNavigate }                from 'react-router-dom'
-import axios                          from '../utils/axiosConfig'
-import logoSvg                        from '../assets/logo.svg'
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axios from '../utils/axiosConfig';
+import logoSvg from '../assets/logo.svg';
 
 function isTokenValid(token) {
-  if (!token) return false
+  if (!token) return false;
   try {
-    const { exp } = JSON.parse(atob(token.split('.')[1]))
-    return typeof exp === 'number' && Date.now() < exp * 1000
+    const { exp } = JSON.parse(atob(token.split('.')[1]));
+    return typeof exp === 'number' && Date.now() < exp * 1000;
   } catch {
-    return false
+    return false;
   }
 }
 
 export default function Login() {
-  const navigate = useNavigate()
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError]       = useState('')
+  const navigate = useNavigate();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    const token = localStorage.getItem('token')
+    const token = localStorage.getItem('token');
     if (isTokenValid(token)) {
-      navigate('/dashboard', { replace: true })
+      navigate('/dashboard', { replace: true });
     } else {
-      localStorage.removeItem('token')
-      localStorage.removeItem('role')
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
     }
-  }, [navigate])
+  }, [navigate]);
 
-  const handleSubmit = async e => {
-    e.preventDefault()
-    setError('')
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
     try {
-      const { data } = await axios.post('/api/auth/login', { username, password })
-      localStorage.setItem('token', data.token)
-      localStorage.setItem('role', data.role)
-      navigate('/dashboard')
+      const { data } = await axios.post('/api/auth/login', {
+        username,
+        password,
+      });
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('role', data.role);
+      navigate('/dashboard');
     } catch {
-      setError('Login failed')
+      setError('Login failed');
     }
-  }
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-white to-gray-50">
@@ -78,7 +81,7 @@ export default function Login() {
                 autoComplete="username"
                 required
                 value={username}
-                onChange={e => setUsername(e.target.value)}
+                onChange={(e) => setUsername(e.target.value)}
                 className="w-full border border-gray-300 px-4 py-2 rounded
                            focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
@@ -95,7 +98,7 @@ export default function Login() {
                 autoComplete="current-password"
                 required
                 value={password}
-                onChange={e => setPassword(e.target.value)}
+                onChange={(e) => setPassword(e.target.value)}
                 className="w-full border border-gray-300 px-4 py-2 rounded
                            focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
@@ -113,5 +116,5 @@ export default function Login() {
         </div>
       </main>
     </div>
-  )
+  );
 }
