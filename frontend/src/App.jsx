@@ -1,10 +1,10 @@
+// src/App.jsx
 import {
   BrowserRouter as Router,
   Routes,
   Route,
   Navigate,
 } from 'react-router-dom';
-
 import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -37,21 +37,18 @@ export default function App() {
 
 function PrivateLayout() {
   return (
-    <div className="flex h-screen flex-col bg-white">
+    <div className="flex flex-col min-h-screen bg-gray-50">
       <Navbar />
-      <main className="flex-1 min-h-0 overflow-hidden px-4 py-4 sm:px-6 lg:px-8">
+      <main className="flex-1 w-full max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
         <Routes>
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="clients/:clientId" element={<ClientPage />} />
           <Route path="clients/:clientId/alerts" element={<AlertsPage />} />
-
-          {/* Scan pages */}
           <Route path="scan" element={<StandaloneScanPage />} />
           <Route
             path="clients/:clientId/scan"
             element={<StandaloneScanPage />}
           />
-
           <Route path="users" element={<UsersPage />} />
           <Route path="*" element={<Navigate to="dashboard" replace />} />
         </Routes>

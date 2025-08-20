@@ -9,8 +9,7 @@ html, body, #root {
   min-height: 100%;
   margin: 0;
   padding: 0;
-  overflow-x: hidden;   /* keep horizontal leaks in check */
-  overflow-y: auto;     /* allow vertical scroll everywhere */
+  overflow-y: auto;
 }
 
 /* Optional: hide scrollbars for horizontal chip rows */

@@ -1,39 +1,45 @@
+// src/components/Footer.jsx
+import { Link } from 'react-router-dom';
+
 export default function Footer() {
-  const year = new Date().getFullYear();
-
   return (
-    <footer className="sticky bottom-0 z-20 bg-white/95 border-t backdrop-blur">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-12 flex items-center justify-between">
-        <div className="flex items-center gap-3 min-w-0">
-          <span className="inline-flex items-center justify-center rounded-md bg-white ring-1 ring-gray-300 p-[2px]">
-            <img
-              src="/logo192.png"
-              alt="Gener8"
-              className="h-6 w-6 md:h-7 md:w-7 object-contain"
-              style={{
-                filter:
-                  'drop-shadow(0 0 1px rgba(0,0,0,.45)) contrast(1.18) saturate(1.05)',
-              }}
-              loading="lazy"
-            />
-          </span>
+    <footer className="w-full bg-white border-t mt-auto">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-5">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-6 text-sm text-gray-600">
+          {/* Left side: Logo */}
+          <div className="flex-shrink-0">
+            <Link
+              to="/dashboard"
+              className="flex items-center gap-2 text-gray-800 font-semibold"
+            >
+              {/* Make sure your logo is in the /public folder */}
+              <img
+                src="/frontend/src/assets/logo.svg"
+                alt="Gener8 Logo"
+                className="h-7 w-auto"
+              />
+              <span>Gener8 Inventory</span>
+            </Link>
+          </div>
 
-          <p className="text-xs sm:text-sm text-gray-600 truncate">
-            “Inventory accuracy is the hallmark of operational excellence.”
-            <span className="ml-2 text-gray-500">— Gener8 Team</span>
-          </p>
-        </div>
+          {/* Center: Quote (hidden on small screens) */}
+          <div className="hidden md:block text-center">
+            <p className="italic">
+              &quot;Inventory accuracy is the hallmark of operational
+              excellence.&quot;
+            </p>
+          </div>
 
-        <div className="flex items-center gap-3 shrink-0">
-          <a
-            href="/feedback"
-            className="text-xs sm:text-sm px-2 py-1 rounded-md border border-gray-300 hover:bg-gray-50"
-          >
-            Feedback
-          </a>
-          <span className="text-xs sm:text-sm text-gray-500">
-            © {year} Gener8 Inventory
-          </span>
+          {/* Right side: Links and Copyright */}
+          <div className="flex items-center gap-4">
+            <a
+              href="mailto:feedback@yourcompany.com"
+              className="hover:underline"
+            >
+              Feedback
+            </a>
+            <span>© {new Date().getFullYear()}</span>
+          </div>
         </div>
       </div>
     </footer>
