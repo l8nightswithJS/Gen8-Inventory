@@ -5,15 +5,10 @@ import {
   listItemBarcodes,
   deleteBarcode,
 } from '../utils/barcodesApi';
-import BarcodeScanner from './BarcodeScannerComponent';
+import BarcodeScannerComponent from './BarcodeScannerComponent';
+import BaseModal from './ui/BaseModal';
+import Button from './ui/Button';
 
-/**
- * Props:
- * - isOpen
- * - onClose
- * - item  -> { id, client_id, attributes }
- * - onAssigned? (called after successful assign)
- */
 export default function BarcodeAssignModal({
   isOpen,
   onClose,
@@ -25,22 +20,24 @@ export default function BarcodeAssignModal({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
 
-  // stable, unique ids for inputs
   const codeId = useId();
   const symId = useId();
 
   useEffect(() => {
     if (!isOpen || !item?.id) return;
+    let isMounted = true;
     (async () => {
       try {
         const rows = await listItemBarcodes(item.id);
-        setList(rows || []);
+        if (isMounted) setList(rows || []);
       } catch (e) {
-        // surface a soft message, but don't block modal
         console.error('Failed to load item barcodes', e);
-        setMsg('Failed to load existing barcodes.');
+        if (isMounted) setMsg('Failed to load existing barcodes.');
       }
     })();
+    return () => {
+      isMounted = false;
+    };
   }, [isOpen, item?.id]);
 
   if (!isOpen || !item) return null;
@@ -62,135 +59,134 @@ export default function BarcodeAssignModal({
       setList(rows || []);
       onAssigned?.();
     } catch (e) {
-      const m = e?.response?.data?.message || e.message || 'Failed to assign';
-      console.error('Assign barcode failed', e);
-      setMsg(m);
+      setMsg(e?.response?.data?.message || e.message || 'Failed to assign');
     } finally {
       setBusy(false);
     }
   };
 
   const doDelete = async (id) => {
-    if (!window.confirm('Remove this barcode from the item?')) return;
+    if (
+      !window.confirm(
+        'Are you sure you want to remove this barcode from the item?',
+      )
+    )
+      return;
     try {
       await deleteBarcode(id);
-      const rows = await listItemBarcodes(item.id);
-      setList(rows || []);
+      setList((prev) => prev.filter((b) => b.id !== id));
       setMsg('Barcode removed ✓');
     } catch (e) {
-      console.error('Delete barcode failed', e);
       setMsg('Failed to remove barcode.');
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl">
-        <div className="px-4 py-3 border-b flex items-center justify-between">
-          <h2 className="font-semibold text-lg">
-            Barcodes •{' '}
-            {item.attributes?.name ||
-              item.attributes?.part_number ||
-              `Item ${item.id}`}
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-sm text-blue-600 hover:underline"
-            aria-label="Close barcode assignment modal"
-          >
-            Close
-          </button>
-        </div>
+  const Footer = (
+    <Button variant="secondary" onClick={onClose}>
+      Done
+    </Button>
+  );
 
-        <div className="grid md:grid-cols-2 gap-4 p-4">
-          <div className="border rounded">
-            <BarcodeScanner
-              onDetected={(code, sym) =>
-                setScanned({ code, symbology: sym || '' })
-              }
-              onClose={onClose}
-            />
-            <div className="p-3 border-t bg-gray-50">
+  return (
+    <BaseModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={`Assign Barcodes to ${item.attributes?.name || `Item ${item.id}`}`}
+      footer={Footer}
+    >
+      <div className="grid md:grid-cols-2 gap-4">
+        {/* Scanner and Assignment Form */}
+        <div className="border rounded-lg overflow-hidden">
+          <BarcodeScannerComponent
+            onDetected={(code, sym) =>
+              setScanned({ code, symbology: sym || '' })
+            }
+          />
+          <div className="p-3 border-t bg-gray-50 space-y-2">
+            <div>
               <label
                 htmlFor={codeId}
                 className="block text-xs text-gray-600 mb-1"
               >
-                Detected code
+                Detected or Manual Entry
               </label>
               <input
                 id={codeId}
-                className="w-full border rounded px-2 py-1"
+                className="w-full border rounded px-2 py-1.5 border-gray-300"
                 placeholder="Scan or paste code…"
                 value={scanned.code}
                 onChange={(e) =>
                   setScanned((s) => ({ ...s, code: e.target.value }))
                 }
               />
-              <div className="flex items-center gap-2 mt-2">
-                <div className="flex-1">
-                  <label
-                    htmlFor={symId}
-                    className="block text-xs text-gray-600 mb-1"
-                  >
-                    Symbology (optional)
-                  </label>
-                  <input
-                    id={symId}
-                    className="w-full border rounded px-2 py-1"
-                    placeholder="Symbology (optional)"
-                    value={scanned.symbology}
-                    onChange={(e) =>
-                      setScanned((s) => ({ ...s, symbology: e.target.value }))
-                    }
-                  />
-                </div>
-                <button
-                  disabled={!scanned.code || busy}
-                  onClick={doAssign}
-                  className="px-3 py-2 rounded bg-blue-600 text-white disabled:opacity-50 self-end"
-                >
-                  {busy ? 'Saving…' : 'Assign'}
-                </button>
-              </div>
-
-              {msg && (
-                <p className="text-sm mt-2" aria-live="polite">
-                  {msg}
-                </p>
-              )}
             </div>
-          </div>
-
-          <div className="border rounded p-3">
-            <h3 className="font-semibold mb-2">Existing barcodes</h3>
-            {list.length === 0 ? (
-              <p className="text-sm text-gray-500">None yet.</p>
-            ) : (
-              <ul className="space-y-2">
-                {list.map((b) => (
-                  <li
-                    key={b.id}
-                    className="flex items-center justify-between border rounded px-2 py-1"
-                  >
-                    <div>
-                      <div className="font-mono">{b.barcode}</div>
-                      <div className="text-xs text-gray-500">
-                        {b.symbology || '—'}
-                      </div>
-                    </div>
-                    <button
-                      className="text-red-600 text-sm hover:underline"
-                      onClick={() => doDelete(b.id)}
-                    >
-                      Remove
-                    </button>
-                  </li>
-                ))}
-              </ul>
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <label
+                  htmlFor={symId}
+                  className="block text-xs text-gray-600 mb-1"
+                >
+                  Symbology (optional)
+                </label>
+                <input
+                  id={symId}
+                  className="w-full border rounded px-2 py-1.5 border-gray-300"
+                  placeholder="e.g., Code128"
+                  value={scanned.symbology}
+                  onChange={(e) =>
+                    setScanned((s) => ({ ...s, symbology: e.target.value }))
+                  }
+                />
+              </div>
+              <Button
+                disabled={!scanned.code || busy}
+                onClick={doAssign}
+                variant="primary"
+                size="md"
+              >
+                {busy ? 'Saving…' : 'Assign'}
+              </Button>
+            </div>
+            {msg && (
+              <p className="text-sm pt-1" aria-live="polite">
+                {msg}
+              </p>
             )}
           </div>
         </div>
+
+        {/* Existing Barcodes List */}
+        <div className="border rounded-lg p-3 space-y-2">
+          <h3 className="font-semibold text-gray-800">Existing Barcodes</h3>
+          {list.length === 0 ? (
+            <p className="text-sm text-gray-500">
+              No barcodes assigned to this item yet.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {list.map((b) => (
+                <li
+                  key={b.id}
+                  className="flex items-center justify-between border rounded px-2 py-1 bg-white"
+                >
+                  <div>
+                    <div className="font-mono font-medium">{b.barcode}</div>
+                    <div className="text-xs text-gray-500">
+                      {b.symbology || 'N/A'}
+                    </div>
+                  </div>
+                  <button
+                    className="text-red-600 text-sm hover:underline font-semibold"
+                    onClick={() => doDelete(b.id)}
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
-    </div>
+    </BaseModal>
   );
 }

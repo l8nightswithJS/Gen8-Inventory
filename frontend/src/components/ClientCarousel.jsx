@@ -1,8 +1,9 @@
 // src/components/ClientCarousel.jsx
-import { useRef, useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import EditClientModal from './EditClientModal';
 import ConfirmModal from './ConfirmModal';
+import { FiEdit2, FiTrash2, FiPlus } from 'react-icons/fi';
 
 export default function ClientCarousel({
   clients,
@@ -11,21 +12,8 @@ export default function ClientCarousel({
   onAddClient,
 }) {
   const navigate = useNavigate();
-  const carouselRef = useRef(null);
-
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
-
-  const [isPortrait, setIsPortrait] = useState(
-    window.matchMedia('(orientation: portrait)').matches,
-  );
-
-  useEffect(() => {
-    const mql = window.matchMedia('(orientation: portrait)');
-    const handler = (e) => setIsPortrait(e.matches);
-    mql.addEventListener('change', handler);
-    return () => mql.removeEventListener('change', handler);
-  }, []);
 
   const resolveLogo = (path) => {
     if (!path) return '';
@@ -34,79 +22,64 @@ export default function ClientCarousel({
     return `${base}${path}`;
   };
 
-  const containerClasses = isPortrait
-    ? 'flex flex-col space-y-4 overflow-y-auto px-4 py-4'
-    : 'flex overflow-x-auto space-x-4 scrollbar-thin scrollbar-thumb-gray-400 px-4 py-4';
-
   return (
-    <div className="relative h-full">
-      <div
-        ref={carouselRef}
-        className={containerClasses}
-        aria-label="Client carousel"
-      >
-        {/* Add Client tile (button for proper a11y) */}
+    <div className="h-full w-full p-4">
+      {/* Responsive Grid Container */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+        {/* Add Client tile */}
         <button
           type="button"
           onClick={onAddClient}
-          aria-label="Add client"
-          className="snap-start flex-shrink-0 w-64 h-48 border-2 border-dashed
-                     border-gray-400 rounded-lg flex flex-col items-center justify-center
-                     hover:bg-gray-50 transition focus:outline-none focus:ring-2 focus:ring-blue-500"
+          aria-label="Add new client"
+          className="aspect-[4/3] border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center text-gray-500 hover:bg-gray-50 hover:border-blue-500 hover:text-blue-600 transition focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
-          <div className="text-4xl text-gray-600">+</div>
-          <div className="mt-1 text-sm text-gray-500">Add Client</div>
+          <FiPlus className="h-10 w-10" />
+          <span className="mt-1 font-semibold">Add Client</span>
         </button>
 
         {/* Client cards */}
         {clients.map((c) => (
           <div
             key={c.id}
-            className="snap-start flex-shrink-0 w-64 h-48 bg-white border
-                       rounded-lg shadow p-4 flex flex-col"
+            className="aspect-[4/3] bg-white border rounded-lg shadow-sm p-4 flex flex-col group"
           >
-            <div className="h-24 flex items-center justify-center bg-gray-50 rounded">
+            <div className="h-2/3 flex items-center justify-center bg-gray-50 rounded-md overflow-hidden">
               {c.logo_url ? (
                 <img
                   src={resolveLogo(c.logo_url)}
                   alt={`${c.name} logo`}
-                  className="h-20 max-w-full object-contain"
+                  className="max-h-full max-w-full object-contain"
                 />
               ) : (
                 <span className="text-gray-400 text-sm">No Logo</span>
               )}
             </div>
-
-            <h3 className="mt-1 text-center font-semibold text-gray-700 truncate">
+            <h3 className="mt-2 text-center font-semibold text-gray-800 truncate">
               {c.name}
             </h3>
-
-            <div className="flex justify-around mt-auto pt-2">
+            <div className="flex justify-around items-center mt-auto pt-2">
               <button
-                type="button"
                 onClick={() => navigate(`/clients/${c.id}`)}
-                className="text-blue-600 hover:underline text-sm"
+                className="text-blue-600 hover:underline text-sm font-medium"
               >
                 Inventory
               </button>
-              <button
-                type="button"
-                onClick={() => setEditing(c)}
-                className="text-gray-600 hover:text-gray-800 text-sm"
-                title="Edit"
-                aria-label={`Edit ${c.name}`}
-              >
-                ✏️
-              </button>
-              <button
-                type="button"
-                onClick={() => setDeleting(c)}
-                className="text-gray-600 hover:text-gray-800 text-sm"
-                title="Delete"
-                aria-label={`Delete ${c.name}`}
-              >
-                🗑️
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setEditing(c)}
+                  className="p-1 text-gray-500 hover:text-blue-600"
+                  title="Edit"
+                >
+                  <FiEdit2 />
+                </button>
+                <button
+                  onClick={() => setDeleting(c)}
+                  className="p-1 text-gray-500 hover:text-red-600"
+                  title="Delete"
+                >
+                  <FiTrash2 />
+                </button>
+              </div>
             </div>
           </div>
         ))}
@@ -116,17 +89,13 @@ export default function ClientCarousel({
         <EditClientModal
           client={editing}
           onClose={() => setEditing(null)}
-          onUpdated={(updated) => {
-            setEditing(null);
-            onClientUpdated(updated);
-          }}
+          onUpdated={onClientUpdated}
         />
       )}
-
       {deleting && (
         <ConfirmModal
           title={`Delete "${deleting.name}"?`}
-          message="Are you sure? This cannot be undone."
+          message="All inventory items for this client will also be deleted. This cannot be undone."
           onCancel={() => setDeleting(null)}
           onConfirm={async () => {
             await onClientDeleted(deleting.id);

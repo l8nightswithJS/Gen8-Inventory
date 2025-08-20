@@ -1,3 +1,6 @@
+// src/components/ConfirmModal.jsx
+import BaseModal from './ui/BaseModal';
+import Button from './ui/Button';
 import PropTypes from 'prop-types';
 
 export default function ConfirmModal({
@@ -5,43 +8,26 @@ export default function ConfirmModal({
   message,
   cancelText = 'Cancel',
   confirmText = 'Confirm',
-  variant = 'danger', // 'danger' | 'success'
-  loading = false, // ← new
+  variant = 'danger',
+  loading = false,
   onCancel,
   onConfirm,
 }) {
-  const confirmClasses =
-    variant === 'success'
-      ? 'bg-green-600 hover:bg-green-700 text-white'
-      : 'bg-red-600 hover:bg-red-700 text-white';
+  const Footer = (
+    <>
+      <Button variant="secondary" onClick={onCancel} disabled={loading}>
+        {cancelText}
+      </Button>
+      <Button variant={variant} onClick={onConfirm} disabled={loading}>
+        {loading ? 'Processing...' : confirmText}
+      </Button>
+    </>
+  );
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
-      role="dialog"
-      aria-modal="true"
-    >
-      <div className="bg-white rounded-lg shadow-lg w-full max-w-sm p-6">
-        <h3 className="text-xl font-semibold text-gray-800 mb-4">{title}</h3>
-        <p className="text-gray-700 mb-6">{message}</p>
-        <div className="flex justify-end space-x-3">
-          <button
-            onClick={onCancel}
-            disabled={loading} // disable while loading
-            className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition disabled:opacity-50"
-          >
-            {cancelText}
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={loading} // disable while loading
-            className={`px-4 py-2 rounded transition disabled:opacity-50 ${confirmClasses}`}
-          >
-            {loading ? 'Processing...' : confirmText} {/* swap text */}
-          </button>
-        </div>
-      </div>
-    </div>
+    <BaseModal isOpen={true} onClose={onCancel} title={title} footer={Footer}>
+      <p className="text-gray-700">{message}</p>
+    </BaseModal>
   );
 }
 
@@ -50,8 +36,8 @@ ConfirmModal.propTypes = {
   message: PropTypes.string.isRequired,
   cancelText: PropTypes.string,
   confirmText: PropTypes.string,
-  variant: PropTypes.oneOf(['danger', 'success']),
-  loading: PropTypes.bool, // ← new
+  variant: PropTypes.oneOf(['danger', 'primary', 'secondary']),
+  loading: PropTypes.bool,
   onCancel: PropTypes.func.isRequired,
   onConfirm: PropTypes.func.isRequired,
 };

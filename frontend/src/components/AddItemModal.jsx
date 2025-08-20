@@ -1,6 +1,8 @@
 // src/components/AddItemModal.jsx
 import { useState, useEffect } from 'react';
 import axios from '../utils/axiosConfig';
+import BaseModal from './ui/BaseModal';
+import Button from './ui/Button';
 import ColumnSetupModal from './ColumnSetupModal';
 import { getSavedSchema, saveSchema } from '../context/SchemaContext';
 
@@ -8,23 +10,22 @@ const NUMERIC_KEYS = new Set([
   'qty_in_stock',
   'quantity',
   'low_stock_threshold',
-  'reorder_point',
+  'reorder_level',
   'reorder_qty',
-  'safety_stock',
 ]);
 
 export default function AddItemModal({ clientId, onClose, onCreated }) {
-  const [schema, setSchema] = useState([]); // dynamic columns
+  const [schema, setSchema] = useState([]);
   const [showSchema, setShowSchema] = useState(false);
-
-  const [form, setForm] = useState({});
+  const [form, setForm] = useState({ alert_enabled: true }); // Default alert to true
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Seed schema from localStorage on mount
   useEffect(() => {
     const s = getSavedSchema(clientId);
-    if (!s.length) setShowSchema(true);
+    if (!s.length) {
+      setShowSchema(true);
+    }
     setSchema(s);
   }, [clientId]);
 
@@ -43,11 +44,10 @@ export default function AddItemModal({ clientId, onClose, onCreated }) {
   };
 
   const validate = () => {
-    // If schema has common required keys, validate a couple
     const needs = ['name', 'part_number'];
     for (const k of needs) {
       if (schema.includes(k) && !String(form[k] ?? '').trim()) {
-        setError(`${k.replace(/_/g, ' ')} is required.`);
+        setError(`'${k.replace(/_/g, ' ')}' is a required field.`);
         return false;
       }
     }
@@ -67,13 +67,11 @@ export default function AddItemModal({ clientId, onClose, onCreated }) {
       }
     }
 
-    // Include barcode even if not in schema (avoid duplicate if it is).
     if (!schema.includes('barcode') && form.barcode) {
       const code = String(form.barcode).trim();
       if (code) attrs.barcode = code;
     }
 
-    // Always include these controls (even if not in schema)
     if ('has_lot' in form) attrs.has_lot = !!form.has_lot;
     if (attrs.has_lot) {
       const lot = String(form.lot_number || '').trim();
@@ -102,7 +100,7 @@ export default function AddItemModal({ clientId, onClose, onCreated }) {
         attributes,
       });
       onCreated?.(data);
-      onClose();
+      onClose(); // Close on success
     } catch (err) {
       console.error(err);
       setError(err.response?.data?.message || 'Failed to create item.');
@@ -110,6 +108,26 @@ export default function AddItemModal({ clientId, onClose, onCreated }) {
       setSubmitting(false);
     }
   };
+
+  const Footer = (
+    <>
+      <Button variant="secondary" onClick={onClose} disabled={submitting}>
+        Cancel
+      </Button>
+      <Button
+        type="submit"
+        form="add-item-form"
+        variant="primary"
+        onClick={handleSubmit}
+        disabled={submitting}
+      >
+        {submitting ? 'Saving...' : 'Add Item'}
+      </Button>
+    </>
+  );
+
+  const humanize = (key) =>
+    key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
   return (
     <>
@@ -122,155 +140,141 @@ export default function AddItemModal({ clientId, onClose, onCreated }) {
         />
       )}
 
-      {!showSchema && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-md relative space-y-4">
-            <button
-              onClick={onClose}
-              className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 text-2xl"
-              disabled={submitting}
-              aria-label="Close add item modal"
-            >
-              &times;
-            </button>
+      <BaseModal
+        isOpen={!showSchema}
+        onClose={onClose}
+        title="Add New Item"
+        footer={Footer}
+      >
+        <form id="add-item-form" onSubmit={handleSubmit} className="space-y-4">
+          {error && <p className="text-red-600 text-sm">{error}</p>}
 
-            <h3 className="text-xl font-semibold text-gray-800">
-              Add Inventory Item
-            </h3>
-
-            {error && <p className="text-red-600 text-sm">{error}</p>}
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Dynamic fields */}
-              {schema.map((key) => (
-                <div key={key} className="space-y-1">
-                  <label htmlFor={`fld-${key}`} className="sr-only">
-                    {key
-                      .replace(/_/g, ' ')
-                      .replace(/\b\w/g, (c) => c.toUpperCase())}
-                  </label>
-                  <input
-                    id={`fld-${key}`}
-                    name={key}
-                    type={NUMERIC_KEYS.has(key) ? 'number' : 'text'}
-                    min={NUMERIC_KEYS.has(key) ? '0' : undefined}
-                    value={form[key] ?? ''}
-                    onChange={handleChange}
-                    placeholder={key
-                      .replace(/_/g, ' ')
-                      .replace(/\b\w/g, (c) => c.toUpperCase())}
-                    className="w-full border px-3 py-2 rounded"
-                    disabled={submitting}
-                  />
-                </div>
-              ))}
-
-              {/* Barcode (only if user didn't already include it in schema) */}
-              {!schema.includes('barcode') && (
-                <div className="space-y-1">
-                  <label htmlFor="fld-barcode" className="sr-only">
-                    Barcode
-                  </label>
-                  <input
-                    id="fld-barcode"
-                    name="barcode"
-                    value={form.barcode ?? ''}
-                    onChange={handleChange}
-                    placeholder="Barcode"
-                    className="w-full border px-3 py-2 rounded"
-                    disabled={submitting}
-                  />
-                </div>
-              )}
-
-              {/* Always-present controls */}
-              <div className="flex items-center space-x-2">
-                <input
-                  id="fld-has_lot"
-                  type="checkbox"
-                  name="has_lot"
-                  checked={!!form.has_lot}
-                  onChange={handleChange}
-                  disabled={submitting}
-                />
-                <label htmlFor="fld-has_lot" className="text-sm text-gray-700">
-                  Track Lot Number
-                </label>
-              </div>
-
-              {form.has_lot && (
-                <div className="space-y-1">
-                  <label htmlFor="fld-lot_number" className="sr-only">
-                    Lot Number
-                  </label>
-                  <input
-                    id="fld-lot_number"
-                    name="lot_number"
-                    value={form.lot_number ?? ''}
-                    onChange={handleChange}
-                    placeholder="Lot Number"
-                    className="w-full border px-3 py-2 rounded"
-                    disabled={submitting}
-                  />
-                </div>
-              )}
-
-              <div className="space-y-1">
-                <label htmlFor="fld-low_stock_threshold" className="sr-only">
-                  Low Stock Threshold
-                </label>
-                <input
-                  id="fld-low_stock_threshold"
-                  name="low_stock_threshold"
-                  type="number"
-                  min="0"
-                  value={form.low_stock_threshold ?? ''}
-                  onChange={handleChange}
-                  placeholder="Low Stock Threshold"
-                  className="w-full border px-3 py-2 rounded"
-                  disabled={submitting}
-                />
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <input
-                  id="fld-alert_enabled"
-                  type="checkbox"
-                  name="alert_enabled"
-                  checked={!!form.alert_enabled}
-                  onChange={handleChange}
-                  disabled={submitting}
-                />
-                <label
-                  htmlFor="fld-alert_enabled"
-                  className="text-sm text-gray-700"
-                >
-                  Enable Low-Stock Alert
-                </label>
-              </div>
-
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-60"
+          {schema.map((key) => (
+            <div key={key}>
+              <label
+                htmlFor={`fld-${key}`}
+                className="block text-sm font-medium text-gray-700 mb-1"
               >
-                {submitting ? 'Saving...' : 'Add Item'}
-              </button>
+                {humanize(key)}
+              </label>
+              <input
+                id={`fld-${key}`}
+                name={key}
+                type={NUMERIC_KEYS.has(key) ? 'number' : 'text'}
+                min={NUMERIC_KEYS.has(key) ? '0' : undefined}
+                value={form[key] ?? ''}
+                onChange={handleChange}
+                className="w-full border px-3 py-2 rounded border-gray-300"
+                disabled={submitting}
+              />
+            </div>
+          ))}
 
-              <div className="text-xs text-gray-500 text-center">
-                Need to change columns?{' '}
-                <button
-                  type="button"
-                  className="underline"
-                  onClick={() => setShowSchema(true)}
+          {!schema.includes('barcode') && (
+            <div>
+              <label
+                htmlFor="fld-barcode"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Barcode
+              </label>
+              <input
+                id="fld-barcode"
+                name="barcode"
+                value={form.barcode ?? ''}
+                onChange={handleChange}
+                className="w-full border px-3 py-2 rounded border-gray-300"
+                disabled={submitting}
+              />
+            </div>
+          )}
+
+          <div className="pt-2 border-t space-y-4">
+            <div className="flex items-center space-x-2">
+              <input
+                id="fld-has_lot"
+                type="checkbox"
+                name="has_lot"
+                checked={!!form.has_lot}
+                onChange={handleChange}
+                disabled={submitting}
+                className="h-4 w-4 rounded"
+              />
+              <label htmlFor="fld-has_lot" className="text-sm text-gray-700">
+                Track Lot Number
+              </label>
+            </div>
+
+            {form.has_lot && (
+              <div>
+                <label
+                  htmlFor="fld-lot_number"
+                  className="block text-sm font-medium text-gray-700 mb-1"
                 >
-                  Edit columns
-                </button>
+                  Lot Number
+                </label>
+                <input
+                  id="fld-lot_number"
+                  name="lot_number"
+                  value={form.lot_number ?? ''}
+                  onChange={handleChange}
+                  className="w-full border px-3 py-2 rounded border-gray-300"
+                  disabled={submitting}
+                />
               </div>
-            </form>
+            )}
+
+            <div>
+              <label
+                htmlFor="fld-low_stock_threshold"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Low Stock Threshold
+              </label>
+              <input
+                id="fld-low_stock_threshold"
+                name="low_stock_threshold"
+                type="number"
+                min="0"
+                value={form.low_stock_threshold ?? ''}
+                onChange={handleChange}
+                className="w-full border px-3 py-2 rounded border-gray-300"
+                disabled={submitting}
+              />
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <input
+                id="fld-alert_enabled"
+                type="checkbox"
+                name="alert_enabled"
+                checked={!!form.alert_enabled}
+                onChange={handleChange}
+                disabled={submitting}
+                className="h-4 w-4 rounded"
+              />
+              <label
+                htmlFor="fld-alert_enabled"
+                className="text-sm text-gray-700"
+              >
+                Enable Low-Stock Alert
+              </label>
+            </div>
           </div>
-        </div>
-      )}
+
+          <div className="text-xs text-gray-500 text-center">
+            Need to change columns?{' '}
+            <button
+              type="button"
+              className="underline"
+              onClick={() => setShowSchema(true)}
+              disabled={submitting}
+            >
+              Edit columns
+            </button>
+          </div>
+        </form>
+      </BaseModal>
     </>
   );
 }

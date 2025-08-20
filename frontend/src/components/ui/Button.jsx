@@ -1,47 +1,48 @@
 // src/components/ui/Button.jsx
+// For combining class names, a utility like `clsx` is great: npm install clsx
+import clsx from 'clsx';
 
-import { cn } from '../../utils/classnames';
+const baseClasses =
+  'inline-flex items-center justify-center font-medium border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 transition';
 
-const base =
-  'inline-flex items-center justify-center gap-2 rounded-2xl font-medium transition-colors ' +
-  'focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed ' +
-  'whitespace-nowrap';
-
-const sizes = {
-  sm: 'h-9 px-3 text-sm',
-  md: 'h-10 px-4 text-[0.95rem]',
-  lg: 'h-11 px-5 text-base',
+const sizeClasses = {
+  sm: 'px-2.5 py-1.5 text-xs',
+  md: 'px-4 py-2 text-sm',
+  lg: 'px-6 py-3 text-base',
 };
 
-const variants = {
+const variantClasses = {
   primary:
-    'bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500',
+    'border-transparent bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500',
   secondary:
-    'bg-gray-100 text-gray-900 hover:bg-gray-200 focus-visible:ring-gray-400',
-  outline:
-    'border border-gray-300 text-gray-800 bg-white hover:bg-gray-50 focus-visible:ring-gray-400',
+    'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:ring-blue-500',
+  danger:
+    'border-transparent bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
   ghost:
-    'bg-transparent text-gray-800 hover:bg-gray-50 focus-visible:ring-gray-400',
+    'border-transparent bg-transparent text-gray-700 hover:bg-gray-100 focus:ring-blue-500',
 };
 
 export default function Button({
-  as: Comp = 'button',
+  as: Component = 'button',
+  variant = 'primary',
   size = 'md',
-  variant = 'outline',
+  leftIcon: LeftIcon,
   className,
   children,
-  leftIcon: LeftIcon,
-  rightIcon: RightIcon,
   ...props
 }) {
   return (
-    <Comp
-      className={cn(base, sizes[size], variants[variant], className)}
+    <Component
+      className={clsx(
+        baseClasses,
+        sizeClasses[size],
+        variantClasses[variant],
+        className,
+      )}
       {...props}
     >
-      {LeftIcon ? <LeftIcon className="shrink-0" /> : null}
-      <span className="min-w-0">{children}</span>
-      {RightIcon ? <RightIcon className="shrink-0" /> : null}
-    </Comp>
+      {LeftIcon && <LeftIcon className="mr-2 -ml-1 h-4 w-4" />}
+      {children}
+    </Component>
   );
 }

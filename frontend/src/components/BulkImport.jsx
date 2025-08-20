@@ -1,8 +1,9 @@
+// src/components/BulkImport.jsx
 import { useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import axios from '../utils/axiosConfig';
-
-// ────── Helpers ────── //
+import Button from './ui/Button'; // <-- Use the new Button
+import { FiUploadCloud } from 'react-icons/fi';
 
 const normalizeKey = (str) =>
   str
@@ -19,17 +20,17 @@ const humanLabel = (key) =>
     .replace(/\b\w/g, (c) => c.toUpperCase());
 
 const NUMERIC_KEYS = new Set([
-  'qty_in_stock',
   'quantity',
-  'low_stock_threshold',
   'on_hand',
+  'qty_in_stock',
+  'stock',
+  'reorder_level',
+  'reorder_qty',
 ]);
-
-// ────── Component ────── //
 
 export default function BulkImport({ clientId, refresh, onClose }) {
   const fileRef = useRef(null);
-
+  const [fileName, setFileName] = useState('');
   const [headers, setHeaders] = useState([]);
   const [rawRows, setRawRows] = useState([]);
   const [previewRows, setPreviewRows] = useState([]);
@@ -45,111 +46,100 @@ export default function BulkImport({ clientId, refresh, onClose }) {
     setPreviewRows([]);
     setInputValues({});
     setMapping({});
+    setFileName('');
+    if (fileRef.current) fileRef.current.value = '';
   };
 
   const handleFileChange = (e) => {
     resetState();
     setError('');
     setSuccess('');
-
     const file = e.target.files[0];
     if (!file) return;
 
+    setFileName(file.name);
     const reader = new FileReader();
-
     reader.onload = (evt) => {
-      let rows = [];
-
-      // CSV
-      if (/\.csv$/i.test(file.name)) {
-        const text = evt.target.result;
-        const lines = text
-          .split('\n')
-          .map((l) => l.replace(/\r/, ''))
-          .filter(Boolean);
-        const cols = lines[0].split(',').map((h) => h.trim());
-
-        rows = lines.slice(1).map((line) => {
-          const vals = line.split(',');
-          return cols.reduce((acc, col, i) => {
-            acc[col] = vals[i]?.trim() ?? '';
-            return acc;
-          }, {});
-        });
-
-        setHeaders(cols);
-      } else {
-        // XLSX
-        const wb = XLSX.read(evt.target.result, { type: 'binary' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
-        setHeaders(rows.length ? Object.keys(rows[0]) : []);
+      try {
+        let rows = [];
+        let sheetHeaders = [];
+        if (/\.csv$/i.test(file.name)) {
+          // Basic CSV parsing
+          const text = evt.target.result;
+          const lines = text
+            .split('\n')
+            .map((l) => l.trim())
+            .filter(Boolean);
+          sheetHeaders = lines[0].split(',').map((h) => h.trim());
+          rows = lines.slice(1).map((line) => {
+            const vals = line.split(',');
+            return sheetHeaders.reduce((acc, col, i) => {
+              acc[col] = vals[i]?.trim() ?? '';
+              return acc;
+            }, {});
+          });
+        } else {
+          // XLSX parsing
+          const wb = XLSX.read(evt.target.result, { type: 'binary' });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+          sheetHeaders = rows.length ? Object.keys(rows[0]) : [];
+        }
+        setHeaders(sheetHeaders);
+        setRawRows(rows);
+        setPreviewRows(rows.slice(0, 5));
+      } catch (parseError) {
+        console.error('File parsing error:', parseError);
+        setError(
+          "Could not parse the uploaded file. Please ensure it's a valid .csv or .xlsx file.",
+        );
       }
-
-      setRawRows(rows);
-      setPreviewRows(rows.slice(0, 5));
     };
-
-    if (/\.csv$/i.test(file.name)) reader.readAsText(file);
-    else reader.readAsBinaryString(file);
+    reader.readAsBinaryString(file);
   };
 
-  const handleInputChange = (col, val) => {
+  const handleInputChange = (col, val) =>
     setInputValues((prev) => ({ ...prev, [col]: val }));
-  };
-
   const handleMappingBlur = (col) => {
     const raw = inputValues[col]?.trim() ?? '';
-    if (!raw) {
-      const updated = { ...mapping };
-      delete updated[col];
-      setMapping(updated);
-    } else {
-      setMapping((prev) => ({ ...prev, [col]: normalizeKey(raw) }));
-    }
+    setMapping((prev) => ({ ...prev, [col]: normalizeKey(raw) }));
   };
 
   const handleImport = async () => {
     setError('');
     setSuccess('');
-
-    if (Object.keys(mapping).length === 0) {
-      setError('Please map at least one column.');
+    const validMappings = Object.entries(mapping).filter(([, to]) => to);
+    if (validMappings.length === 0) {
+      setError('Please map at least one column to an internal key.');
       return;
     }
-
-    const items = rawRows.map((row) => {
-      const attributes = {};
-      for (const [col, key] of Object.entries(mapping)) {
-        const rawVal = row[col];
-        if (rawVal == null || rawVal === '') continue;
-
-        if (NUMERIC_KEYS.has(key)) {
-          const n = Number(rawVal);
-          if (!isNaN(n)) attributes[key] = n;
-        } else {
-          attributes[key] = rawVal;
+    const items = rawRows
+      .map((row) => {
+        const attributes = {};
+        for (const [col, key] of validMappings) {
+          const rawVal = row[col];
+          if (rawVal == null || rawVal === '') continue;
+          if (NUMERIC_KEYS.has(key)) {
+            const n = Number(rawVal);
+            if (!isNaN(n)) attributes[key] = n;
+          } else {
+            attributes[key] = String(rawVal).trim();
+          }
         }
-      }
-      return { attributes };
-    });
+        return { attributes };
+      })
+      .filter((item) => Object.keys(item.attributes).length > 0);
 
     setSubmitting(true);
-
     try {
       const resp = await axios.post('/api/items/bulk', {
         client_id: parseInt(clientId, 10),
         items,
       });
-
-      setSuccess(
-        `${resp.data.successCount} imported, ${resp.data.failCount} failed.`,
-      );
-      fileRef.current.value = '';
+      setSuccess(`${resp.data.successCount} items imported successfully.`);
       resetState();
-
-      if (refresh) await refresh();
-      if (onClose) onClose();
+      await refresh?.();
+      setTimeout(() => onClose?.(), 1500); // Close after showing success message
     } catch (err) {
       console.error(err);
       setError(err.response?.data?.message || 'Bulk import failed');
@@ -159,57 +149,85 @@ export default function BulkImport({ clientId, refresh, onClose }) {
   };
 
   return (
-    <div className="space-y-6 p-6 max-w-4xl mx-auto">
-      <div className="flex justify-between items-center">
-        <h3 className="text-2xl font-semibold">Import Items in Bulk</h3>
+    <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-4xl relative space-y-4">
+      <div className="flex justify-between items-start">
+        <div>
+          <h3 className="text-xl font-semibold text-gray-800">
+            Import Items in Bulk
+          </h3>
+          <p className="text-sm text-gray-500">
+            Upload a .csv or .xlsx file to get started.
+          </p>
+        </div>
         {onClose && (
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-800 text-2xl"
+            className="text-gray-500 hover:text-gray-700 text-2xl"
+            disabled={submitting}
           >
             &times;
           </button>
         )}
       </div>
 
-      <input
-        ref={fileRef}
-        type="file"
-        accept=".csv, .xlsx, .xls"
-        onChange={handleFileChange}
-        className="file:py-2 file:px-4 file:border-0 file:bg-indigo-600 file:text-white file:rounded hover:file:bg-indigo-700"
-      />
+      <div>
+        <label
+          htmlFor="file-upload"
+          className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100"
+        >
+          <div className="flex flex-col items-center justify-center pt-5 pb-6">
+            <FiUploadCloud className="w-8 h-8 mb-2 text-gray-500" />
+            <p className="mb-2 text-sm text-gray-500">
+              <span className="font-semibold">Click to upload</span> or drag and
+              drop
+            </p>
+            <p className="text-xs text-gray-500">{fileName || 'CSV or XLSX'}</p>
+          </div>
+          <input
+            ref={fileRef}
+            id="file-upload"
+            type="file"
+            className="hidden"
+            accept=".csv, .xlsx, .xls"
+            onChange={handleFileChange}
+          />
+        </label>
+      </div>
 
       {headers.length > 0 && (
         <>
           <div className="bg-gray-50 border rounded p-4">
             <h4 className="font-medium mb-3">Map Your Columns</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {headers.map((col) => (
-                <div key={col} className="flex items-center space-x-2">
-                  <label className="w-32 text-gray-700">
-                    Import “{humanLabel(col)}” as
+                <div key={col} className="space-y-1">
+                  <label
+                    htmlFor={`map-${col}`}
+                    className="text-sm font-medium text-gray-700"
+                  >
+                    File Header:{' '}
+                    <span className="font-bold">{humanLabel(col)}</span>
                   </label>
                   <input
+                    id={`map-${col}`}
                     type="text"
-                    placeholder="internal_key"
+                    placeholder="Map to internal key (e.g., part_number)"
                     value={inputValues[col] || ''}
                     onChange={(e) => handleInputChange(col, e.target.value)}
                     onBlur={() => handleMappingBlur(col)}
                     disabled={submitting}
-                    className="flex-1 border rounded px-2 py-1"
+                    className="w-full border rounded px-3 py-2 border-gray-300"
                   />
                 </div>
               ))}
             </div>
           </div>
-
           <div className="overflow-x-auto border rounded">
             <table className="min-w-full text-sm">
               <thead className="bg-gray-100">
-                <tr>
+                <tr className="text-left">
                   {headers.map((h) => (
-                    <th key={h} className="px-3 py-2 text-left">
+                    <th key={h} className="px-3 py-2 font-semibold">
                       {humanLabel(h)}
                     </th>
                   ))}
@@ -222,8 +240,8 @@ export default function BulkImport({ clientId, refresh, onClose }) {
                     className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
                   >
                     {headers.map((h) => (
-                      <td key={h} className="px-3 py-2">
-                        {row[h]}
+                      <td key={h} className="px-3 py-2 truncate max-w-xs">
+                        {String(row[h])}
                       </td>
                     ))}
                   </tr>
@@ -231,17 +249,21 @@ export default function BulkImport({ clientId, refresh, onClose }) {
               </tbody>
             </table>
           </div>
-
-          <div className="flex justify-end items-center space-x-4">
-            {error && <p className="text-red-600">{error}</p>}
-            {success && <p className="text-green-600">{success}</p>}
-            <button
+          <div className="flex justify-end items-center gap-4 pt-2">
+            {error && (
+              <p className="text-red-600 text-sm font-medium">{error}</p>
+            )}
+            {success && (
+              <p className="text-green-600 text-sm font-medium">{success}</p>
+            )}
+            <Button
               onClick={handleImport}
               disabled={submitting}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded disabled:opacity-50"
+              variant="primary"
+              size="md"
             >
-              {submitting ? 'Importing…' : 'Import'}
-            </button>
+              {submitting ? 'Importing…' : `Import ${rawRows.length} Items`}
+            </Button>
           </div>
         </>
       )}
