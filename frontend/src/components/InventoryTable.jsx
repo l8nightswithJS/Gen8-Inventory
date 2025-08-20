@@ -5,23 +5,6 @@ import Button from './ui/Button';
 import { computeLowState } from '../utils/stockLogic';
 
 // Column ordering & labels
-const LEGACY_ORDER = [
-  'part_number',
-  'description',
-  'quantity',
-  'reorder_level',
-  'reorder_qty',
-  'lead_times',
-  'type',
-  'name',
-  'location',
-  'lot_number',
-  'low_stock_threshold',
-  'has_lot',
-  'alert_acknowledged_at',
-  'barcode',
-];
-
 const LABEL_OVERRIDES = {
   part_number: 'Part #',
   quantity: 'On Hand',
@@ -33,7 +16,6 @@ const LABEL_OVERRIDES = {
   barcode: 'Barcode',
 };
 
-const HIDE_FORCE = new Set(['alert_enabled', 'has_lot', 'low_stock_threshold']);
 const QTY_KEYS = ['quantity', 'on_hand', 'qty_in_stock', 'stock'];
 const NO_WRAP_COLS = new Set([
   'part_number',
@@ -45,13 +27,11 @@ const humanLabel = (k) =>
   LABEL_OVERRIDES[k] ||
   k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
-const isNumericLike = (k, qtyKey) =>
-  k === qtyKey ||
+const isNumericLike = (k) =>
   QTY_KEYS.includes(k) ||
   /\b(level|qty|quantity|threshold|count|days|hours)\b/i.test(k);
 
-const shouldNoWrap = (k, qtyKey) =>
-  NO_WRAP_COLS.has(k) || isNumericLike(k, qtyKey);
+const shouldNoWrap = (k) => NO_WRAP_COLS.has(k) || isNumericLike(k);
 
 // ---------- Shared cell rendering ----------
 function formatShortDate(value) {
@@ -225,15 +205,9 @@ function TabletRow({ item, expanded, onToggle, onEdit, onDelete }) {
 }
 
 // ---------- Main component ----------
-/**
- * viewMode: 'desktop' | 'tablet' | 'mobile'
- * rowsPerPage: number (current)
- * isAutoRows: boolean (if true, pager shows "Auto (N)" and Auto button)
- * onAutoRowsToggle?: (boolean) => void
- * showRowSelector?: boolean
- */
 export default function InventoryTable({
   items,
+  columns = [], // Use columns prop
   page,
   totalPages,
   onPage,
@@ -263,33 +237,6 @@ export default function InventoryTable({
     [items],
   );
 
-  const allKeys = useMemo(() => {
-    const keys = Array.from(
-      new Set(safeItems.flatMap((i) => Object.keys(i.attributes))),
-    );
-    return keys.sort((a, b) => {
-      const ia = LEGACY_ORDER.indexOf(a),
-        ib = LEGACY_ORDER.indexOf(b);
-      if (ia !== -1 && ib !== -1) return ia - ib;
-      if (ia !== -1) return -1;
-      if (ib !== -1) return 1;
-      return a.localeCompare(b);
-    });
-  }, [safeItems]);
-
-  const qtyKey = useMemo(
-    () => QTY_KEYS.find((k) => allKeys.includes(k)),
-    [allKeys],
-  );
-
-  const visibleKeys = useMemo(
-    () =>
-      allKeys
-        .filter((k) => !HIDE_FORCE.has(k))
-        .filter((k) => (qtyKey ? k === qtyKey || !QTY_KEYS.includes(k) : true)),
-    [allKeys, qtyKey],
-  );
-
   // ---------- Desktop Table ----------
   const DesktopTable = () => (
     <div className="js-inventory-card overflow-x-auto bg-white shadow-md rounded-lg">
@@ -304,12 +251,12 @@ export default function InventoryTable({
           "
         >
           <tr>
-            {visibleKeys.map((key) => (
+            {columns.map((key) => (
               <th
                 key={key}
                 className="px-3 py-2.5 text-left uppercase tracking-wider text-slate-800 font-semibold text-[11px]"
               >
-                {humanLabel(key === qtyKey ? 'quantity' : key)}
+                {humanLabel(key)}
               </th>
             ))}
             {role === 'admin' && (
@@ -335,7 +282,7 @@ export default function InventoryTable({
           {safeItems.length === 0 ? (
             <tr>
               <td
-                colSpan={visibleKeys.length + (role === 'admin' ? 1 : 0)}
+                colSpan={columns.length + (role === 'admin' ? 1 : 0)}
                 className="px-6 py-5 text-center text-gray-500 italic"
               >
                 No items to display.
@@ -352,8 +299,8 @@ export default function InventoryTable({
                     low ? 'bg-red-50' : 'bg-white'
                   } hover:bg-gray-50`}
                 >
-                  {visibleKeys.map((key, idx) => {
-                    const numeric = isNumericLike(key, qtyKey);
+                  {columns.map((key) => {
+                    const numeric = isNumericLike(key);
                     const value = a[key];
                     const cell =
                       key === 'alert_acknowledged_at' ? (
@@ -373,36 +320,17 @@ export default function InventoryTable({
                           numeric ? 'text-center' : ''
                         }`}
                       >
-                        {idx === 0 && low ? (
-                          <div className="flex items-center gap-2">
-                            <div
-                              className={`${
-                                numeric ? 'text-center' : 'text-left'
-                              } ${
-                                shouldNoWrap(key, qtyKey)
-                                  ? 'whitespace-nowrap'
-                                  : 'whitespace-normal break-words'
-                              }`}
-                            >
-                              {cell}
-                            </div>
-                            <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
-                              Low
-                            </span>
-                          </div>
-                        ) : (
-                          <div
-                            className={`${
-                              numeric ? 'text-center' : 'text-left'
-                            } ${
-                              shouldNoWrap(key, qtyKey)
-                                ? 'whitespace-nowrap'
-                                : 'whitespace-normal break-words'
-                            }`}
-                          >
-                            {cell}
-                          </div>
-                        )}
+                        <div
+                          className={`${
+                            numeric ? 'text-center' : 'text-left'
+                          } ${
+                            shouldNoWrap(key)
+                              ? 'whitespace-nowrap'
+                              : 'whitespace-normal break-words'
+                          }`}
+                        >
+                          {cell}
+                        </div>
                       </td>
                     );
                   })}

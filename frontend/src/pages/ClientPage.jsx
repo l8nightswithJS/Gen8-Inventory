@@ -94,7 +94,9 @@ export default function ClientPage() {
     fetchItems();
   }, [clientId, fetchItems]);
 
-  const handleUpdated = () => fetchItems();
+  const handleUpdated = () => {
+    fetchItems();
+  };
 
   const confirmDelete = async () => {
     if (!deleteItem) return;
@@ -130,28 +132,42 @@ export default function ClientPage() {
     return filtered.slice(start, start + rowsPerPage);
   }, [filtered, page, rowsPerPage]);
 
-  const savedSchema = useMemo(
-    () => getSavedSchema(clientId),
-    [clientId, schemaRev],
-  );
-
   const columns = useMemo(() => {
-    if (savedSchema.length) return savedSchema;
-    const union = new Set(
-      (items || []).flatMap((it) => Object.keys(it.attributes || {})),
-    );
-    const hasQty = QTY_KEYS.some((k) => union.has(k));
-    const withoutQty = [...union].filter((k) => !QTY_KEYS.includes(k));
-    const base = hasQty ? ['quantity', ...withoutQty] : withoutQty;
-    return base.sort((a, b) => {
-      const ia = ORDER_HINT.indexOf(a),
-        ib = ORDER_HINT.indexOf(b);
-      if (ia !== -1 && ib !== -1) return ia - ib;
-      if (ia !== -1) return -1;
-      if (ib !== -1) return 1;
-      return a.localeCompare(b);
-    });
-  }, [items, savedSchema]);
+    let baseSchema = getSavedSchema(clientId);
+
+    if (!baseSchema.length && items.length > 0) {
+      const union = new Set(
+        items.flatMap((it) => Object.keys(it.attributes || {})),
+      );
+      const hasQty = QTY_KEYS.some((k) => union.has(k));
+      const withoutQty = [...union].filter((k) => !QTY_KEYS.includes(k));
+      baseSchema = hasQty ? ['quantity', ...withoutQty] : withoutQty;
+      baseSchema.sort((a, b) => {
+        const ia = ORDER_HINT.indexOf(a),
+          ib = ORDER_HINT.indexOf(b);
+        if (ia !== -1 && ib !== -1) return ia - ib;
+        if (ia !== -1) return -1;
+        if (ib !== -1) return 1;
+        return a.localeCompare(b);
+      });
+    }
+
+    const showLotColumn = items.some((item) => item.attributes?.has_lot);
+
+    if (showLotColumn) {
+      if (!baseSchema.includes('lot_number')) {
+        return [...baseSchema, 'lot_number'];
+      }
+      return baseSchema;
+    } else {
+      return baseSchema.filter((col) => col !== 'lot_number');
+    }
+  }, [items, clientId, schemaRev]);
+
+  const isLotTrackingSystemActive = useMemo(
+    () => items.some((item) => !!item.attributes?.lot_number),
+    [items],
+  );
 
   const handlePrintAll = async () => {
     try {
@@ -298,7 +314,7 @@ export default function ClientPage() {
             saveSchema(clientId, cols);
             setSchemaRev((n) => n + 1);
           }}
-          initial={savedSchema}
+          initial={columns}
         />
       )}
       {showImport && (
@@ -313,13 +329,16 @@ export default function ClientPage() {
           clientId={clientId}
           onClose={() => setShowAddItem(false)}
           onCreated={handleUpdated}
+          isLotTrackingLocked={isLotTrackingSystemActive}
         />
       )}
       {editItem && (
         <EditItemModal
+          open={!!editItem}
           item={editItem}
           onClose={() => setEditItem(null)}
           onUpdated={handleUpdated}
+          isLotTrackingLocked={isLotTrackingSystemActive}
         />
       )}
       {deleteItem && (

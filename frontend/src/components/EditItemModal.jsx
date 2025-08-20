@@ -14,44 +14,33 @@ const LABELS = {
 };
 
 const QTY_KEYS = ['quantity', 'on_hand', 'qty_in_stock', 'stock'];
+const SYSTEM_KEYS = new Set(['has_lot', 'lot_number']);
 
 const titleFor = (key) =>
   LABELS[key] ||
   key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
-export default function EditItemModal({ open, item, onClose, onUpdated }) {
+export default function EditItemModal({
+  open,
+  item,
+  onClose,
+  onUpdated,
+  isLotTrackingLocked,
+}) {
   const attrs = useMemo(() => item?.attributes || {}, [item]);
 
-  // choose a single quantity key to display
   const qtyKey = useMemo(
     () => QTY_KEYS.find((k) => Object.hasOwn(attrs, k)),
     [attrs],
   );
 
-  // final, ordered keys for the form (no duplicates)
   const keys = useMemo(() => {
-    if (!attrs) return [];
-    const base = [
-      'part_number',
-      'description',
-      'reorder_level',
-      'reorder_qty',
-      'lead_times',
-      'type',
-      // only one qty field, if present
-      ...(qtyKey ? [qtyKey] : []),
-      'alert_acknowledged_at',
-      // include barcode if present (trigger will add one after insert)
-      ...(Object.hasOwn(attrs, 'barcode') ? ['barcode'] : []),
-    ];
-
-    // include any additional custom keys not already covered
-    const extra = Object.keys(attrs).filter(
-      (k) => !base.includes(k) && !QTY_KEYS.includes(k),
+    const all = Object.keys(attrs);
+    const dynamicKeys = all.filter(
+      (k) => !QTY_KEYS.includes(k) && !SYSTEM_KEYS.has(k),
     );
-
-    // final order: base first, then extras alphabetically
-    return [...base, ...extra.sort()];
+    if (qtyKey) dynamicKeys.unshift(qtyKey);
+    return dynamicKeys;
   }, [attrs, qtyKey]);
 
   const [form, setForm] = useState({});
@@ -59,23 +48,33 @@ export default function EditItemModal({ open, item, onClose, onUpdated }) {
   useEffect(() => {
     if (!item) return;
     const seeded = {};
-    keys.forEach((k) => {
+    Object.keys(attrs).forEach((k) => {
       const v = attrs[k];
-      if (typeof v === 'boolean') seeded[k] = v;
-      else if (v == null) seeded[k] = '';
-      else seeded[k] = String(v);
+      seeded[k] = v ?? '';
     });
+
+    if (isLotTrackingLocked) {
+      seeded.has_lot = true;
+    } else if (typeof seeded.has_lot === 'undefined') {
+      seeded.has_lot = false;
+    }
+
     setForm(seeded);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [item, keys]);
+  }, [item, attrs, isLotTrackingLocked]);
 
   if (!open || !item) return null;
 
   const onChange = (key, val) => setForm((f) => ({ ...f, [key]: val }));
+  const handleCheckbox = (key, checked) =>
+    setForm((f) => ({ ...f, [key]: checked }));
 
   const onSave = async () => {
     try {
       const payload = { attributes: { ...form } };
+      if (!payload.attributes.has_lot) {
+        delete payload.attributes.lot_number;
+      }
+
       await axios.put(`/api/items/${item.id}?merge=true`, payload);
       onUpdated?.();
       onClose?.();
@@ -102,28 +101,8 @@ export default function EditItemModal({ open, item, onClose, onUpdated }) {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {keys.map((key) => {
             const readOnly = key === 'alert_acknowledged_at';
-            const isBool =
-              typeof attrs[key] === 'boolean' || typeof form[key] === 'boolean';
-
             const label =
               qtyKey && key === qtyKey ? 'Qty On Hand' : titleFor(key);
-
-            if (isBool) {
-              return (
-                <label
-                  key={key}
-                  className="flex items-center gap-2 rounded border p-2"
-                >
-                  <input
-                    type="checkbox"
-                    checked={!!form[key]}
-                    onChange={(e) => onChange(key, e.target.checked)}
-                    disabled={readOnly}
-                  />
-                  <span className="text-sm font-medium">{label}</span>
-                </label>
-              );
-            }
 
             return (
               <div key={key} className="flex flex-col">
@@ -138,6 +117,46 @@ export default function EditItemModal({ open, item, onClose, onUpdated }) {
               </div>
             );
           })}
+        </div>
+
+        <div className="mt-4 pt-4 border-t">
+          <div className="flex items-center space-x-2">
+            <input
+              id="fld-has_lot"
+              type="checkbox"
+              name="has_lot"
+              checked={!!form.has_lot}
+              onChange={(e) => handleCheckbox('has_lot', e.target.checked)}
+              disabled={isLotTrackingLocked}
+              className="h-4 w-4 rounded disabled:opacity-70"
+            />
+            <label
+              htmlFor="fld-has_lot"
+              className={`text-sm text-gray-700 ${
+                isLotTrackingLocked ? 'opacity-70' : ''
+              }`}
+            >
+              Track Lot Number
+            </label>
+          </div>
+
+          {form.has_lot && (
+            <div className="mt-3">
+              <label
+                htmlFor="fld-lot_number"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Lot Number
+              </label>
+              <input
+                id="fld-lot_number"
+                name="lot_number"
+                value={form.lot_number ?? ''}
+                onChange={(e) => onChange('lot_number', e.target.value)}
+                className="w-full sm:w-1/2 border px-3 py-2 rounded border-gray-300"
+              />
+            </div>
+          )}
         </div>
 
         <div className="mt-5 flex items-center justify-end gap-2">

@@ -2,7 +2,7 @@
 import { useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import axios from '../utils/axiosConfig';
-import Button from './ui/Button'; // <-- Use the new Button
+import Button from './ui/Button';
 import { FiUploadCloud } from 'react-icons/fi';
 
 const normalizeKey = (str) =>
@@ -137,8 +137,8 @@ export default function BulkImport({ clientId, refresh, onClose }) {
         items,
       });
       setSuccess(`${resp.data.successCount} items imported successfully.`);
-      resetState();
       await refresh?.();
+      resetState();
       setTimeout(() => onClose?.(), 1500); // Close after showing success message
     } catch (err) {
       console.error(err);

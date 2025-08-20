@@ -14,10 +14,15 @@ const NUMERIC_KEYS = new Set([
   'reorder_qty',
 ]);
 
-export default function AddItemModal({ clientId, onClose, onCreated }) {
+export default function AddItemModal({
+  clientId,
+  onClose,
+  onCreated,
+  isLotTrackingLocked,
+}) {
   const [schema, setSchema] = useState([]);
   const [showSchema, setShowSchema] = useState(false);
-  const [form, setForm] = useState({ alert_enabled: true }); // Default alert to true
+  const [form, setForm] = useState({ alert_enabled: true });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -27,7 +32,11 @@ export default function AddItemModal({ clientId, onClose, onCreated }) {
       setShowSchema(true);
     }
     setSchema(s);
-  }, [clientId]);
+    // If lot tracking is locked system-wide, ensure new items default to it
+    if (isLotTrackingLocked) {
+      setForm((f) => ({ ...f, has_lot: true }));
+    }
+  }, [clientId, isLotTrackingLocked]);
 
   const handleSchemaSave = (cols) => {
     const saved = saveSchema(clientId, cols);
@@ -100,7 +109,7 @@ export default function AddItemModal({ clientId, onClose, onCreated }) {
         attributes,
       });
       onCreated?.(data);
-      onClose(); // Close on success
+      onClose();
     } catch (err) {
       console.error(err);
       setError(err.response?.data?.message || 'Failed to create item.');
@@ -197,10 +206,15 @@ export default function AddItemModal({ clientId, onClose, onCreated }) {
                 name="has_lot"
                 checked={!!form.has_lot}
                 onChange={handleChange}
-                disabled={submitting}
-                className="h-4 w-4 rounded"
+                disabled={submitting || isLotTrackingLocked}
+                className="h-4 w-4 rounded disabled:opacity-70"
               />
-              <label htmlFor="fld-has_lot" className="text-sm text-gray-700">
+              <label
+                htmlFor="fld-has_lot"
+                className={`text-sm text-gray-700 ${
+                  isLotTrackingLocked ? 'opacity-70' : ''
+                }`}
+              >
                 Track Lot Number
               </label>
             </div>
