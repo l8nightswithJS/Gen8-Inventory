@@ -4,7 +4,6 @@ import { FiEdit2, FiTrash2, FiMoreVertical } from 'react-icons/fi';
 import Button from './ui/Button';
 import { computeLowState } from '../utils/stockLogic';
 
-// Column ordering & labels
 const LABEL_OVERRIDES = {
   part_number: 'Part #',
   quantity: 'On Hand',
@@ -17,6 +16,7 @@ const LABEL_OVERRIDES = {
   alert_enabled: 'Enable Low-Stock Alert',
   alert_acknowledged_at: 'Noted',
   barcode: 'Barcode',
+  lead_times: 'Lead Time',
 };
 
 const QTY_KEYS = ['quantity', 'on_hand', 'qty_in_stock', 'stock'];
@@ -36,7 +36,6 @@ const isNumericLike = (k) =>
 
 const shouldNoWrap = (k) => NO_WRAP_COLS.has(k) || isNumericLike(k);
 
-// ---------- Shared cell rendering ----------
 function formatShortDate(value) {
   if (!value) return null;
   const d = new Date(value);
@@ -48,66 +47,59 @@ function formatShortDate(value) {
   }
 }
 
-// ---------- Mobile Card ----------
 function MobileCard({ item, onEdit, onDelete }) {
   const a = item.attributes || {};
   const { low } = computeLowState(a);
-  const showAlert = a.alert_enabled && low;
+  const showAlert = a.alert_enabled !== false && low;
   const part = a.part_number || a.name || '—';
   const onHand = a.quantity ?? a.on_hand ?? a.qty_in_stock ?? a.stock ?? '—';
 
   return (
-    <div className="rounded-xl border bg-white shadow-sm p-3 mb-3">
-      {/* top line */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <div className="font-semibold text-base">{part}</div>
-          {showAlert && (
-            <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
-              Low
-            </span>
+    <div className="rounded-lg border border-slate-200 bg-white shadow-md p-4 mb-4">
+      <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-3">
+        <div>
+          <p className="font-bold text-lg text-slate-800">{part}</p>
+          {a.description && (
+            <p className="text-sm text-slate-500 mt-1 line-clamp-2">
+              {a.description}
+            </p>
           )}
         </div>
-        <div className="text-right">
-          <div className="text-xs text-gray-500">On Hand</div>
-          <div className="font-semibold tabular-nums">{onHand}</div>
+        <div className="text-right flex-shrink-0">
+          <p className="text-xs font-medium text-slate-500">On Hand</p>
+          <p className="font-bold text-2xl text-slate-800 tabular-nums">
+            {onHand}
+          </p>
         </div>
       </div>
 
-      {/* description */}
-      {!!a.description && (
-        <div className="mt-1 text-sm text-gray-700 line-clamp-2">
-          {a.description}
-        </div>
-      )}
-
-      {/* details grid */}
-      <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[13px]">
+      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
         {[
           ['Type', a.type],
-          ['Lead', a.lead_times],
+          ['Lead Time', a.lead_times],
           ['Reorder Lvl', a.reorder_level],
           ['Reorder Qty', a.reorder_qty],
           ['Barcode', a.barcode],
-          ['Noted', formatShortDate(a.alert_acknowledged_at)],
         ]
           .filter(([, v]) => v != null && v !== '')
           .map(([k, v]) => (
-            <div key={k} className="flex items-center justify-between gap-2">
-              <span className="text-gray-500">{k}</span>
-              <span className="font-medium text-gray-800 truncate">
-                {String(v)}
-              </span>
+            <div key={k}>
+              <p className="text-slate-500">{k}</p>
+              <p className="font-medium text-slate-700">{String(v)}</p>
             </div>
           ))}
       </div>
 
-      {/* actions */}
-      <div className="mt-3 flex items-center justify-end gap-2">
+      <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-end gap-2">
+        {showAlert && (
+          <span className="text-xs font-bold text-red-600 mr-auto tracking-wider">
+            LOW STOCK
+          </span>
+        )}
         <Button
           onClick={() => onEdit(item)}
           size="sm"
-          variant="outline"
+          variant="secondary"
           leftIcon={FiEdit2}
         >
           Edit
@@ -115,8 +107,7 @@ function MobileCard({ item, onEdit, onDelete }) {
         <Button
           onClick={() => onDelete(item)}
           size="sm"
-          variant="outline"
-          className="text-rose-700"
+          variant="danger"
           leftIcon={FiTrash2}
         >
           Delete
@@ -126,7 +117,6 @@ function MobileCard({ item, onEdit, onDelete }) {
   );
 }
 
-// ---------- Tablet Compact Row ----------
 function TabletRow({ item, expanded, onToggle, onEdit, onDelete }) {
   const a = item.attributes || {};
   const { low } = computeLowState(a);
@@ -165,7 +155,7 @@ function TabletRow({ item, expanded, onToggle, onEdit, onDelete }) {
               {[
                 ['Description', a.description],
                 ['Type', a.type],
-                ['Lead', a.lead_times],
+                ['Lead Time', a.lead_times],
                 ['Reorder Lvl', a.reorder_level],
                 ['Reorder Qty', a.reorder_qty],
                 ['Noted', formatShortDate(a.alert_acknowledged_at)],
@@ -209,7 +199,6 @@ function TabletRow({ item, expanded, onToggle, onEdit, onDelete }) {
   );
 }
 
-// ---------- Main component ----------
 export default function InventoryTable({
   items,
   columns = [],
@@ -221,18 +210,33 @@ export default function InventoryTable({
   role = 'viewer',
   rowsPerPage,
   onRowsPerPageChange,
-  showRowSelector = true,
-  isAutoRows = false,
-  onAutoRowsToggle,
   viewMode = 'desktop',
 }) {
   const [showRotateNotice, setShowRotateNotice] = useState(false);
+
+  // This effect now ONLY runs once to set up the listener
   useEffect(() => {
-    const f = () => setShowRotateNotice(window.innerWidth < 775);
-    f();
-    window.addEventListener('resize', f);
-    return () => window.removeEventListener('resize', f);
+    const handleResize = () => {
+      const isMobilePortrait =
+        window.innerWidth < 768 && window.innerHeight > window.innerWidth;
+      setShowRotateNotice(isMobilePortrait);
+    };
+    handleResize(); // Check on initial load
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // This new effect handles the auto-dismiss logic
+  useEffect(() => {
+    if (showRotateNotice) {
+      const timer = setTimeout(() => {
+        setShowRotateNotice(false);
+      }, 5000); // Hide after 5 seconds
+
+      // Clean up the timer if the component unmounts or the notice is hidden sooner
+      return () => clearTimeout(timer);
+    }
+  }, [showRotateNotice]);
 
   const safeItems = useMemo(
     () =>
@@ -281,7 +285,6 @@ export default function InventoryTable({
             )}
           </tr>
         </thead>
-
         <tbody>
           {safeItems.length === 0 ? (
             <tr>
@@ -419,78 +422,49 @@ export default function InventoryTable({
     </div>
   );
 
-  const Pager = () => {
-    const base = [8, 10, 12, 15, 20, 25, 30, 40, 50];
-    const seen = new Set(base);
-    const opts = [...base];
-    if (!seen.has(rowsPerPage)) opts.unshift(rowsPerPage);
-
-    return (
-      <div className="js-inventory-pager mt-3 mb-8 flex items-center justify-between gap-3 text-sm text-gray-700">
-        {showRowSelector ? (
-          <div className="flex items-center gap-2">
-            <span className="text-gray-600">Rows:</span>
-            <select
-              value={rowsPerPage}
-              onChange={(e) => {
-                const v = Number(e.target.value);
-                if (isAutoRows && v !== rowsPerPage) onAutoRowsToggle?.(false);
-                onRowsPerPageChange?.(v);
-              }}
-              className="h-8 border rounded px-2 bg-white"
-            >
-              {isAutoRows && (
-                <option value={rowsPerPage}>{`Auto (${rowsPerPage})`}</option>
-              )}
-              {opts.map((n) =>
-                n === rowsPerPage && isAutoRows ? null : (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ),
-              )}
-            </select>
-            {!isAutoRows && (
-              <button
-                onClick={() => onAutoRowsToggle?.(true)}
-                className="px-2 py-1 border rounded bg-white hover:bg-gray-50"
-                title="Return to Auto row fit"
-              >
-                ↻ Auto
-              </button>
-            )}
-          </div>
-        ) : (
-          <div />
-        )}
-
-        <div className="flex items-center gap-2">
-          <button
-            disabled={page <= 1}
-            onClick={() => onPage(page - 1)}
-            className="px-3 py-1.5 border rounded disabled:opacity-50 bg-white hover:bg-gray-50"
-          >
-            Prev
-          </button>
-          <span className="tabular-nums">
-            Page {page} of {totalPages}
-          </span>
-          <button
-            disabled={page >= totalPages}
-            onClick={() => onPage(page + 1)}
-            className="px-3 py-1.5 border rounded disabled:opacity-50 bg-white hover:bg-gray-50"
-          >
-            Next
-          </button>
-        </div>
+  const Pager = () => (
+    <div className="my-4 flex items-center justify-between gap-3 text-sm text-gray-700">
+      <div className="flex items-center gap-2">
+        <span className="text-gray-600">Rows:</span>
+        <select
+          value={rowsPerPage}
+          onChange={(e) => onRowsPerPageChange?.(Number(e.target.value))}
+          className="h-8 border rounded px-2 bg-white"
+        >
+          {[8, 10, 12, 15, 20, 25, 30, 40, 50].map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </select>
       </div>
-    );
-  };
+
+      <div className="flex items-center gap-2">
+        <button
+          disabled={page <= 1}
+          onClick={() => onPage(page - 1)}
+          className="px-3 py-1.5 border rounded disabled:opacity-50 bg-white hover:bg-gray-50"
+        >
+          Prev
+        </button>
+        <span className="tabular-nums">
+          Page {page} of {totalPages}
+        </span>
+        <button
+          disabled={page >= totalPages}
+          onClick={() => onPage(page + 1)}
+          className="px-3 py-1.5 border rounded disabled:opacity-50 bg-white hover:bg-gray-50"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="mt-4 flex flex-col">
       {showRotateNotice && (
-        <div className="bg-yellow-100 border-yellow-300 border px-3 py-2 rounded mb-3 text-yellow-800 text-xs text-center max-w-xl mx-auto">
+        <div className="bg-yellow-100 border-yellow-300 border px-3 py-2 rounded mb-3 text-yellow-800 text-xs text-center max-w-xl mx-auto transition-opacity duration-500">
           📱 For best experience, rotate to landscape.
         </div>
       )}

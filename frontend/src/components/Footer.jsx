@@ -1,41 +1,55 @@
 export default function Footer() {
   const year = new Date().getFullYear();
 
-  return (
-    <footer className="sticky bottom-0 z-20 bg-white/95 border-t backdrop-blur">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-auto md:h-12 py-2 flex flex-col md:flex-row items-center justify-between text-center md:text-left">
-        <div className="flex items-center gap-3 min-w-0 mb-2 md:mb-0">
-          <span className="inline-flex items-center justify-center rounded-md bg-white ring-1 ring-gray-300 p-[2px]">
-            <img
-              src="/logo192.png"
-              alt="Gener8"
-              className="h-6 w-6 md:h-7 md:w-7 object-contain"
-              style={{
-                filter:
-                  'drop-shadow(0 0 1px rgba(0,0,0,.45)) contrast(1.18) saturate(1.05)',
-              }}
-              loading="lazy"
-            />
-          </span>
+  const links = [
+    { href: '/how-to', text: 'How-to Guide' },
+    { href: '/feedback', text: 'Feedback' },
+    { href: '/support', text: 'Support' },
+    { href: '#', text: 'System Status' },
+  ];
 
-          <p className="text-xs sm:text-sm text-gray-600 truncate">
-            “Inventory accuracy is the hallmark of operational excellence.”
-            <span className="hidden sm:inline ml-2 text-gray-500">
-              — Gener8 Team
-            </span>
+  const legalLinks = [
+    { href: '/terms', text: 'Terms' },
+    { href: '/privacy', text: 'Privacy' },
+  ];
+
+  return (
+    <footer className="bg-slate-100 border-t">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-5">
+        {/* Mobile Layout: Stacked */}
+        <div className="sm:hidden text-center">
+          <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
+            {links.map((link) => (
+              <a
+                key={link.text}
+                href={link.href}
+                className="text-sm font-medium text-gray-600 hover:text-gray-900"
+              >
+                {link.text}
+              </a>
+            ))}
+          </nav>
+          <p className="text-sm text-gray-500 mt-4">
+            © {year} Gener8 Inventory, Inc.
           </p>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
-          <a
-            href="/feedback"
-            className="text-xs sm:text-sm px-2 py-1 rounded-md border border-gray-300 hover:bg-gray-50"
-          >
-            Feedback
-          </a>
-          <span className="text-xs sm:text-sm text-gray-500">
-            © {year} Gener8 Inventory
-          </span>
+        {/* Desktop Layout: Horizontal */}
+        <div className="hidden sm:flex items-center justify-between">
+          <p className="text-sm text-gray-500">
+            © {year} Gener8 Inventory, Inc. All rights reserved.
+          </p>
+          <nav className="flex items-center gap-x-6">
+            {[...links, ...legalLinks].map((link) => (
+              <a
+                key={link.text}
+                href={link.href}
+                className="text-sm font-medium text-gray-600 hover:text-gray-900"
+              >
+                {link.text}
+              </a>
+            ))}
+          </nav>
         </div>
       </div>
     </footer>

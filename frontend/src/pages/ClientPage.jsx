@@ -22,6 +22,7 @@ import {
   FiColumns,
   FiPrinter,
   FiCamera,
+  FiChevronLeft, // Import the new icon for the back button
 } from 'react-icons/fi';
 
 const QTY_KEYS = ['quantity', 'on_hand', 'qty_in_stock', 'stock'];
@@ -151,7 +152,6 @@ export default function ClientPage() {
   const columns = useMemo(() => {
     let schema = getSavedSchema(clientId);
 
-    // If no schema is saved, generate a temporary one from the data.
     if (!schema.length && items.length > 0) {
       const keysFromData = new Set(
         items.flatMap((it) => Object.keys(it.attributes || {})),
@@ -161,7 +161,6 @@ export default function ClientPage() {
 
       let generatedSchema = hasQtyKey ? ['on_hand', ...nonQtyKeys] : nonQtyKeys;
 
-      // Sort this fallback schema for predictability
       generatedSchema.sort((a, b) => {
         const hintA = ORDER_HINT.indexOf(a);
         const hintB = ORDER_HINT.indexOf(b);
@@ -173,10 +172,8 @@ export default function ClientPage() {
       schema = generatedSchema;
     }
 
-    // Process the schema for display
     let displayColumns = [...schema];
 
-    // Consolidate quantity keys into 'on_hand' for display
     const hasQtyInSchema = displayColumns.some((k) => QTY_KEYS.includes(k));
     if (hasQtyInSchema) {
       displayColumns = displayColumns.filter((k) => !QTY_KEYS.includes(k));
@@ -185,7 +182,6 @@ export default function ClientPage() {
       }
     }
 
-    // Handle dynamic visibility of lot_number column based on data
     const showLotColumn = items.some((item) => item.attributes?.has_lot);
     const lotInSchema = displayColumns.includes('lot_number');
 
@@ -219,102 +215,91 @@ export default function ClientPage() {
     }
   };
 
-  const Toolbar = ({ isMobile }) => {
-    const buttons = (
-      <>
+  const Toolbar = () => {
+    return (
+      <div className="flex flex-wrap items-center gap-2 mb-4 justify-start sm:justify-end">
         <Button
           onClick={() => setShowSearch((s) => !s)}
           variant="secondary"
-          size={isMobile ? 'sm' : 'md'}
-          leftIcon={FiSearch}
+          title="Search"
         >
-          Search
+          <FiSearch className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Search</span>
         </Button>
         <Button
           onClick={() => setScanOpen(true)}
           variant="secondary"
-          size={isMobile ? 'sm' : 'md'}
-          leftIcon={FiCamera}
+          title="Scan"
         >
-          Scan
+          <FiCamera className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Scan</span>
         </Button>
         {isAdmin && (
           <>
             <Button
               onClick={() => setShowAddItem(true)}
               variant="secondary"
-              size={isMobile ? 'sm' : 'md'}
-              leftIcon={FiPlus}
+              title="Add Item"
             >
-              Add
+              <FiPlus className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Add</span>
             </Button>
             <Button
               onClick={() => setShowImport(true)}
               variant="secondary"
-              size={isMobile ? 'sm' : 'md'}
-              leftIcon={FiLayers}
+              title="Bulk Import"
             >
-              Bulk
+              <FiLayers className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Bulk</span>
             </Button>
             <Button
               as="a"
               href={`/api/items/export?client_id=${clientId}`}
               variant="secondary"
-              size={isMobile ? 'sm' : 'md'}
-              leftIcon={FiDownload}
+              title="Export Data"
             >
-              Export
+              <FiDownload className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Export</span>
             </Button>
             <Button
               onClick={handlePrintAll}
               variant="secondary"
-              size={isMobile ? 'sm' : 'md'}
-              leftIcon={FiPrinter}
+              title="Print All Labels"
             >
-              Print
+              <FiPrinter className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Print</span>
             </Button>
             <Button
               onClick={() => setShowSchema(true)}
               variant="secondary"
-              size={isMobile ? 'sm' : 'md'}
-              leftIcon={FiColumns}
+              title="Edit Columns"
             >
-              Columns
+              <FiColumns className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Columns</span>
             </Button>
           </>
         )}
-      </>
-    );
-
-    if (isMobile) {
-      return (
-        <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 no-scrollbar">
-          {buttons}
-        </div>
-      );
-    }
-    return (
-      <div className="flex flex-wrap items-center gap-2 mb-4 justify-start sm:justify-end">
-        {buttons}
       </div>
     );
   };
 
   return (
     <div className="mx-auto max-w-7xl">
-      <div className="flex items-center gap-4 mb-4">
+      {/* ## REDESIGNED HEADER ## */}
+      <div className="mb-6">
         <button
           onClick={() => navigate('/dashboard')}
-          className="text-sm text-blue-600 hover:underline flex-shrink-0"
+          className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors mb-2"
         >
-          ← All Clients
+          <FiChevronLeft className="h-5 w-5 -ml-1" />
+          All Clients
         </button>
-        <h1 className="text-3xl font-bold truncate leading-tight">
+        <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight truncate">
           {client.name || 'Loading...'}
         </h1>
       </div>
 
-      <Toolbar isMobile={viewMode === 'mobile'} />
+      <Toolbar />
 
       {showSearch && (
         <div className="my-3">

@@ -37,7 +37,8 @@ export default function App() {
 
 function PrivateLayout() {
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
+    // Change background to a soft slate color for a more modern feel
+    <div className="flex flex-col min-h-screen bg-slate-50">
       <Navbar />
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
         <Routes>
