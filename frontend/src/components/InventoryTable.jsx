@@ -8,6 +8,9 @@ import { computeLowState } from '../utils/stockLogic';
 const LABEL_OVERRIDES = {
   part_number: 'Part #',
   quantity: 'On Hand',
+  on_hand: 'On Hand',
+  qty_in_stock: 'On Hand',
+  stock: 'On Hand',
   reorder_level: 'Reorder Level',
   reorder_qty: 'Reorder Qty',
   low_stock_threshold: 'Low-Stock Threshold',
@@ -48,7 +51,8 @@ function formatShortDate(value) {
 // ---------- Mobile Card ----------
 function MobileCard({ item, onEdit, onDelete }) {
   const a = item.attributes || {};
-  const { low } = computeLowState(a); // removed unused `status`
+  const { low } = computeLowState(a);
+  const showAlert = a.alert_enabled && low;
   const part = a.part_number || a.name || '—';
   const onHand = a.quantity ?? a.on_hand ?? a.qty_in_stock ?? a.stock ?? '—';
 
@@ -58,7 +62,7 @@ function MobileCard({ item, onEdit, onDelete }) {
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
           <div className="font-semibold text-base">{part}</div>
-          {low && (
+          {showAlert && (
             <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
               Low
             </span>
@@ -126,16 +130,17 @@ function MobileCard({ item, onEdit, onDelete }) {
 function TabletRow({ item, expanded, onToggle, onEdit, onDelete }) {
   const a = item.attributes || {};
   const { low } = computeLowState(a);
+  const showAlert = a.alert_enabled && low;
   const part = a.part_number || a.name || '—';
   const onHand = a.quantity ?? a.on_hand ?? a.qty_in_stock ?? a.stock ?? '—';
   const barcode = a.barcode || '—';
 
   return (
     <>
-      <tr className={`${low ? 'bg-red-50' : 'bg-white'} border-t`}>
+      <tr className={`${showAlert ? 'bg-red-50' : 'bg-white'} border-t`}>
         <td className="px-2 py-2 font-medium">
           {part}{' '}
-          {low && (
+          {showAlert && (
             <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[10px] text-red-700">
               Low
             </span>
@@ -207,7 +212,7 @@ function TabletRow({ item, expanded, onToggle, onEdit, onDelete }) {
 // ---------- Main component ----------
 export default function InventoryTable({
   items,
-  columns = [], // Use columns prop
+  columns = [],
   page,
   totalPages,
   onPage,
@@ -237,7 +242,6 @@ export default function InventoryTable({
     [items],
   );
 
-  // ---------- Desktop Table ----------
   const DesktopTable = () => (
     <div className="js-inventory-card overflow-x-auto bg-white shadow-md rounded-lg">
       <table className="js-inventory-table w-full table-auto border-collapse text-sm">
@@ -292,11 +296,12 @@ export default function InventoryTable({
             safeItems.map((item) => {
               const a = item.attributes || {};
               const { low } = computeLowState(a);
+              const showAlert = a.alert_enabled !== false && low;
               return (
                 <tr
                   key={item.id}
                   className={`border-t ${
-                    low ? 'bg-red-50' : 'bg-white'
+                    showAlert ? 'bg-red-50' : 'bg-white'
                   } hover:bg-gray-50`}
                 >
                   {columns.map((key) => {
@@ -368,7 +373,6 @@ export default function InventoryTable({
     </div>
   );
 
-  // ---------- Tablet Compact ----------
   const [expandedId, setExpandedId] = useState(null);
   const TabletTable = () => (
     <div className="overflow-x-auto bg-white shadow-md rounded-lg">
@@ -407,7 +411,6 @@ export default function InventoryTable({
     </div>
   );
 
-  // ---------- Mobile Cards ----------
   const MobileCards = () => (
     <div>
       {safeItems.map((it) => (
@@ -416,7 +419,6 @@ export default function InventoryTable({
     </div>
   );
 
-  // ---------- Pager ----------
   const Pager = () => {
     const base = [8, 10, 12, 15, 20, 25, 30, 40, 50];
     const seen = new Set(base);
@@ -432,7 +434,6 @@ export default function InventoryTable({
               value={rowsPerPage}
               onChange={(e) => {
                 const v = Number(e.target.value);
-                // selecting any fixed value flips to manual
                 if (isAutoRows && v !== rowsPerPage) onAutoRowsToggle?.(false);
                 onRowsPerPageChange?.(v);
               }}
@@ -486,7 +487,6 @@ export default function InventoryTable({
     );
   };
 
-  // ---------- Render ----------
   return (
     <div className="mt-4 flex flex-col">
       {showRotateNotice && (

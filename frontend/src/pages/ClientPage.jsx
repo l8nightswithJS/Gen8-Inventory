@@ -27,11 +27,15 @@ import {
 const QTY_KEYS = ['quantity', 'on_hand', 'qty_in_stock', 'stock'];
 const ORDER_HINT = [
   'part_number',
+  'name',
   'description',
-  'quantity',
+  'on_hand',
+  'location',
   'reorder_level',
   'reorder_qty',
-  'location',
+  'lead_times',
+  'lot_number',
+  'barcode',
 ];
 
 export default function ClientPage() {
@@ -55,6 +59,18 @@ export default function ClientPage() {
   const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(15);
   const [viewMode, setViewMode] = useState('desktop');
+
+  const processedItems = useMemo(() => {
+    return items.map((item) => {
+      const attrs = item.attributes || {};
+      const qtyKey = QTY_KEYS.find((key) => attrs[key] != null);
+      const newAttrs = { ...attrs };
+      if (qtyKey) {
+        newAttrs.on_hand = attrs[qtyKey];
+      }
+      return { ...item, attributes: newAttrs };
+    });
+  }, [items]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -110,9 +126,9 @@ export default function ClientPage() {
   };
 
   const filtered = useMemo(() => {
-    if (!query) return items;
+    if (!query) return processedItems;
     const q = query.trim().toLowerCase();
-    return items.filter((item) => {
+    return processedItems.filter((item) => {
       const attr = item.attributes || {};
       return ['name', 'part_number', 'description'].some((key) =>
         String(attr[key] ?? '')
@@ -120,7 +136,7 @@ export default function ClientPage() {
           .includes(q),
       );
     });
-  }, [items, query]);
+  }, [processedItems, query]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
   useEffect(() => {
@@ -133,35 +149,53 @@ export default function ClientPage() {
   }, [filtered, page, rowsPerPage]);
 
   const columns = useMemo(() => {
-    let baseSchema = getSavedSchema(clientId);
+    let schema = getSavedSchema(clientId);
 
-    if (!baseSchema.length && items.length > 0) {
-      const union = new Set(
+    // If no schema is saved, generate a temporary one from the data.
+    if (!schema.length && items.length > 0) {
+      const keysFromData = new Set(
         items.flatMap((it) => Object.keys(it.attributes || {})),
       );
-      const hasQty = QTY_KEYS.some((k) => union.has(k));
-      const withoutQty = [...union].filter((k) => !QTY_KEYS.includes(k));
-      baseSchema = hasQty ? ['quantity', ...withoutQty] : withoutQty;
-      baseSchema.sort((a, b) => {
-        const ia = ORDER_HINT.indexOf(a),
-          ib = ORDER_HINT.indexOf(b);
-        if (ia !== -1 && ib !== -1) return ia - ib;
-        if (ia !== -1) return -1;
-        if (ib !== -1) return 1;
+      const nonQtyKeys = [...keysFromData].filter((k) => !QTY_KEYS.includes(k));
+      const hasQtyKey = QTY_KEYS.some((k) => keysFromData.has(k));
+
+      let generatedSchema = hasQtyKey ? ['on_hand', ...nonQtyKeys] : nonQtyKeys;
+
+      // Sort this fallback schema for predictability
+      generatedSchema.sort((a, b) => {
+        const hintA = ORDER_HINT.indexOf(a);
+        const hintB = ORDER_HINT.indexOf(b);
+        if (hintA !== -1 && hintB !== -1) return hintA - hintB;
+        if (hintA !== -1) return -1;
+        if (hintB !== -1) return 1;
         return a.localeCompare(b);
       });
+      schema = generatedSchema;
     }
 
-    const showLotColumn = items.some((item) => item.attributes?.has_lot);
+    // Process the schema for display
+    let displayColumns = [...schema];
 
-    if (showLotColumn) {
-      if (!baseSchema.includes('lot_number')) {
-        return [...baseSchema, 'lot_number'];
+    // Consolidate quantity keys into 'on_hand' for display
+    const hasQtyInSchema = displayColumns.some((k) => QTY_KEYS.includes(k));
+    if (hasQtyInSchema) {
+      displayColumns = displayColumns.filter((k) => !QTY_KEYS.includes(k));
+      if (!displayColumns.includes('on_hand')) {
+        displayColumns.push('on_hand');
       }
-      return baseSchema;
-    } else {
-      return baseSchema.filter((col) => col !== 'lot_number');
     }
+
+    // Handle dynamic visibility of lot_number column based on data
+    const showLotColumn = items.some((item) => item.attributes?.has_lot);
+    const lotInSchema = displayColumns.includes('lot_number');
+
+    if (showLotColumn && !lotInSchema) {
+      displayColumns.push('lot_number');
+    } else if (!showLotColumn && lotInSchema) {
+      displayColumns = displayColumns.filter((col) => col !== 'lot_number');
+    }
+
+    return displayColumns;
   }, [items, clientId, schemaRev]);
 
   const isLotTrackingSystemActive = useMemo(

@@ -14,6 +14,14 @@ const NUMERIC_KEYS = new Set([
   'reorder_qty',
 ]);
 
+// Keys handled in the dedicated alert section
+const ALERT_SYSTEM_KEYS = new Set([
+  'alert_enabled',
+  'low_stock_threshold',
+  'reorder_level',
+  'reorder_qty',
+]);
+
 export default function AddItemModal({
   clientId,
   onClose,
@@ -32,7 +40,6 @@ export default function AddItemModal({
       setShowSchema(true);
     }
     setSchema(s);
-    // If lot tracking is locked system-wide, ensure new items default to it
     if (isLotTrackingLocked) {
       setForm((f) => ({ ...f, has_lot: true }));
     }
@@ -52,45 +59,30 @@ export default function AddItemModal({
     }));
   };
 
-  const validate = () => {
-    const needs = ['name', 'part_number'];
-    for (const k of needs) {
-      if (schema.includes(k) && !String(form[k] ?? '').trim()) {
-        setError(`'${k.replace(/_/g, ' ')}' is a required field.`);
-        return false;
-      }
-    }
-    return true;
-  };
-
   const buildAttributes = () => {
     const attrs = {};
-    for (const key of schema) {
+    // Add dynamically rendered fields from schema
+    schema.forEach((key) => {
+      if (ALERT_SYSTEM_KEYS.has(key)) return; // Skip alert keys, handled below
       const raw = form[key];
-      if (raw == null || raw === '') continue;
-      if (NUMERIC_KEYS.has(key)) {
-        const n = Number(raw);
-        if (Number.isFinite(n)) attrs[key] = n;
-      } else {
-        attrs[key] = typeof raw === 'string' ? raw.trim() : raw;
-      }
-    }
+      if (raw == null || raw === '') return;
+      attrs[key] = typeof raw === 'string' ? raw.trim() : raw;
+    });
 
+    // Add special and alert-related fields
     if (!schema.includes('barcode') && form.barcode) {
-      const code = String(form.barcode).trim();
-      if (code) attrs.barcode = code;
+      attrs.barcode = String(form.barcode).trim() || undefined;
     }
-
-    if ('has_lot' in form) attrs.has_lot = !!form.has_lot;
-    if (attrs.has_lot) {
-      const lot = String(form.lot_number || '').trim();
-      if (lot) attrs.lot_number = lot;
+    if (form.has_lot) {
+      attrs.has_lot = true;
+      attrs.lot_number = String(form.lot_number || '').trim() || undefined;
     }
-    if ('low_stock_threshold' in form) {
-      const n = Number(form.low_stock_threshold);
-      if (Number.isFinite(n)) attrs.low_stock_threshold = n;
+    attrs.alert_enabled = !!form.alert_enabled;
+    if (attrs.alert_enabled) {
+      attrs.low_stock_threshold = Number(form.low_stock_threshold) || undefined;
+      attrs.reorder_level = Number(form.reorder_level) || undefined;
+      attrs.reorder_qty = Number(form.reorder_qty) || undefined;
     }
-    if ('alert_enabled' in form) attrs.alert_enabled = !!form.alert_enabled;
 
     return attrs;
   };
@@ -98,8 +90,6 @@ export default function AddItemModal({
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!validate()) return;
-
     const attributes = buildAttributes();
 
     try {
@@ -158,26 +148,28 @@ export default function AddItemModal({
         <form id="add-item-form" onSubmit={handleSubmit} className="space-y-4">
           {error && <p className="text-red-600 text-sm">{error}</p>}
 
-          {schema.map((key) => (
-            <div key={key}>
-              <label
-                htmlFor={`fld-${key}`}
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                {humanize(key)}
-              </label>
-              <input
-                id={`fld-${key}`}
-                name={key}
-                type={NUMERIC_KEYS.has(key) ? 'number' : 'text'}
-                min={NUMERIC_KEYS.has(key) ? '0' : undefined}
-                value={form[key] ?? ''}
-                onChange={handleChange}
-                className="w-full border px-3 py-2 rounded border-gray-300"
-                disabled={submitting}
-              />
-            </div>
-          ))}
+          {schema
+            .filter((key) => !ALERT_SYSTEM_KEYS.has(key))
+            .map((key) => (
+              <div key={key}>
+                <label
+                  htmlFor={`fld-${key}`}
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  {humanize(key)}
+                </label>
+                <input
+                  id={`fld-${key}`}
+                  name={key}
+                  type={NUMERIC_KEYS.has(key) ? 'number' : 'text'}
+                  min={NUMERIC_KEYS.has(key) ? '0' : undefined}
+                  value={form[key] ?? ''}
+                  onChange={handleChange}
+                  className="w-full border px-3 py-2 rounded border-gray-300"
+                  disabled={submitting}
+                />
+              </div>
+            ))}
 
           {!schema.includes('barcode') && (
             <div>
@@ -199,6 +191,10 @@ export default function AddItemModal({
           )}
 
           <div className="pt-2 border-t space-y-4">
+            <h4 className="text-base font-semibold text-gray-800">
+              Tracking & Alerts
+            </h4>
+            {/* Lot Number Section */}
             <div className="flex items-center space-x-2">
               <input
                 id="fld-has_lot"
@@ -218,9 +214,8 @@ export default function AddItemModal({
                 Track Lot Number
               </label>
             </div>
-
             {form.has_lot && (
-              <div>
+              <div className="pl-6">
                 <label
                   htmlFor="fld-lot_number"
                   className="block text-sm font-medium text-gray-700 mb-1"
@@ -237,26 +232,7 @@ export default function AddItemModal({
                 />
               </div>
             )}
-
-            <div>
-              <label
-                htmlFor="fld-low_stock_threshold"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Low Stock Threshold
-              </label>
-              <input
-                id="fld-low_stock_threshold"
-                name="low_stock_threshold"
-                type="number"
-                min="0"
-                value={form.low_stock_threshold ?? ''}
-                onChange={handleChange}
-                className="w-full border px-3 py-2 rounded border-gray-300"
-                disabled={submitting}
-              />
-            </div>
-
+            {/* Low Stock Alert Section */}
             <div className="flex items-center space-x-2">
               <input
                 id="fld-alert_enabled"
@@ -274,18 +250,46 @@ export default function AddItemModal({
                 Enable Low-Stock Alert
               </label>
             </div>
-          </div>
-
-          <div className="text-xs text-gray-500 text-center">
-            Need to change columns?{' '}
-            <button
-              type="button"
-              className="underline"
-              onClick={() => setShowSchema(true)}
-              disabled={submitting}
-            >
-              Edit columns
-            </button>
+            {form.alert_enabled && (
+              <div className="pl-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label
+                    htmlFor="fld-reorder_level"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Reorder Level
+                  </label>
+                  <input
+                    id="fld-reorder_level"
+                    name="reorder_level"
+                    type="number"
+                    min="0"
+                    value={form.reorder_level ?? ''}
+                    onChange={handleChange}
+                    className="w-full border px-3 py-2 rounded border-gray-300"
+                    disabled={submitting}
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="fld-reorder_qty"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Reorder Quantity
+                  </label>
+                  <input
+                    id="fld-reorder_qty"
+                    name="reorder_qty"
+                    type="number"
+                    min="0"
+                    value={form.reorder_qty ?? ''}
+                    onChange={handleChange}
+                    className="w-full border px-3 py-2 rounded border-gray-300"
+                    disabled={submitting}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </form>
       </BaseModal>

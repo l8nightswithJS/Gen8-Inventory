@@ -1,5 +1,5 @@
 // src/components/BulkImport.jsx
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import axios from '../utils/axiosConfig';
 import Button from './ui/Button';
@@ -19,6 +19,17 @@ const humanLabel = (key) =>
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase());
 
+// Dictionary of keywords to look for in uploaded file headers
+const AUTO_MAP_SUGGESTIONS = {
+  part_number: ['part', 'part_number', 'part #', 'sku'],
+  description: ['desc', 'description'],
+  quantity: ['qty', 'quantity', 'on_hand', 'stock', 'qty_in_stock'],
+  reorder_level: ['reorder_level', 'reorder level', 'threshold', 'restock_at'],
+  reorder_qty: ['reorder_qty', 'reorder quantity', 'restock_qty'],
+  location: ['location', 'loc', 'bin'],
+  lot_number: ['lot', 'lot_number', 'lot #'],
+};
+
 const NUMERIC_KEYS = new Set([
   'quantity',
   'on_hand',
@@ -26,6 +37,7 @@ const NUMERIC_KEYS = new Set([
   'stock',
   'reorder_level',
   'reorder_qty',
+  'low_stock_threshold',
 ]);
 
 export default function BulkImport({ clientId, refresh, onClose }) {
@@ -39,6 +51,30 @@ export default function BulkImport({ clientId, refresh, onClose }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // This effect runs when headers are found and attempts to auto-map them.
+  useEffect(() => {
+    if (!headers.length) return;
+
+    const newInputs = {};
+    const newMapping = {};
+
+    headers.forEach((header) => {
+      const normalizedHeader = normalizeKey(header).replace(/_/g, ' ');
+      for (const [internalKey, aliases] of Object.entries(
+        AUTO_MAP_SUGGESTIONS,
+      )) {
+        if (aliases.includes(normalizedHeader)) {
+          newInputs[header] = internalKey;
+          newMapping[header] = internalKey;
+          break; // Move to the next header once a match is found
+        }
+      }
+    });
+
+    setInputValues(newInputs);
+    setMapping(newMapping);
+  }, [headers]);
 
   const resetState = () => {
     setHeaders([]);
@@ -64,7 +100,6 @@ export default function BulkImport({ clientId, refresh, onClose }) {
         let rows = [];
         let sheetHeaders = [];
         if (/\.csv$/i.test(file.name)) {
-          // Basic CSV parsing
           const text = evt.target.result;
           const lines = text
             .split('\n')
@@ -79,7 +114,6 @@ export default function BulkImport({ clientId, refresh, onClose }) {
             }, {});
           });
         } else {
-          // XLSX parsing
           const wb = XLSX.read(evt.target.result, { type: 'binary' });
           const ws = wb.Sheets[wb.SheetNames[0]];
           rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
@@ -139,7 +173,7 @@ export default function BulkImport({ clientId, refresh, onClose }) {
       setSuccess(`${resp.data.successCount} items imported successfully.`);
       await refresh?.();
       resetState();
-      setTimeout(() => onClose?.(), 1500); // Close after showing success message
+      setTimeout(() => onClose?.(), 1500);
     } catch (err) {
       console.error(err);
       setError(err.response?.data?.message || 'Bulk import failed');

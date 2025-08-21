@@ -2,22 +2,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import axios from '../utils/axiosConfig';
 
-const LABELS = {
-  part_number: 'Part Number',
-  description: 'Description',
-  reorder_level: 'Reorder Level',
-  reorder_qty: 'Reorder Qty',
-  lead_times: 'Lead Times',
-  type: 'Type',
-  alert_acknowledged_at: 'Alert Acknowledged At',
-  barcode: 'Barcode',
-};
-
 const QTY_KEYS = ['quantity', 'on_hand', 'qty_in_stock', 'stock'];
-const SYSTEM_KEYS = new Set(['has_lot', 'lot_number']);
+const SYSTEM_KEYS = new Set([
+  'has_lot',
+  'lot_number',
+  'alert_enabled',
+  'low_stock_threshold',
+  'reorder_level',
+  'reorder_qty',
+]);
 
 const titleFor = (key) =>
-  LABELS[key] ||
   key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
 export default function EditItemModal({
@@ -29,34 +24,29 @@ export default function EditItemModal({
 }) {
   const attrs = useMemo(() => item?.attributes || {}, [item]);
 
-  const qtyKey = useMemo(
-    () => QTY_KEYS.find((k) => Object.hasOwn(attrs, k)),
-    [attrs],
-  );
-
   const keys = useMemo(() => {
     const all = Object.keys(attrs);
     const dynamicKeys = all.filter(
       (k) => !QTY_KEYS.includes(k) && !SYSTEM_KEYS.has(k),
     );
+    const qtyKey = QTY_KEYS.find((k) => all.includes(k));
     if (qtyKey) dynamicKeys.unshift(qtyKey);
     return dynamicKeys;
-  }, [attrs, qtyKey]);
+  }, [attrs]);
 
   const [form, setForm] = useState({});
 
   useEffect(() => {
     if (!item) return;
-    const seeded = {};
-    Object.keys(attrs).forEach((k) => {
-      const v = attrs[k];
-      seeded[k] = v ?? '';
-    });
+    const seeded = { ...attrs };
 
     if (isLotTrackingLocked) {
       seeded.has_lot = true;
     } else if (typeof seeded.has_lot === 'undefined') {
       seeded.has_lot = false;
+    }
+    if (typeof seeded.alert_enabled === 'undefined') {
+      seeded.alert_enabled = true; // Default to on
     }
 
     setForm(seeded);
@@ -73,6 +63,11 @@ export default function EditItemModal({
       const payload = { attributes: { ...form } };
       if (!payload.attributes.has_lot) {
         delete payload.attributes.lot_number;
+      }
+      if (!payload.attributes.alert_enabled) {
+        delete payload.attributes.reorder_level;
+        delete payload.attributes.reorder_qty;
+        delete payload.attributes.low_stock_threshold;
       }
 
       await axios.put(`/api/items/${item.id}?merge=true`, payload);
@@ -99,27 +94,26 @@ export default function EditItemModal({
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {keys.map((key) => {
-            const readOnly = key === 'alert_acknowledged_at';
-            const label =
-              qtyKey && key === qtyKey ? 'Qty On Hand' : titleFor(key);
-
-            return (
-              <div key={key} className="flex flex-col">
-                <label className="mb-1 text-sm font-medium">{label}</label>
-                <input
-                  className="rounded border px-3 py-2 outline-none focus:ring"
-                  value={form[key] ?? ''}
-                  onChange={(e) => onChange(key, e.target.value)}
-                  placeholder={label}
-                  readOnly={readOnly}
-                />
-              </div>
-            );
-          })}
+          {keys.map((key) => (
+            <div key={key} className="flex flex-col">
+              <label className="mb-1 text-sm font-medium">
+                {titleFor(key)}
+              </label>
+              <input
+                className="rounded border px-3 py-2 outline-none focus:ring"
+                value={form[key] ?? ''}
+                onChange={(e) => onChange(key, e.target.value)}
+                placeholder={titleFor(key)}
+              />
+            </div>
+          ))}
         </div>
 
-        <div className="mt-4 pt-4 border-t">
+        <div className="mt-4 pt-4 border-t space-y-4">
+          <h4 className="text-base font-semibold text-gray-800">
+            Tracking & Alerts
+          </h4>
+          {/* Lot Number Section */}
           <div className="flex items-center space-x-2">
             <input
               id="fld-has_lot"
@@ -139,9 +133,8 @@ export default function EditItemModal({
               Track Lot Number
             </label>
           </div>
-
           {form.has_lot && (
-            <div className="mt-3">
+            <div className="pl-6">
               <label
                 htmlFor="fld-lot_number"
                 className="block text-sm font-medium text-gray-700 mb-1"
@@ -155,6 +148,63 @@ export default function EditItemModal({
                 onChange={(e) => onChange('lot_number', e.target.value)}
                 className="w-full sm:w-1/2 border px-3 py-2 rounded border-gray-300"
               />
+            </div>
+          )}
+          {/* Low Stock Alert Section */}
+          <div className="flex items-center space-x-2">
+            <input
+              id="fld-alert_enabled"
+              type="checkbox"
+              name="alert_enabled"
+              checked={!!form.alert_enabled}
+              onChange={(e) =>
+                handleCheckbox('alert_enabled', e.target.checked)
+              }
+              className="h-4 w-4 rounded"
+            />
+            <label
+              htmlFor="fld-alert_enabled"
+              className="text-sm text-gray-700"
+            >
+              Enable Low-Stock Alert
+            </label>
+          </div>
+          {form.alert_enabled && (
+            <div className="pl-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label
+                  htmlFor="fld-reorder_level"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Reorder Level
+                </label>
+                <input
+                  id="fld-reorder_level"
+                  name="reorder_level"
+                  type="number"
+                  min="0"
+                  value={form.reorder_level ?? ''}
+                  onChange={(e) => onChange('reorder_level', e.target.value)}
+                  className="w-full border px-3 py-2 rounded border-gray-300"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="fld-reorder_qty"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Reorder Quantity
+                </label>
+                <input
+                  id="fld-reorder_qty"
+                  name="reorder_qty"
+                  type="number"
+                  min="0"
+                  value={form.reorder_qty ?? ''}
+                  onChange={(e) => onChange('reorder_qty', e.target.value)}
+                  className="w-full border px-3 py-2 rounded border-gray-300"
+                />
+              </div>
             </div>
           )}
         </div>

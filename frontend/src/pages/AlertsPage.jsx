@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from '../utils/axiosConfig';
-import { computeLowState } from '../utils/stockLogic';
 
 const THRESHOLD_LABELS = {
   low_stock_threshold: 'Low-Stock Threshold',
@@ -20,25 +19,9 @@ export default function AlertsPage() {
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
 
-  // Map backend rows/items → alert rows we render
-  const toRow = (row) => {
-    const itemObj = row?.item ?? row ?? {};
-    const attrs = itemObj.attributes ?? itemObj ?? {};
-    const { low, reason, threshold, qty } = computeLowState(attrs);
-    if (!low) return null;
-
-    return {
-      id: itemObj.id,
-      name: attrs.name ?? attrs.part_number ?? `Item ${itemObj.id}`,
-      qty,
-      threshold,
-      reason,
-      triggered_at: row?.triggered_at || itemObj.updated_at || null,
-    };
-  };
-
-  // Centralized loader, reused by useEffect and on-error resyncs
   const loadAlerts = useCallback(async () => {
+    setLoading(true);
+    setError('');
     if (!clientId) {
       setError('No client specified.');
       setAlerts([]);
@@ -46,61 +29,38 @@ export default function AlertsPage() {
       return;
     }
     try {
+      // The backend API is the single source of truth for alerts.
+      // We will render the data exactly as it comes from this endpoint.
       const { data } = await axios.get('/api/items/alerts', {
         params: { client_id: Number(clientId) },
-        meta: { silent: true },
       });
-      setAlerts((Array.isArray(data) ? data : []).map(toRow).filter(Boolean));
-      setError('');
-    } catch (err1) {
-      // Fallback: derive alerts from /api/items if the alerts endpoint isn’t available
-      try {
-        const { data: items } = await axios.get('/api/items', {
-          params: { client_id: Number(clientId) },
-          meta: { silent: true },
-        });
-        setAlerts(
-          (Array.isArray(items) ? items : []).map(toRow).filter(Boolean),
-        );
-        setError('');
-      } catch (err2) {
-        console.error('Failed to load alerts', err1, err2);
-        setAlerts([]);
-        setError('Failed to load alerts.');
-      }
+      setAlerts(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Failed to load alerts:', err);
+      setAlerts([]);
+      setError('Failed to load alerts. Please try again.');
     } finally {
       setLoading(false);
       setPage(1);
     }
   }, [clientId]);
 
-  // Initial + client change
   useEffect(() => {
-    setLoading(true);
     loadAlerts();
   }, [loadAlerts]);
 
-  // Acknowledge one alert (optimistic), resync if it fails
   const acknowledge = async (itemId) => {
-    setAlerts((prev) => prev.filter((a) => a.id !== itemId)); // optimistic UI
+    // Optimistically remove the alert from the UI
+    setAlerts((prev) => prev.filter((a) => a.id !== itemId));
     try {
-      await axios.post(`/api/items/alerts/${itemId}/acknowledge`, null, {
-        meta: { silent: true },
-      });
+      await axios.post(`/api/items/alerts/${itemId}/acknowledge`, null);
     } catch (err) {
       console.error('Failed to acknowledge alert', err);
-      setError(
-        `Failed to acknowledge alert for item ${itemId}: ${
-          err?.message || 'Unknown error'
-        }`,
-      );
-      // Re-sync from backend in case optimistic update was wrong
-      setLoading(true);
+      // On failure, reload data from the server to re-sync the UI
       await loadAlerts();
     }
   };
 
-  // Pagination bookkeeping
   const totalPages = Math.max(1, Math.ceil(alerts.length / ROWS_PER_PAGE));
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -139,7 +99,6 @@ export default function AlertsPage() {
   );
 
   return (
-    // full-height column; table scrolls inside, never behind footer
     <div className="flex h-full min-h-0 flex-col max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-3">
         <button
@@ -164,29 +123,35 @@ export default function AlertsPage() {
             </tr>
           </thead>
           <tbody>
-            {pageItems.map((a) => (
-              <tr key={a.id} className="border-t bg-red-50">
+            {pageItems.map((alert) => (
+              <tr key={alert.id} className="border-t bg-red-50">
                 <td className="px-4 py-2">
                   <div className="flex items-center gap-2">
                     <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
                       Low
                     </span>
-                    <span className="break-words">{a.name}</span>
+                    <span className="break-words">
+                      {alert.item?.attributes?.name ??
+                        alert.item?.attributes?.part_number ??
+                        `Item ${alert.id}`}
+                    </span>
                   </div>
                 </td>
-                <td className="px-4 py-2 text-center">{a.qty ?? '—'}</td>
-                <td className="px-4 py-2 text-center">{a.threshold ?? '—'}</td>
-                <td className="px-4 py-2">
-                  {THRESHOLD_LABELS[a.reason] ?? '—'}
+                <td className="px-4 py-2 text-center">{alert.qty ?? '—'}</td>
+                <td className="px-4 py-2 text-center">
+                  {alert.threshold ?? '—'}
                 </td>
                 <td className="px-4 py-2">
-                  {a.triggered_at
-                    ? new Date(a.triggered_at).toLocaleString()
+                  {THRESHOLD_LABELS[alert.reason] ?? '—'}
+                </td>
+                <td className="px-4 py-2">
+                  {alert.triggered_at
+                    ? new Date(alert.triggered_at).toLocaleString()
                     : '—'}
                 </td>
                 <td className="px-4 py-2 text-center">
                   <button
-                    onClick={() => acknowledge(a.id)}
+                    onClick={() => acknowledge(alert.id)}
                     className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs"
                   >
                     Acknowledge
