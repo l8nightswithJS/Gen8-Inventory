@@ -1,13 +1,25 @@
 // src/components/EditItemModal.jsx
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import axios from '../utils/axiosConfig';
+import BaseModal from './ui/BaseModal';
+import Button from './ui/Button';
 
-const QTY_KEYS = ['quantity', 'on_hand', 'qty_in_stock', 'stock'];
+// Added the missing QTY_KEYS constant
+const QTY_KEYS = new Set(['on_hand', 'quantity', 'qty_in_stock', 'stock']);
+
+const NUMERIC_KEYS = new Set([
+  'on_hand',
+  'quantity',
+  'qty_in_stock',
+  'stock',
+  'reorder_level',
+  'reorder_qty',
+]);
+
 const SYSTEM_KEYS = new Set([
   'has_lot',
   'lot_number',
   'alert_enabled',
-  'low_stock_threshold',
   'reorder_level',
   'reorder_qty',
 ]);
@@ -16,28 +28,17 @@ const titleFor = (key) =>
   key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
 export default function EditItemModal({
-  open,
   item,
+  schema = [],
   onClose,
   onUpdated,
   isLotTrackingLocked,
 }) {
-  const attrs = useMemo(() => item?.attributes || {}, [item]);
-
-  const keys = useMemo(() => {
-    const all = Object.keys(attrs);
-    const dynamicKeys = all.filter(
-      (k) => !QTY_KEYS.includes(k) && !SYSTEM_KEYS.has(k),
-    );
-    const qtyKey = QTY_KEYS.find((k) => all.includes(k));
-    if (qtyKey) dynamicKeys.unshift(qtyKey);
-    return dynamicKeys;
-  }, [attrs]);
-
   const [form, setForm] = useState({});
 
   useEffect(() => {
     if (!item) return;
+    const attrs = item.attributes || {};
     const seeded = { ...attrs };
 
     if (isLotTrackingLocked) {
@@ -46,13 +47,11 @@ export default function EditItemModal({
       seeded.has_lot = false;
     }
     if (typeof seeded.alert_enabled === 'undefined') {
-      seeded.alert_enabled = true; // Default to on
+      seeded.alert_enabled = true;
     }
 
     setForm(seeded);
-  }, [item, attrs, isLotTrackingLocked]);
-
-  if (!open || !item) return null;
+  }, [item, isLotTrackingLocked]);
 
   const onChange = (key, val) => setForm((f) => ({ ...f, [key]: val }));
   const handleCheckbox = (key, checked) =>
@@ -67,7 +66,6 @@ export default function EditItemModal({
       if (!payload.attributes.alert_enabled) {
         delete payload.attributes.reorder_level;
         delete payload.attributes.reorder_qty;
-        delete payload.attributes.low_stock_threshold;
       }
 
       await axios.put(`/api/items/${item.id}?merge=true`, payload);
@@ -79,151 +77,135 @@ export default function EditItemModal({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-full max-w-3xl rounded-lg bg-white p-4 shadow-lg">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Edit Inventory Item</h2>
-          <button
-            onClick={onClose}
-            className="rounded px-2 py-1 text-gray-600 hover:bg-gray-100"
-            aria-label="Close"
-          >
-            ×
-          </button>
-        </div>
+  const humanize = (key) => {
+    if (QTY_KEYS.has(key)) return 'On Hand';
+    return titleFor(key);
+  };
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {keys.map((key) => (
-            <div key={key} className="flex flex-col">
+  return (
+    <BaseModal isOpen={!!item} onClose={onClose} title="Edit Inventory Item">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {schema
+          .filter((key) => !SYSTEM_KEYS.has(key))
+          .map((key) => (
+            <div key={key}>
               <label className="mb-1 text-sm font-medium">
-                {titleFor(key)}
+                {humanize(key)}
               </label>
               <input
-                className="rounded border px-3 py-2 outline-none focus:ring"
+                className="rounded border px-3 py-2 outline-none focus:ring w-full"
                 value={form[key] ?? ''}
                 onChange={(e) => onChange(key, e.target.value)}
-                placeholder={titleFor(key)}
+                type={NUMERIC_KEYS.has(key) ? 'number' : 'text'}
               />
             </div>
           ))}
-        </div>
+      </div>
 
-        <div className="mt-4 pt-4 border-t space-y-4">
-          <h4 className="text-base font-semibold text-gray-800">
-            Tracking & Alerts
-          </h4>
-          {/* Lot Number Section */}
-          <div className="flex items-center space-x-2">
-            <input
-              id="fld-has_lot"
-              type="checkbox"
-              name="has_lot"
-              checked={!!form.has_lot}
-              onChange={(e) => handleCheckbox('has_lot', e.target.checked)}
-              disabled={isLotTrackingLocked}
-              className="h-4 w-4 rounded disabled:opacity-70"
-            />
+      <div className="mt-4 pt-4 border-t space-y-4">
+        <h4 className="text-base font-semibold text-gray-800">
+          Tracking & Alerts
+        </h4>
+        <div className="flex items-center space-x-2">
+          <input
+            id="fld-has_lot"
+            type="checkbox"
+            name="has_lot"
+            checked={!!form.has_lot}
+            onChange={(e) => handleCheckbox('has_lot', e.target.checked)}
+            disabled={isLotTrackingLocked}
+            className="h-4 w-4 rounded disabled:opacity-70"
+          />
+          <label
+            htmlFor="fld-has_lot"
+            className={`text-sm text-gray-700 ${
+              isLotTrackingLocked ? 'opacity-70' : ''
+            }`}
+          >
+            Track Lot Number
+          </label>
+        </div>
+        {form.has_lot && (
+          <div className="pl-6">
+            {/* Added htmlFor and id to link the label and input */}
             <label
-              htmlFor="fld-has_lot"
-              className={`text-sm text-gray-700 ${
-                isLotTrackingLocked ? 'opacity-70' : ''
-              }`}
+              htmlFor="edit-lot_number"
+              className="block text-sm font-medium text-gray-700 mb-1"
             >
-              Track Lot Number
+              Lot Number
             </label>
+            <input
+              id="edit-lot_number"
+              name="lot_number"
+              value={form.lot_number ?? ''}
+              onChange={(e) => onChange('lot_number', e.target.value)}
+              className="w-full sm:w-1/2 border px-3 py-2 rounded border-gray-300"
+            />
           </div>
-          {form.has_lot && (
-            <div className="pl-6">
+        )}
+        <div className="flex items-center space-x-2">
+          <input
+            id="fld-alert_enabled"
+            type="checkbox"
+            name="alert_enabled"
+            checked={!!form.alert_enabled}
+            onChange={(e) => handleCheckbox('alert_enabled', e.target.checked)}
+            className="h-4 w-4 rounded"
+          />
+          <label htmlFor="fld-alert_enabled" className="text-sm text-gray-700">
+            Enable Low-Stock Alert
+          </label>
+        </div>
+        {form.alert_enabled && (
+          <div className="pl-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              {/* Added htmlFor and id to link the label and input */}
               <label
-                htmlFor="fld-lot_number"
+                htmlFor="edit-reorder_level"
                 className="block text-sm font-medium text-gray-700 mb-1"
               >
-                Lot Number
+                Reorder Level
               </label>
               <input
-                id="fld-lot_number"
-                name="lot_number"
-                value={form.lot_number ?? ''}
-                onChange={(e) => onChange('lot_number', e.target.value)}
-                className="w-full sm:w-1/2 border px-3 py-2 rounded border-gray-300"
+                id="edit-reorder_level"
+                name="reorder_level"
+                type="number"
+                min="0"
+                value={form.reorder_level ?? ''}
+                onChange={(e) => onChange('reorder_level', e.target.value)}
+                className="w-full border px-3 py-2 rounded border-gray-300"
               />
             </div>
-          )}
-          {/* Low Stock Alert Section */}
-          <div className="flex items-center space-x-2">
-            <input
-              id="fld-alert_enabled"
-              type="checkbox"
-              name="alert_enabled"
-              checked={!!form.alert_enabled}
-              onChange={(e) =>
-                handleCheckbox('alert_enabled', e.target.checked)
-              }
-              className="h-4 w-4 rounded"
-            />
-            <label
-              htmlFor="fld-alert_enabled"
-              className="text-sm text-gray-700"
-            >
-              Enable Low-Stock Alert
-            </label>
-          </div>
-          {form.alert_enabled && (
-            <div className="pl-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label
-                  htmlFor="fld-reorder_level"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Reorder Level
-                </label>
-                <input
-                  id="fld-reorder_level"
-                  name="reorder_level"
-                  type="number"
-                  min="0"
-                  value={form.reorder_level ?? ''}
-                  onChange={(e) => onChange('reorder_level', e.target.value)}
-                  className="w-full border px-3 py-2 rounded border-gray-300"
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="fld-reorder_qty"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Reorder Quantity
-                </label>
-                <input
-                  id="fld-reorder_qty"
-                  name="reorder_qty"
-                  type="number"
-                  min="0"
-                  value={form.reorder_qty ?? ''}
-                  onChange={(e) => onChange('reorder_qty', e.target.value)}
-                  className="w-full border px-3 py-2 rounded border-gray-300"
-                />
-              </div>
+            <div>
+              {/* Added htmlFor and id to link the label and input */}
+              <label
+                htmlFor="edit-reorder_qty"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Reorder Quantity
+              </label>
+              <input
+                id="edit-reorder_qty"
+                name="reorder_qty"
+                type="number"
+                min="0"
+                value={form.reorder_qty ?? ''}
+                onChange={(e) => onChange('reorder_qty', e.target.value)}
+                className="w-full border px-3 py-2 rounded border-gray-300"
+              />
             </div>
-          )}
-        </div>
-
-        <div className="mt-5 flex items-center justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="rounded border px-4 py-2 text-gray-700 hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onSave}
-            className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-          >
-            Save
-          </button>
-        </div>
+          </div>
+        )}
       </div>
-    </div>
+
+      <div className="mt-5 flex items-center justify-end gap-2">
+        <Button variant="secondary" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button variant="primary" onClick={onSave}>
+          Save
+        </Button>
+      </div>
+    </BaseModal>
   );
 }

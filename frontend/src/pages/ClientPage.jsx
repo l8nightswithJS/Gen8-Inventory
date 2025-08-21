@@ -22,7 +22,7 @@ import {
   FiColumns,
   FiPrinter,
   FiCamera,
-  FiChevronLeft, // Import the new icon for the back button
+  FiChevronLeft,
 } from 'react-icons/fi';
 
 const QTY_KEYS = ['quantity', 'on_hand', 'qty_in_stock', 'stock'];
@@ -52,7 +52,7 @@ export default function ClientPage() {
   const [showImport, setShowImport] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [deleteItem, setDeleteItem] = useState(null);
-  const [showSchema, setShowSchema] = useState(false);
+  const [showColumnSetup, setShowColumnSetup] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [schemaRev, setSchemaRev] = useState(0);
   const [scanOpen, setScanOpen] = useState(false);
@@ -93,8 +93,12 @@ export default function ClientPage() {
       const validItems = Array.isArray(data) ? data : [];
       setItems(validItems);
       setError('');
-      if (!validItems.length && !getSavedSchema(clientId).length && isAdmin) {
-        setShowSchema(true);
+      if (
+        validItems.length === 0 &&
+        !getSavedSchema(clientId).length &&
+        isAdmin
+      ) {
+        setShowColumnSetup(true);
       }
     } catch (err) {
       console.error(err);
@@ -215,77 +219,74 @@ export default function ClientPage() {
     }
   };
 
-  const Toolbar = () => {
-    return (
-      <div className="flex flex-wrap items-center gap-2 mb-4 justify-start sm:justify-end">
-        <Button
-          onClick={() => setShowSearch((s) => !s)}
-          variant="secondary"
-          title="Search"
-        >
-          <FiSearch className="h-4 w-4 sm:mr-2" />
-          <span className="hidden sm:inline">Search</span>
-        </Button>
-        <Button
-          onClick={() => setScanOpen(true)}
-          variant="secondary"
-          title="Scan"
-        >
-          <FiCamera className="h-4 w-4 sm:mr-2" />
-          <span className="hidden sm:inline">Scan</span>
-        </Button>
-        {isAdmin && (
-          <>
-            <Button
-              onClick={() => setShowAddItem(true)}
-              variant="secondary"
-              title="Add Item"
-            >
-              <FiPlus className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Add</span>
-            </Button>
-            <Button
-              onClick={() => setShowImport(true)}
-              variant="secondary"
-              title="Bulk Import"
-            >
-              <FiLayers className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Bulk</span>
-            </Button>
-            <Button
-              as="a"
-              href={`/api/items/export?client_id=${clientId}`}
-              variant="secondary"
-              title="Export Data"
-            >
-              <FiDownload className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Export</span>
-            </Button>
-            <Button
-              onClick={handlePrintAll}
-              variant="secondary"
-              title="Print All Labels"
-            >
-              <FiPrinter className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Print</span>
-            </Button>
-            <Button
-              onClick={() => setShowSchema(true)}
-              variant="secondary"
-              title="Edit Columns"
-            >
-              <FiColumns className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Columns</span>
-            </Button>
-          </>
-        )}
-      </div>
-    );
-  };
+  const Toolbar = () => (
+    <div className="flex flex-wrap items-center gap-2 mb-4 justify-start sm:justify-end">
+      <Button
+        onClick={() => setShowSearch((s) => !s)}
+        variant="secondary"
+        title="Search"
+      >
+        <FiSearch className="h-4 w-4 sm:mr-2" />
+        <span className="hidden sm:inline">Search</span>
+      </Button>
+      <Button
+        onClick={() => setScanOpen(true)}
+        variant="secondary"
+        title="Scan"
+      >
+        <FiCamera className="h-4 w-4 sm:mr-2" />
+        <span className="hidden sm:inline">Scan</span>
+      </Button>
+      {isAdmin && (
+        <>
+          <Button
+            onClick={() => setShowAddItem(true)}
+            variant="secondary"
+            title="Add Item"
+          >
+            <FiPlus className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Add</span>
+          </Button>
+          <Button
+            onClick={() => setShowImport(true)}
+            variant="secondary"
+            title="Bulk Import"
+          >
+            <FiLayers className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Bulk</span>
+          </Button>
+          <Button
+            as="a"
+            href={`/api/items/export?client_id=${clientId}`}
+            variant="secondary"
+            title="Export Data"
+          >
+            <FiDownload className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Export</span>
+          </Button>
+          <Button
+            onClick={handlePrintAll}
+            variant="secondary"
+            title="Print All Labels"
+          >
+            <FiPrinter className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Print</span>
+          </Button>
+          <Button
+            onClick={() => setShowColumnSetup(true)}
+            variant="secondary"
+            title="Edit Columns"
+          >
+            <FiColumns className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Columns</span>
+          </Button>
+        </>
+      )}
+    </div>
+  );
 
   return (
     <div className="mx-auto max-w-7xl">
-      {/* ## REDESIGNED HEADER ## */}
       <div className="mb-6">
         <button
           onClick={() => navigate('/dashboard')}
@@ -325,13 +326,14 @@ export default function ClientPage() {
         viewMode={viewMode}
       />
 
-      {showSchema && (
+      {showColumnSetup && (
         <ColumnSetupModal
-          isOpen={showSchema}
-          onClose={() => setShowSchema(false)}
+          isOpen={showColumnSetup}
+          onClose={() => setShowColumnSetup(false)}
           onSave={(cols) => {
             saveSchema(clientId, cols);
             setSchemaRev((n) => n + 1);
+            setShowColumnSetup(false);
           }}
           initial={columns}
         />
@@ -345,6 +347,7 @@ export default function ClientPage() {
       )}
       {showAddItem && (
         <AddItemModal
+          schema={columns} // Pass the unified schema
           clientId={clientId}
           onClose={() => setShowAddItem(false)}
           onCreated={handleUpdated}
@@ -353,7 +356,7 @@ export default function ClientPage() {
       )}
       {editItem && (
         <EditItemModal
-          open={!!editItem}
+          schema={columns} // Pass the unified schema
           item={editItem}
           onClose={() => setEditItem(null)}
           onUpdated={handleUpdated}
