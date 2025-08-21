@@ -125,7 +125,6 @@ exports.updateUser = async (req, res, next) => {
     if (req.body.role) updates.role = req.body.role;
 
     if (Object.keys(updates).length === 0) {
-      // Fetch and return current user data if no changes submitted
       const { data: currentUser, error: currentError } = await supabase
         .from('users')
         .select('id, username, role, approved, created_at')
