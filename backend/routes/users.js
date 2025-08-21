@@ -1,7 +1,7 @@
 // backend/routes/users.js
 const express = require('express');
 const { body, param } = require('express-validator');
-const ctrl = require('../controllers/usersController'); // Corrected controller name
+const ctrl = require('../controllers/userController'); // Corrected controller name
 const authenticate = require('../middleware/authMiddleware');
 const requireRole = require('../middleware/requireRole');
 const { handleValidation } = require('../middleware/validationMiddleware');
