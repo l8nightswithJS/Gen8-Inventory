@@ -19,7 +19,6 @@ const humanLabel = (key) =>
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase());
 
-// Dictionary of keywords to look for in uploaded file headers
 const AUTO_MAP_SUGGESTIONS = {
   part_number: ['part', 'part_number', 'part #', 'sku'],
   description: ['desc', 'description'],
@@ -52,13 +51,10 @@ export default function BulkImport({ clientId, refresh, onClose }) {
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // This effect runs when headers are found and attempts to auto-map them.
   useEffect(() => {
     if (!headers.length) return;
-
     const newInputs = {};
     const newMapping = {};
-
     headers.forEach((header) => {
       const normalizedHeader = normalizeKey(header).replace(/_/g, ' ');
       for (const [internalKey, aliases] of Object.entries(
@@ -67,15 +63,15 @@ export default function BulkImport({ clientId, refresh, onClose }) {
         if (aliases.includes(normalizedHeader)) {
           newInputs[header] = internalKey;
           newMapping[header] = internalKey;
-          break; // Move to the next header once a match is found
+          break;
         }
       }
     });
-
     setInputValues(newInputs);
     setMapping(newMapping);
   }, [headers]);
 
+  // This function now only resets the data state, not the file input itself.
   const resetState = () => {
     setHeaders([]);
     setRawRows([]);
@@ -83,18 +79,23 @@ export default function BulkImport({ clientId, refresh, onClose }) {
     setInputValues({});
     setMapping({});
     setFileName('');
-    if (fileRef.current) fileRef.current.value = '';
   };
 
   const handleFileChange = (e) => {
+    // 1. Get the file from the input event FIRST.
+    const file = e.target.files[0];
+    if (!file) {
+      return;
+    }
+
+    // 2. Now that we have the file, reset the previous data state.
     resetState();
     setError('');
     setSuccess('');
-    const file = e.target.files[0];
-    if (!file) return;
-
     setFileName(file.name);
+
     const reader = new FileReader();
+
     reader.onload = (evt) => {
       try {
         let rows = [];
@@ -129,6 +130,13 @@ export default function BulkImport({ clientId, refresh, onClose }) {
         );
       }
     };
+
+    reader.onerror = (err) => {
+      console.error('FileReader error:', err);
+      setError('An error occurred while trying to read the file.');
+    };
+
+    // 3. Finally, read the file.
     reader.readAsBinaryString(file);
   };
 
@@ -173,6 +181,8 @@ export default function BulkImport({ clientId, refresh, onClose }) {
       setSuccess(`${resp.data.successCount} items imported successfully.`);
       await refresh?.();
       resetState();
+      // Clear the file input value only after a successful import
+      if (fileRef.current) fileRef.current.value = '';
       setTimeout(() => onClose?.(), 1500);
     } catch (err) {
       console.error(err);

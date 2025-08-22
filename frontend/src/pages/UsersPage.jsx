@@ -2,48 +2,98 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from '../utils/axiosConfig';
 import ConfirmModal from '../components/ConfirmModal';
-import UserForm from '../components/UserForm';
+import UserFormModal from '../components/UserFormModal';
+import Button from '../components/ui/Button';
+import { FiEdit2, FiTrash2, FiCheck, FiX } from 'react-icons/fi';
+
+const UserCard = ({ user, onApprove, onDeny, onEdit, onDelete, isPending }) => (
+  <div
+    className={`rounded-lg border bg-white shadow-md p-4 mb-4 ${
+      isPending ? 'border-amber-300' : 'border-slate-200'
+    }`}
+  >
+    <div className="flex items-start justify-between">
+      <div>
+        <p className="font-bold text-lg text-slate-800">{user.username}</p>
+        <p className="text-sm font-medium bg-slate-100 text-slate-600 inline-block px-2 py-0.5 rounded-full mt-1 capitalize">
+          {user.role}
+        </p>
+      </div>
+      {isPending ? (
+        <div className="flex items-center gap-2">
+          <Button onClick={() => onApprove(user)} size="sm" variant="success">
+            <FiCheck className="mr-2" />
+            Approve
+          </Button>
+          <Button onClick={() => onDeny(user)} size="sm" variant="danger">
+            <FiX className="mr-2" />
+            Deny
+          </Button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-1">
+          <Button
+            onClick={() => onEdit(user)}
+            variant="ghost"
+            size="sm"
+            title="Edit"
+          >
+            <FiEdit2 />
+          </Button>
+          <Button
+            onClick={() => onDelete(user)}
+            variant="ghost"
+            size="sm"
+            title="Delete"
+            className="text-rose-600"
+          >
+            <FiTrash2 />
+          </Button>
+        </div>
+      )}
+    </div>
+  </div>
+);
 
 export default function UsersPage() {
-  const [users, setUsers] = useState([]); // all users
+  const [users, setUsers] = useState([]);
   const [pendingUsers, setPendingUsers] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [confirm, setConfirm] = useState({
-    type: '', // 'delete' | 'approve' | 'deny'
-    id: null, // user ID for the action
-    username: '', // username for display
+    type: '',
+    id: null,
+    username: '',
     open: false,
     loading: false,
   });
+  const [viewMode, setViewMode] = useState('desktop');
 
-  const isAdmin = localStorage.getItem('role') === 'admin';
-
-  // fetch all approved + pending users
-  const fetchUsers = useCallback(async () => {
-    try {
-      const res = await axios.get('/api/users');
-      setUsers(res.data);
-    } catch (err) {
-      console.error('fetchUsers error', err);
-    }
-  }, []);
-
-  // fetch only pending users
-  const fetchPending = useCallback(async () => {
-    try {
-      const res = await axios.get('/api/users/pending');
-      setPendingUsers(res.data);
-    } catch (err) {
-      console.error('fetchPending error', err);
-    }
-  }, []);
-
-  // initial load
   useEffect(() => {
-    fetchUsers();
-    fetchPending();
-  }, [fetchUsers, fetchPending]);
+    const handleResize = () => {
+      window.innerWidth < 768 ? setViewMode('mobile') : setViewMode('desktop');
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const fetchAllUsers = useCallback(async () => {
+    try {
+      const [usersRes, pendingRes] = await Promise.all([
+        axios.get('/api/users'),
+        axios.get('/api/users/pending'),
+      ]);
+      setUsers(usersRes.data);
+      setPendingUsers(pendingRes.data);
+    } catch (err) {
+      console.error('Error fetching users:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAllUsers();
+  }, [fetchAllUsers]);
 
   const openForm = (user) => {
     setEditingUser(user);
@@ -51,8 +101,6 @@ export default function UsersPage() {
   };
 
   const openConfirm = (type, user) => {
-    // ensure pendingUsers up to date
-    fetchPending();
     setConfirm({
       type,
       id: user.id,
@@ -60,7 +108,6 @@ export default function UsersPage() {
       open: true,
       loading: false,
     });
-    console.log('Opening confirm for:', user.id, user.username);
   };
   const closeConfirm = () =>
     setConfirm({
@@ -72,158 +119,157 @@ export default function UsersPage() {
     });
 
   const handleConfirm = async () => {
-    const action = confirm.type;
-    const targetId = confirm.id;
-    console.log(
-      'Confirming action:',
-      action,
-      'on id:',
-      targetId,
-      'pending IDs:',
-      pendingUsers.map((u) => u.id),
-    );
-
     setConfirm((c) => ({ ...c, loading: true }));
-
     try {
-      if (action === 'approve') {
-        await axios.put(`/api/users/${targetId}/approve`);
+      if (confirm.type === 'approve') {
+        await axios.post(`/api/users/${confirm.id}/approve`);
       } else {
-        await axios.delete(`/api/users/${targetId}`);
+        await axios.delete(`/api/users/${confirm.id}`);
       }
-      closeConfirm();
-      await fetchUsers();
-      await fetchPending();
+      await fetchAllUsers();
     } catch (err) {
       console.error('handleConfirm error', err);
-      alert(`Failed to ${action} user. Check console for details.`);
+      alert(`Failed to ${confirm.type} user.`);
     } finally {
-      setConfirm((c) => ({ ...c, loading: false }));
+      closeConfirm();
     }
   };
 
-  return (
-    <div className="px-4 py-6 max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold">Manage Users</h2>
-        {isAdmin && (
-          <button
-            onClick={() => openForm(null)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
-          >
-            + Add User
-          </button>
-        )}
-      </div>
-
-      {/* Users Table */}
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm border">
-          <thead className="bg-gray-100">
-            <tr>
-              <th className="border p-2 text-left">Username</th>
-              <th className="border p-2 text-left">Role</th>
-              {isAdmin && <th className="border p-2 text-left">Actions</th>}
+  const UserTable = () => (
+    <div className="overflow-x-auto bg-white shadow-md rounded-lg">
+      <table className="min-w-full text-sm border-collapse">
+        <thead className="bg-slate-50 border-b">
+          <tr>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-600">
+              Username
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-600">
+              Role
+            </th>
+            <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-slate-600">
+              Actions
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {pendingUsers.map((u) => (
+            <tr
+              key={`p-${u.id}`}
+              className="border-b last:border-b-0 bg-amber-50"
+            >
+              <td className="px-4 py-3 font-medium text-slate-800">
+                {u.username}{' '}
+                <span className="text-amber-600 font-normal">(Pending)</span>
+              </td>
+              <td className="px-4 py-3 capitalize text-slate-600">{u.role}</td>
+              <td className="px-4 py-3 text-center">
+                <div className="flex items-center justify-center gap-2">
+                  {/* Changed to new 'success' variant */}
+                  <Button
+                    onClick={() => openConfirm('approve', u)}
+                    size="sm"
+                    variant="success"
+                  >
+                    Approve
+                  </Button>
+                  <Button
+                    onClick={() => openConfirm('deny', u)}
+                    size="sm"
+                    variant="danger"
+                  >
+                    Deny
+                  </Button>
+                </div>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {/* Pending users */}
-            {pendingUsers.map((u) => (
-              <tr
-                key={`p-${u.id}`}
-                className="border-t bg-red-50 animate-pulse"
-              >
-                <td className="p-2">{u.username}</td>
-                <td className="p-2 capitalize">{u.role}</td>
-                {isAdmin && (
-                  <td className="p-2 space-x-3">
-                    <button
-                      onClick={() => openConfirm('approve', u)}
-                      className="text-green-700 hover:underline"
-                    >
-                      Approve
-                    </button>
-                    <button
-                      onClick={() => openConfirm('deny', u)}
-                      className="text-red-600 hover:underline"
-                    >
-                      Deny
-                    </button>
-                  </td>
-                )}
-              </tr>
-            ))}
+          ))}
+          {users.map((u) => (
+            <tr
+              key={u.id}
+              className="border-b last:border-b-0 hover:bg-slate-50"
+            >
+              <td className="px-4 py-3 font-medium text-slate-800">
+                {u.username}
+              </td>
+              <td className="px-4 py-3 capitalize text-slate-600">{u.role}</td>
+              <td className="px-4 py-3 text-center">
+                <div className="flex items-center justify-center gap-1">
+                  <Button onClick={() => openForm(u)} variant="ghost" size="sm">
+                    <FiEdit2 />
+                  </Button>
+                  <Button
+                    onClick={() => openConfirm('delete', u)}
+                    variant="ghost"
+                    size="sm"
+                    className="text-rose-600"
+                  >
+                    <FiTrash2 />
+                  </Button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 
-            {/* Approved users */}
-            {users
-              .filter((u) => u.approved)
-              .map((u) => (
-                <tr key={u.id} className="border-t">
-                  <td className="p-2">{u.username}</td>
-                  <td className="p-2 capitalize">{u.role}</td>
-                  {isAdmin && (
-                    <td className="p-2 space-x-3">
-                      <button
-                        onClick={() => openForm(u)}
-                        className="text-blue-600 hover:underline"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => openConfirm('delete', u)}
-                        className="text-red-600 hover:underline"
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  )}
-                </tr>
-              ))}
-          </tbody>
-        </table>
+  return (
+    <div className="max-w-4xl mx-auto">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
+        <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight">
+          Manage Users
+        </h1>
+        {/* Changed to 'secondary' variant */}
+        <Button variant="secondary" onClick={() => openForm(null)}>
+          + Add User
+        </Button>
       </div>
 
-      {/* User Form Modal */}
-      {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded shadow-md max-w-sm w-full mx-4 relative">
-            <UserForm
-              userToEdit={editingUser}
-              onSuccess={() => {
-                fetchUsers();
-                fetchPending();
-                setShowForm(false);
-              }}
-              onClose={() => setShowForm(false)}
+      {viewMode === 'mobile' ? (
+        <div>
+          {pendingUsers.map((u) => (
+            <UserCard
+              key={`p-${u.id}`}
+              user={u}
+              onApprove={openConfirm.bind(null, 'approve')}
+              onDeny={openConfirm.bind(null, 'deny')}
+              isPending
             />
-          </div>
+          ))}
+          {users.map((u) => (
+            <UserCard
+              key={u.id}
+              user={u}
+              onEdit={openForm}
+              onDelete={openConfirm.bind(null, 'delete')}
+            />
+          ))}
         </div>
+      ) : (
+        <UserTable />
       )}
 
-      {/* Confirm Modal */}
+      <UserFormModal
+        isOpen={showForm}
+        userToEdit={editingUser}
+        onSuccess={() => {
+          fetchAllUsers();
+          setShowForm(false);
+        }}
+        onClose={() => setShowForm(false)}
+      />
+
       {confirm.open && (
         <ConfirmModal
-          title={
-            confirm.type === 'approve'
-              ? 'Approve User'
-              : confirm.type === 'deny'
-              ? 'Deny User'
-              : 'Delete User'
-          }
-          message={
-            confirm.type === 'approve'
-              ? `Approve "${confirm.username}"?`
-              : confirm.type === 'deny'
-              ? `Deny "${confirm.username}"? This deletes their request.`
-              : `Delete "${confirm.username}"?`
-          }
+          title={`${
+            confirm.type.charAt(0).toUpperCase() + confirm.type.slice(1)
+          } User`}
+          message={`Are you sure you want to ${confirm.type} "${confirm.username}"?`}
           variant={confirm.type === 'approve' ? 'success' : 'danger'}
-          cancelText="No"
-          confirmText="Yes"
-          loading={confirm.loading}
           onCancel={closeConfirm}
           onConfirm={handleConfirm}
+          loading={confirm.loading}
         />
       )}
     </div>

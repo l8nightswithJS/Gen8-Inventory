@@ -1,7 +1,9 @@
+// src/pages/Dashboard.jsx
 import { useState, useEffect, useCallback } from 'react';
 import axios from '../utils/axiosConfig';
 import ClientCarousel from '../components/ClientCarousel';
 import AddClientModal from '../components/AddClientModal';
+import Button from '../components/ui/Button';
 
 export default function Dashboard() {
   const [clients, setClients] = useState([]);
@@ -33,25 +35,37 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="px-4 py-8 max-w-screen-xl mx-auto">
-      <h2 className="text-2xl font-bold mb-6">Projects Dashboard</h2>
-      {error && <p className="text-red-500 mb-4">{error}</p>}
+    <div className="max-w-7xl mx-auto">
+      <div className="flex justify-between items-center mb-6 px-4 sm:px-0">
+        <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+          Clients
+        </h1>
+        {/* Changed button to the secondary style for a cleaner look */}
+        <Button variant="secondary" onClick={() => setShowAddModal(true)}>
+          + Add Client
+        </Button>
+      </div>
 
-      <ClientCarousel
-        clients={clients}
-        onClientDeleted={handleDelete}
-        onClientUpdated={fetchClients}
-        onAddClient={() => setShowAddModal(true)}
-      />
+      {error && <p className="text-red-500 mb-4 px-4 sm:px-0">{error}</p>}
 
-      <AddClientModal
-        isOpen={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        onClientAdded={() => {
-          fetchClients();
-          setShowAddModal(false);
-        }}
-      />
+      <div className="px-4 sm:px-0">
+        <ClientCarousel
+          clients={clients}
+          onClientDeleted={handleDelete}
+          onClientUpdated={fetchClients}
+        />
+      </div>
+
+      {showAddModal && (
+        <AddClientModal
+          isOpen={showAddModal}
+          onClose={() => setShowAddModal(false)}
+          onClientAdded={() => {
+            fetchClients();
+            setShowAddModal(false);
+          }}
+        />
+      )}
     </div>
   );
 }

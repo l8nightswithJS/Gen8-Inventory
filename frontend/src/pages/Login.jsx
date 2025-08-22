@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from '../utils/axiosConfig';
 import logoSvg from '../assets/logo.svg';
+import SignupModal from '../components/SignupModal';
+import { FiUser, FiLock } from 'react-icons/fi';
 
 function isTokenValid(token) {
   if (!token) return false;
@@ -19,6 +21,7 @@ export default function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [showSignup, setShowSignup] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -42,79 +45,110 @@ export default function Login() {
       localStorage.setItem('role', data.role);
       navigate('/dashboard');
     } catch {
-      setError('Login failed');
+      setError('Invalid username or password.');
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-b from-white to-gray-50">
-      {/* Navbar */}
-      <header className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 flex justify-between items-center">
-        <h1 className="flex items-center gap-2 text-2xl sm:text-3xl font-bold">
-          <img src={logoSvg} alt="Gener8" className="h-8 sm:h-10" />
-          <span className="text-green-500">Inventory</span>
-        </h1>
-      </header>
-
-      {/* Main login card */}
-      <main className="flex-grow flex items-center justify-center px-4">
-        <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow-xl">
-          <h2 className="text-2xl font-extrabold text-gray-900 text-center mb-6">
-            Log in to your account
-          </h2>
-
-          {error && (
-            <div className="bg-red-100 text-red-700 px-4 py-2 rounded mb-4 text-center">
-              {error}
+    <>
+      <div className="min-h-screen flex flex-col md:flex-row">
+        {/* Left Panel: Branded side, hidden on mobile */}
+        <div className="hidden md:flex md:w-1/2 lg:w-2/5 bg-slate-900 text-white p-12 flex-col justify-between">
+          <div>
+            <div className="flex items-center gap-3">
+              <img src={logoSvg} alt="Gener8 Logo" className="h-10 w-10" />
+              <span className="font-semibold text-2xl text-blue-400">
+                Gener8 <span className="text-white">Inventory</span>
+              </span>
             </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="username" className="block text-gray-700 mb-1">
-                Username
-              </label>
-              <input
-                id="username"
-                name="username"
-                type="text"
-                autoComplete="username"
-                required
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full border border-gray-300 px-4 py-2 rounded
-                           focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="password" className="block text-gray-700 mb-1">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full border border-gray-300 px-4 py-2 rounded
-                           focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white
-                         font-semibold py-2 rounded-full transition-transform
-                         transform hover:scale-105"
-            >
-              Log In
-            </button>
-          </form>
+            <p className="mt-8 text-2xl font-light text-slate-300">
+              “Inventory accuracy is the hallmark of operational excellence.”
+            </p>
+          </div>
+          <p className="text-sm text-slate-400">
+            &copy; {new Date().getFullYear()} Gener8, Inc.
+          </p>
         </div>
-      </main>
-    </div>
+
+        {/* Right Panel: Login Form */}
+        <div className="w-full md:w-1/2 lg:w-3/5 bg-slate-50 flex flex-col items-center justify-center p-4">
+          <div className="w-full max-w-sm">
+            <h2 className="text-3xl font-extrabold text-slate-900 text-center">
+              Welcome Back
+            </h2>
+            <p className="text-center text-slate-500 mt-2">
+              Sign in to continue
+            </p>
+
+            {error && (
+              <div className="bg-red-100 border border-red-300 text-red-800 px-4 py-3 rounded-lg my-6 text-center text-sm">
+                {error}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="mt-8 space-y-6">
+              <div className="relative">
+                <FiUser className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
+                <input
+                  id="username"
+                  name="username"
+                  type="text"
+                  autoComplete="username"
+                  required
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="w-full border border-gray-300 pl-10 pr-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Username"
+                />
+              </div>
+
+              <div className="relative">
+                <FiLock className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full border border-gray-300 pl-10 pr-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Password"
+                />
+              </div>
+
+              <div className="text-sm text-right">
+                {/* Changed from an <a> tag to a <button> to fix the accessibility error */}
+                <button
+                  type="button"
+                  className="font-medium text-blue-600 hover:text-blue-500"
+                >
+                  Forgot password?
+                </button>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                Sign In
+              </button>
+            </form>
+            {/* Changed "Don't" to "Don&apos;t" to fix the unescaped entity error */}
+            <p className="mt-6 text-center text-sm text-slate-600">
+              Don&apos;t have an account?{' '}
+              <button
+                onClick={() => setShowSignup(true)}
+                className="font-medium text-blue-600 hover:text-blue-500"
+              >
+                Request Access
+              </button>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {showSignup && <SignupModal onClose={() => setShowSignup(false)} />}
+    </>
   );
 }

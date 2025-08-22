@@ -56,10 +56,22 @@ export default function ClientPage() {
   const [showSearch, setShowSearch] = useState(false);
   const [schemaRev, setSchemaRev] = useState(0);
   const [scanOpen, setScanOpen] = useState(false);
+  const [savedSchema, setSavedSchema] = useState(() =>
+    getSavedSchema(clientId),
+  );
+
+  const [sortConfig, setSortConfig] = useState({
+    key: 'part_number',
+    direction: 'ascending',
+  });
 
   const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(15);
   const [viewMode, setViewMode] = useState('desktop');
+
+  useEffect(() => {
+    setSavedSchema(getSavedSchema(clientId));
+  }, [clientId, schemaRev]);
 
   const processedItems = useMemo(() => {
     return items.map((item) => {
@@ -77,7 +89,6 @@ export default function ClientPage() {
     const handleResize = () => {
       const w = window.innerWidth;
       if (w < 768) setViewMode('mobile');
-      else if (w < 1024) setViewMode('tablet');
       else setViewMode('desktop');
     };
     handleResize();
@@ -130,7 +141,7 @@ export default function ClientPage() {
     }
   };
 
-  const filtered = useMemo(() => {
+  const filteredItems = useMemo(() => {
     if (!query) return processedItems;
     const q = query.trim().toLowerCase();
     return processedItems.filter((item) => {
@@ -143,28 +154,55 @@ export default function ClientPage() {
     });
   }, [processedItems, query]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
+  const sortedItems = useMemo(() => {
+    let sortableItems = [...filteredItems];
+    if (sortConfig.key !== null) {
+      sortableItems.sort((a, b) => {
+        const valA = a.attributes[sortConfig.key];
+        const valB = b.attributes[sortConfig.key];
+
+        if (valA == null) return 1;
+        if (valB == null) return -1;
+
+        if (typeof valA === 'number' && typeof valB === 'number') {
+          return valA - valB;
+        }
+        return String(valA).localeCompare(String(valB));
+      });
+      if (sortConfig.direction === 'descending') {
+        sortableItems.reverse();
+      }
+    }
+    return sortableItems;
+  }, [filteredItems, sortConfig]);
+
+  const handleSort = (key) => {
+    let direction = 'ascending';
+    if (sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const totalPages = Math.max(1, Math.ceil(sortedItems.length / rowsPerPage));
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
   const pageItems = useMemo(() => {
     const start = (page - 1) * rowsPerPage;
-    return filtered.slice(start, start + rowsPerPage);
-  }, [filtered, page, rowsPerPage]);
+    return sortedItems.slice(start, start + rowsPerPage);
+  }, [sortedItems, page, rowsPerPage]);
 
   const columns = useMemo(() => {
-    let schema = getSavedSchema(clientId);
-
+    let schema = savedSchema;
     if (!schema.length && items.length > 0) {
       const keysFromData = new Set(
         items.flatMap((it) => Object.keys(it.attributes || {})),
       );
       const nonQtyKeys = [...keysFromData].filter((k) => !QTY_KEYS.includes(k));
       const hasQtyKey = QTY_KEYS.some((k) => keysFromData.has(k));
-
       let generatedSchema = hasQtyKey ? ['on_hand', ...nonQtyKeys] : nonQtyKeys;
-
       generatedSchema.sort((a, b) => {
         const hintA = ORDER_HINT.indexOf(a);
         const hintB = ORDER_HINT.indexOf(b);
@@ -177,7 +215,6 @@ export default function ClientPage() {
     }
 
     let displayColumns = [...schema];
-
     const hasQtyInSchema = displayColumns.some((k) => QTY_KEYS.includes(k));
     if (hasQtyInSchema) {
       displayColumns = displayColumns.filter((k) => !QTY_KEYS.includes(k));
@@ -188,7 +225,6 @@ export default function ClientPage() {
 
     const showLotColumn = items.some((item) => item.attributes?.has_lot);
     const lotInSchema = displayColumns.includes('lot_number');
-
     if (showLotColumn && !lotInSchema) {
       displayColumns.push('lot_number');
     } else if (!showLotColumn && lotInSchema) {
@@ -196,7 +232,7 @@ export default function ClientPage() {
     }
 
     return displayColumns;
-  }, [items, clientId, schemaRev]);
+  }, [items, savedSchema]);
 
   const isLotTrackingSystemActive = useMemo(
     () => items.some((item) => !!item.attributes?.lot_number),
@@ -220,7 +256,7 @@ export default function ClientPage() {
   };
 
   const Toolbar = () => (
-    <div className="flex flex-wrap items-center gap-2 mb-4 justify-start sm:justify-end">
+    <div className="flex flex-wrap items-center gap-2 mb-4 justify-center sm:justify-end">
       <Button
         onClick={() => setShowSearch((s) => !s)}
         variant="secondary"
@@ -295,7 +331,8 @@ export default function ClientPage() {
           <FiChevronLeft className="h-5 w-5 -ml-1" />
           All Clients
         </button>
-        <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight truncate">
+        {/* Removed 'truncate' class to allow the title to wrap */}
+        <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight">
           {client.name || 'Loading...'}
         </h1>
       </div>
@@ -311,7 +348,10 @@ export default function ClientPage() {
 
       <InventoryTable
         items={pageItems}
+        totalItems={sortedItems.length}
         columns={columns}
+        onSort={handleSort}
+        sortConfig={sortConfig}
         onPage={setPage}
         page={page}
         totalPages={totalPages}
@@ -347,7 +387,7 @@ export default function ClientPage() {
       )}
       {showAddItem && (
         <AddItemModal
-          schema={columns} // Pass the unified schema
+          schema={columns}
           clientId={clientId}
           onClose={() => setShowAddItem(false)}
           onCreated={handleUpdated}
@@ -356,7 +396,7 @@ export default function ClientPage() {
       )}
       {editItem && (
         <EditItemModal
-          schema={columns} // Pass the unified schema
+          schema={columns}
           item={editItem}
           onClose={() => setEditItem(null)}
           onUpdated={handleUpdated}

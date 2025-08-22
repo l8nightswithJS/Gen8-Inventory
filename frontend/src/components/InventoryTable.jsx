@@ -1,16 +1,18 @@
 // src/components/InventoryTable.jsx
 import { useEffect, useMemo, useState } from 'react';
-import { FiEdit2, FiTrash2, FiMoreVertical } from 'react-icons/fi';
+import { FiEdit2, FiTrash2, FiChevronUp, FiChevronDown } from 'react-icons/fi';
 import Button from './ui/Button';
 import { computeLowState } from '../utils/stockLogic';
 
 const LABEL_OVERRIDES = {
   part_number: 'Part #',
+  name: 'Name',
+  description: 'Description',
   quantity: 'On Hand',
   on_hand: 'On Hand',
   qty_in_stock: 'On Hand',
   stock: 'On Hand',
-  reorder_level: 'Reorder Level',
+  reorder_level: 'Reorder Lvl',
   reorder_qty: 'Reorder Qty',
   low_stock_threshold: 'Low-Stock Threshold',
   alert_enabled: 'Enable Low-Stock Alert',
@@ -20,11 +22,6 @@ const LABEL_OVERRIDES = {
 };
 
 const QTY_KEYS = ['quantity', 'on_hand', 'qty_in_stock', 'stock'];
-const NO_WRAP_COLS = new Set([
-  'part_number',
-  'alert_acknowledged_at',
-  'barcode',
-]);
 
 const humanLabel = (k) =>
   LABEL_OVERRIDES[k] ||
@@ -33,19 +30,6 @@ const humanLabel = (k) =>
 const isNumericLike = (k) =>
   QTY_KEYS.includes(k) ||
   /\b(level|qty|quantity|threshold|count|days|hours)\b/i.test(k);
-
-const shouldNoWrap = (k) => NO_WRAP_COLS.has(k) || isNumericLike(k);
-
-function formatShortDate(value) {
-  if (!value) return null;
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return String(value);
-  try {
-    return new Intl.DateTimeFormat(undefined, { dateStyle: 'short' }).format(d);
-  } catch {
-    return d.toLocaleDateString();
-  }
-}
 
 function MobileCard({ item, onEdit, onDelete }) {
   const a = item.attributes || {};
@@ -117,91 +101,42 @@ function MobileCard({ item, onEdit, onDelete }) {
   );
 }
 
-function TabletRow({ item, expanded, onToggle, onEdit, onDelete }) {
-  const a = item.attributes || {};
-  const { low } = computeLowState(a);
-  const showAlert = a.alert_enabled && low;
-  const part = a.part_number || a.name || '—';
-  const onHand = a.quantity ?? a.on_hand ?? a.qty_in_stock ?? a.stock ?? '—';
-  const barcode = a.barcode || '—';
-
+const SortableHeader = ({
+  children,
+  sortKey,
+  onSort,
+  sortConfig,
+  className,
+}) => {
+  const isSorted = sortConfig.key === sortKey;
+  const isAsc = sortConfig.direction === 'ascending';
   return (
-    <>
-      <tr className={`${showAlert ? 'bg-red-50' : 'bg-white'} border-t`}>
-        <td className="px-2 py-2 font-medium">
-          {part}{' '}
-          {showAlert && (
-            <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[10px] text-red-700">
-              Low
-            </span>
-          )}
-        </td>
-        <td className="px-2 py-2 text-center tabular-nums">{onHand}</td>
-        <td className="px-2 py-2 text-center">{barcode}</td>
-        <td className="px-2 py-2 text-right">
-          <button
-            onClick={onToggle}
-            className="inline-flex items-center gap-1 px-2 py-1 text-sm rounded border bg-white hover:bg-gray-50"
-          >
-            <FiMoreVertical className="opacity-70" />
-            {expanded ? 'Hide' : 'Details'}
-          </button>
-        </td>
-      </tr>
-      {expanded && (
-        <tr className="bg-white border-t">
-          <td colSpan={4} className="px-3 py-3">
-            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[13px]">
-              {[
-                ['Description', a.description],
-                ['Type', a.type],
-                ['Lead Time', a.lead_times],
-                ['Reorder Lvl', a.reorder_level],
-                ['Reorder Qty', a.reorder_qty],
-                ['Noted', formatShortDate(a.alert_acknowledged_at)],
-              ]
-                .filter(([, v]) => v != null && v !== '')
-                .map(([k, v]) => (
-                  <div
-                    key={k}
-                    className="flex items-center justify-between gap-2"
-                  >
-                    <span className="text-gray-500">{k}</span>
-                    <span className="font-medium text-gray-800 text-right">
-                      {String(v)}
-                    </span>
-                  </div>
-                ))}
-            </div>
-            <div className="mt-3 flex items-center justify-end gap-2">
-              <Button
-                onClick={() => onEdit(item)}
-                size="sm"
-                variant="outline"
-                leftIcon={FiEdit2}
-              >
-                Edit
-              </Button>
-              <Button
-                onClick={() => onDelete(item)}
-                size="sm"
-                variant="outline"
-                className="text-rose-700"
-                leftIcon={FiTrash2}
-              >
-                Delete
-              </Button>
-            </div>
-          </td>
-        </tr>
-      )}
-    </>
+    <button
+      className={`flex items-center gap-1 group ${className}`}
+      onClick={() => onSort(sortKey)}
+    >
+      <span>{children}</span>
+      <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+        {isSorted ? (
+          isAsc ? (
+            <FiChevronUp size={14} />
+          ) : (
+            <FiChevronDown size={14} />
+          )
+        ) : (
+          <FiChevronUp size={14} className="text-slate-400" />
+        )}
+      </span>
+    </button>
   );
-}
+};
 
 export default function InventoryTable({
   items,
+  totalItems,
   columns = [],
+  sortConfig,
+  onSort,
   page,
   totalPages,
   onPage,
@@ -214,26 +149,22 @@ export default function InventoryTable({
 }) {
   const [showRotateNotice, setShowRotateNotice] = useState(false);
 
-  // This effect now ONLY runs once to set up the listener
   useEffect(() => {
     const handleResize = () => {
       const isMobilePortrait =
         window.innerWidth < 768 && window.innerHeight > window.innerWidth;
       setShowRotateNotice(isMobilePortrait);
     };
-    handleResize(); // Check on initial load
+    handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // This new effect handles the auto-dismiss logic
   useEffect(() => {
     if (showRotateNotice) {
       const timer = setTimeout(() => {
         setShowRotateNotice(false);
-      }, 5000); // Hide after 5 seconds
-
-      // Clean up the timer if the component unmounts or the notice is hidden sooner
+      }, 5000);
       return () => clearTimeout(timer);
     }
   }, [showRotateNotice]);
@@ -246,40 +177,31 @@ export default function InventoryTable({
     [items],
   );
 
-  const DesktopTable = () => (
-    <div className="js-inventory-card overflow-x-auto bg-white shadow-md rounded-lg">
-      <table className="js-inventory-table w-full table-auto border-collapse text-sm">
-        <thead
-          className="
-            sticky top-0 z-10
-            bg-gradient-to-b from-blue-50/80 to-white/95
-            backdrop-blur supports-[backdrop-filter]:bg-white/85
-            border-b border-slate-200
-            shadow-[0_1px_0_rgba(0,0,0,0.05)]
-          "
-        >
+  const ResponsiveTable = () => (
+    <div className="overflow-x-auto bg-white shadow-md rounded-lg">
+      <table className="w-full table-auto border-collapse text-sm">
+        {/* Changed bg-slate-50 to bg-white to make the table pop */}
+        <thead className="bg-white border-b border-slate-200">
           <tr>
             {columns.map((key) => (
               <th
                 key={key}
-                className="px-3 py-2.5 text-left uppercase tracking-wider text-slate-800 font-semibold text-[11px]"
+                className={`px-4 py-3 text-[12px] font-semibold uppercase text-slate-600 ${
+                  isNumericLike(key) ? 'text-right' : 'text-left'
+                }`}
               >
-                {humanLabel(key)}
+                <SortableHeader
+                  sortKey={key}
+                  onSort={onSort}
+                  sortConfig={sortConfig}
+                  className={isNumericLike(key) ? 'ml-auto' : ''}
+                >
+                  {humanLabel(key)}
+                </SortableHeader>
               </th>
             ))}
             {role === 'admin' && (
-              <th
-                className="
-                  px-3 py-2.5 text-center uppercase tracking-wider
-                  text-slate-800 font-semibold text-[11px] whitespace-nowrap
-                  md:w-[168px]
-                  md:sticky md:right-0
-                  bg-gradient-to-b from-blue-50/80 to-white/95
-                  backdrop-blur supports-[backdrop-filter]:bg-white/85
-                  border-l border-slate-200
-                  md:shadow-[-6px_0_6px_-6px_rgba(0,0,0,0.08)]
-                "
-              >
+              <th className="px-4 py-3 text-center text-[12px] font-semibold uppercase text-slate-600 w-28">
                 Actions
               </th>
             )}
@@ -303,66 +225,79 @@ export default function InventoryTable({
               return (
                 <tr
                   key={item.id}
-                  className={`border-t ${
-                    showAlert ? 'bg-red-50' : 'bg-white'
-                  } hover:bg-gray-50`}
+                  className="border-b last:border-b-0 hover:bg-slate-50 transition-colors"
                 >
-                  {columns.map((key) => {
-                    const numeric = isNumericLike(key);
+                  {columns.map((key, index) => {
                     const value = a[key];
-                    const cell =
-                      key === 'alert_acknowledged_at' ? (
-                        formatShortDate(value) || (
-                          <span className="text-gray-400">—</span>
-                        )
-                      ) : value != null && value !== '' ? (
+                    const isNumeric = isNumericLike(key);
+                    const isPrimaryColumn =
+                      index === 0 && (key === 'part_number' || key === 'name');
+
+                    let cellContent =
+                      value != null && value !== '' ? (
                         String(value)
                       ) : (
                         <span className="text-gray-400">—</span>
                       );
 
+                    if (key === 'on_hand') {
+                      cellContent = (
+                        <div className="flex items-center justify-end gap-2">
+                          {showAlert && (
+                            <div
+                              className="h-2 w-2 rounded-full bg-red-500"
+                              title="Low Stock"
+                            ></div>
+                          )}
+                          <span>{cellContent}</span>
+                        </div>
+                      );
+                    }
+
                     return (
                       <td
                         key={key}
-                        className={`px-2 py-2 border align-middle text-[13px] ${
-                          numeric ? 'text-center' : ''
+                        className={`px-4 py-3 align-top text-sm ${
+                          isNumeric ? 'text-right tabular-nums' : 'text-left'
                         }`}
                       >
-                        <div
-                          className={`${
-                            numeric ? 'text-center' : 'text-left'
-                          } ${
-                            shouldNoWrap(key)
-                              ? 'whitespace-nowrap'
-                              : 'whitespace-normal break-words'
-                          }`}
-                        >
-                          {cell}
-                        </div>
+                        {isPrimaryColumn ? (
+                          <div>
+                            <p className="font-semibold text-slate-800">
+                              {cellContent}
+                            </p>
+                            {a.description && (
+                              <p className="text-xs text-slate-500 mt-1">
+                                {a.description}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          cellContent
+                        )}
                       </td>
                     );
                   })}
 
                   {role === 'admin' && (
-                    <td className="px-2 md:px-3 py-2 border text-center whitespace-nowrap align-middle md:w-[168px] md:sticky md:right-0 md:bg-white md:shadow-[-6px_0_6px_-6px_rgba(0,0,0,0.08)]">
-                      <div className="w-full flex items-center justify-center gap-2">
+                    <td className="px-4 py-3 align-top text-center w-28">
+                      <div className="flex items-center justify-center gap-1">
                         <Button
                           onClick={() => onEdit(item)}
                           variant="ghost"
                           size="sm"
-                          leftIcon={FiEdit2}
-                          className="px-2 py-1"
+                          title="Edit"
                         >
-                          Edit
+                          <FiEdit2 size={16} />
                         </Button>
                         <Button
                           onClick={() => onDelete(item)}
                           variant="ghost"
                           size="sm"
-                          leftIcon={FiTrash2}
-                          className="px-2 py-1 text-rose-700 hover:text-rose-800"
+                          className="text-rose-600 hover:text-rose-700"
+                          title="Delete"
                         >
-                          Delete
+                          <FiTrash2 size={16} />
                         </Button>
                       </div>
                     </td>
@@ -371,44 +306,6 @@ export default function InventoryTable({
               );
             })
           )}
-        </tbody>
-      </table>
-    </div>
-  );
-
-  const [expandedId, setExpandedId] = useState(null);
-  const TabletTable = () => (
-    <div className="overflow-x-auto bg-white shadow-md rounded-lg">
-      <table className="w-full table-auto text-sm border-collapse">
-        <thead className="bg-slate-50 border-b">
-          <tr>
-            <th className="px-3 py-2.5 text-left text-[12px] font-semibold uppercase">
-              Part #
-            </th>
-            <th className="px-3 py-2.5 text-center text-[12px] font-semibold uppercase">
-              On Hand
-            </th>
-            <th className="px-3 py-2.5 text-center text-[12px] font-semibold uppercase">
-              Barcode
-            </th>
-            <th className="px-3 py-2.5 text-right text-[12px] font-semibold uppercase">
-              Actions
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {safeItems.map((it) => (
-            <TabletRow
-              key={it.id}
-              item={it}
-              expanded={expandedId === it.id}
-              onToggle={() =>
-                setExpandedId(expandedId === it.id ? null : it.id)
-              }
-              onEdit={onEdit}
-              onDelete={onDelete}
-            />
-          ))}
         </tbody>
       </table>
     </div>
@@ -423,40 +320,44 @@ export default function InventoryTable({
   );
 
   const Pager = () => (
-    <div className="my-4 flex items-center justify-between gap-3 text-sm text-gray-700">
-      <div className="flex items-center gap-2">
-        <span className="text-gray-600">Rows:</span>
-        <select
-          value={rowsPerPage}
-          onChange={(e) => onRowsPerPageChange?.(Number(e.target.value))}
-          className="h-8 border rounded px-2 bg-white"
-        >
-          {[8, 10, 12, 15, 20, 25, 30, 40, 50].map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </select>
+    <div className="my-4 flex flex-col sm:flex-row items-center sm:justify-between gap-3 text-sm text-gray-700">
+      <div className="font-medium">
+        Total items: <span className="font-bold">{totalItems}</span>
       </div>
-
-      <div className="flex items-center gap-2">
-        <button
-          disabled={page <= 1}
-          onClick={() => onPage(page - 1)}
-          className="px-3 py-1.5 border rounded disabled:opacity-50 bg-white hover:bg-gray-50"
-        >
-          Prev
-        </button>
-        <span className="tabular-nums">
-          Page {page} of {totalPages}
-        </span>
-        <button
-          disabled={page >= totalPages}
-          onClick={() => onPage(page + 1)}
-          className="px-3 py-1.5 border rounded disabled:opacity-50 bg-white hover:bg-gray-50"
-        >
-          Next
-        </button>
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <span className="text-gray-600">Rows:</span>
+          <select
+            value={rowsPerPage}
+            onChange={(e) => onRowsPerPageChange?.(Number(e.target.value))}
+            className="h-8 border rounded px-2 bg-white"
+          >
+            {[8, 10, 12, 15, 20, 25, 30, 40, 50].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            disabled={page <= 1}
+            onClick={() => onPage(page - 1)}
+            className="px-3 py-1.5 border rounded disabled:opacity-50 bg-white hover:bg-gray-50"
+          >
+            Prev
+          </button>
+          <span className="tabular-nums">
+            Page {page} of {totalPages}
+          </span>
+          <button
+            disabled={page >= totalPages}
+            onClick={() => onPage(page + 1)}
+            className="px-3 py-1.5 border rounded disabled:opacity-50 bg-white hover:bg-gray-50"
+          >
+            Next
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -469,13 +370,7 @@ export default function InventoryTable({
         </div>
       )}
 
-      {viewMode === 'mobile' ? (
-        <MobileCards />
-      ) : viewMode === 'tablet' ? (
-        <TabletTable />
-      ) : (
-        <DesktopTable />
-      )}
+      {viewMode === 'mobile' ? <MobileCards /> : <ResponsiveTable />}
 
       <Pager />
     </div>

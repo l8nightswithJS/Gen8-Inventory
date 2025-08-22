@@ -1,17 +1,16 @@
 // src/components/ClientCarousel.jsx
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import EditClientModal from './EditClientModal';
 import ConfirmModal from './ConfirmModal';
-import { FiEdit2, FiTrash2, FiPlus } from 'react-icons/fi';
+import Button from './ui/Button';
+import { FiEdit2, FiTrash2 } from 'react-icons/fi';
 
 export default function ClientCarousel({
   clients,
   onClientUpdated,
   onClientDeleted,
-  onAddClient,
 }) {
-  const navigate = useNavigate();
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
 
@@ -22,28 +21,27 @@ export default function ClientCarousel({
     return `${base}${path}`;
   };
 
-  return (
-    <div className="h-full w-full p-4">
-      {/* Responsive Grid Container */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-        {/* Add Client tile */}
-        <button
-          type="button"
-          onClick={onAddClient}
-          aria-label="Add new client"
-          className="aspect-[4/3] border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center text-gray-500 hover:bg-gray-50 hover:border-blue-500 hover:text-blue-600 transition focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <FiPlus className="h-10 w-10" />
-          <span className="mt-1 font-semibold">Add Client</span>
-        </button>
+  const handleEditClick = (e, client) => {
+    e.preventDefault();
+    setEditing(client);
+  };
 
-        {/* Client cards */}
+  const handleDeleteClick = (e, client) => {
+    e.preventDefault();
+    setDeleting(client);
+  };
+
+  return (
+    <div>
+      {/* Changed xl:grid-cols-5 to xl:grid-cols-4 to make cards bigger on large screens */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
         {clients.map((c) => (
-          <div
+          <Link
             key={c.id}
-            className="aspect-[4/3] bg-white border rounded-lg shadow-sm p-4 flex flex-col group"
+            to={`/clients/${c.id}`}
+            className="aspect-[4/3] bg-white border rounded-lg shadow-sm p-4 grid grid-rows-[1fr_auto] group transition hover:shadow-xl hover:border-blue-500 hover:-translate-y-1"
           >
-            <div className="h-2/3 flex items-center justify-center bg-gray-50 rounded-md overflow-hidden">
+            <div className="flex items-center justify-center bg-gray-50 rounded-md overflow-hidden p-2">
               {c.logo_url ? (
                 <img
                   src={resolveLogo(c.logo_url)}
@@ -54,34 +52,32 @@ export default function ClientCarousel({
                 <span className="text-gray-400 text-sm">No Logo</span>
               )}
             </div>
-            <h3 className="mt-2 text-center font-semibold text-gray-800 truncate">
-              {c.name}
-            </h3>
-            <div className="flex justify-around items-center mt-auto pt-2">
-              <button
-                onClick={() => navigate(`/clients/${c.id}`)}
-                className="text-blue-600 hover:underline text-sm font-medium"
-              >
-                Inventory
-              </button>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setEditing(c)}
-                  className="p-1 text-gray-500 hover:text-blue-600"
+
+            <div className="flex items-start justify-between pt-3">
+              <h3 className="font-bold text-lg text-slate-800 line-clamp-2">
+                {c.name}
+              </h3>
+              <div className="flex items-center gap-1 transition-opacity flex-shrink-0 opacity-100 md:opacity-0 group-hover:opacity-100">
+                <Button
+                  onClick={(e) => handleEditClick(e, c)}
+                  variant="ghost"
+                  size="sm"
                   title="Edit"
                 >
-                  <FiEdit2 />
-                </button>
-                <button
-                  onClick={() => setDeleting(c)}
-                  className="p-1 text-gray-500 hover:text-red-600"
+                  <FiEdit2 size={16} />
+                </Button>
+                <Button
+                  onClick={(e) => handleDeleteClick(e, c)}
+                  variant="ghost"
+                  size="sm"
                   title="Delete"
+                  className="text-rose-600 hover:text-rose-700"
                 >
-                  <FiTrash2 />
-                </button>
+                  <FiTrash2 size={16} />
+                </Button>
               </div>
             </div>
-          </div>
+          </Link>
         ))}
       </div>
 

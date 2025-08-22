@@ -1,5 +1,4 @@
 // src/components/ui/Button.jsx
-// For combining class names, a utility like `clsx` is great: npm install clsx
 import clsx from 'clsx';
 
 const baseClasses =
@@ -18,6 +17,9 @@ const variantClasses = {
     'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:ring-blue-500',
   danger:
     'border-transparent bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
+  // Added a new 'success' variant for green buttons
+  success:
+    'border-transparent bg-green-600 text-white hover:bg-green-700 focus:ring-green-500',
   ghost:
     'border-transparent bg-transparent text-gray-700 hover:bg-gray-100 focus:ring-blue-500',
 };

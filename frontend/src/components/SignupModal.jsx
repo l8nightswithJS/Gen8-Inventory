@@ -1,6 +1,7 @@
 // src/components/SignupModal.jsx
 import { useState } from 'react';
 import axios from '../utils/axiosConfig';
+import Button from './ui/Button';
 
 export default function SignupModal({ onClose }) {
   const [form, setForm] = useState({
@@ -9,6 +10,7 @@ export default function SignupModal({ onClose }) {
     role: 'staff',
   });
   const [msg, setMsg] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -18,24 +20,30 @@ export default function SignupModal({ onClose }) {
   const submit = async (e) => {
     e.preventDefault();
     setMsg('');
+    setLoading(true);
     try {
       const { data } = await axios.post('/api/auth/register', form);
       setMsg(data.message);
-      // Automatically close after a successful request:
-      setTimeout(onClose, 1500);
+      setTimeout(onClose, 2500); // Give user time to read success message
     } catch (err) {
       setMsg(err.response?.data?.message || 'Signup failed');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
       <form
         onSubmit={submit}
-        className="w-full max-w-md bg-white p-6 sm:p-8 rounded-lg shadow-lg space-y-4"
+        className="w-full max-w-md bg-white p-6 sm:p-8 rounded-lg shadow-xl space-y-4"
       >
         <h2 className="text-xl font-semibold text-center">Request Access</h2>
-        {msg && <div className="text-center text-green-700 text-sm">{msg}</div>}
+        {msg && (
+          <div className="text-center text-sm font-medium p-3 bg-slate-50 rounded-md">
+            {msg}
+          </div>
+        )}
 
         <input
           name="username"
@@ -44,8 +52,8 @@ export default function SignupModal({ onClose }) {
           value={form.username}
           onChange={handleChange}
           className="w-full border border-gray-300 px-3 py-2 rounded text-sm"
+          disabled={loading}
         />
-
         <input
           name="password"
           type="password"
@@ -54,32 +62,31 @@ export default function SignupModal({ onClose }) {
           value={form.password}
           onChange={handleChange}
           className="w-full border border-gray-300 px-3 py-2 rounded text-sm"
+          autoComplete="new-password"
+          disabled={loading}
         />
-
         <select
           name="role"
           value={form.role}
           onChange={handleChange}
-          className="w-full border border-gray-300 px-3 py-2 rounded text-sm"
+          className="w-full border border-gray-300 px-3 py-2 rounded text-sm bg-white"
+          disabled={loading}
         >
           <option value="staff">Staff</option>
           <option value="admin">Admin</option>
         </select>
-
-        <div className="flex justify-between">
-          <button
+        <div className="flex justify-end gap-3 pt-2">
+          <Button
             type="button"
+            variant="secondary"
             onClick={onClose}
-            className="px-4 py-2 bg-gray-200 rounded text-sm"
+            disabled={loading}
           >
             Cancel
-          </button>
-          <button
-            type="submit"
-            className="px-4 py-2 bg-green-600 text-white rounded text-sm"
-          >
-            Submit
-          </button>
+          </Button>
+          <Button type="submit" variant="primary" disabled={loading}>
+            {loading ? 'Submitting...' : 'Submit Request'}
+          </Button>
         </div>
       </form>
     </div>
