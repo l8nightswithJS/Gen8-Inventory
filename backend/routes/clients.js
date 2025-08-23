@@ -8,7 +8,6 @@ const clientsController = require('../controllers/clientsController');
 const authenticate = require('../middleware/authMiddleware');
 const requireRole = require('../middleware/requireRole');
 
-// Multer temp storage
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) =>
     cb(null, path.join(__dirname, '..', 'uploads')),
@@ -16,12 +15,11 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// All client routes require authentication
 router.use(authenticate);
 
-// CRUD
-router.get('/', clientsController.getAllClients);
-router.get('/:id', clientsController.getClientById);
+// Applying requireRole('admin') to all routes for consistency and security
+router.get('/', requireRole('admin'), clientsController.getAllClients);
+router.get('/:id', requireRole('admin'), clientsController.getClientById);
 router.post(
   '/',
   requireRole('admin'),
@@ -35,8 +33,10 @@ router.put(
   clientsController.updateClient,
 );
 router.delete('/:id', requireRole('admin'), clientsController.deleteClient);
-
-// Alerts by client
-router.get('/:id/alerts', clientsController.getClientAlerts);
+router.get(
+  '/:id/alerts',
+  requireRole('admin'),
+  clientsController.getClientAlerts,
+);
 
 module.exports = router;
