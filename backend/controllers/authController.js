@@ -24,11 +24,9 @@ exports.register = async (req, res, next) => {
     if (error) {
       // Add a specific check for rate-limiting errors (status 429)
       if (error.status === 429) {
-        return res
-          .status(429)
-          .json({
-            message: 'Too many requests. Please wait a minute and try again.',
-          });
+        return res.status(429).json({
+          message: 'Too many requests. Please wait a minute and try again.',
+        });
       }
       if (error.message.includes('User already registered')) {
         return res.status(409).json({ message: 'Username already exists' });
@@ -64,12 +62,10 @@ exports.login = async (req, res, next) => {
     if (signInError) {
       // Also handle rate limiting on login for better user feedback
       if (signInError.status === 429) {
-        return res
-          .status(429)
-          .json({
-            message:
-              'Too many login attempts. Please wait a minute and try again.',
-          });
+        return res.status(429).json({
+          message:
+            'Too many login attempts. Please wait a minute and try again.',
+        });
       }
       return res.status(401).json({ message: 'Invalid username or password' });
     }
@@ -96,6 +92,39 @@ exports.login = async (req, res, next) => {
       username: userProfile.username,
     });
   } catch (err) {
+    next(err);
+  }
+};
+
+// Add this entire new function to the end of your authController.js file
+exports.testLogin = async (req, res, next) => {
+  console.log('--- RUNNING LOGIN TEST ---');
+  try {
+    const testUsername = 'admin';
+    const testPassword = 'admin';
+
+    console.log(`Attempting to sign in with user: ${testUsername}`);
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: `${testUsername}@inventory.app`,
+      password: testPassword,
+    });
+
+    if (error) {
+      console.error('Test failed. Supabase returned an error:', error);
+      return res.status(500).json({
+        message: 'Test failed. See backend logs for Supabase error.',
+        errorDetails: error,
+      });
+    }
+
+    console.log('Test successful. Supabase returned session data:', data);
+    res.json({
+      message: 'Test successful! Supabase authentication is working.',
+      sessionData: data,
+    });
+  } catch (err) {
+    console.error('--- A CRITICAL ERROR OCCURRED IN THE TEST ---', err);
     next(err);
   }
 };

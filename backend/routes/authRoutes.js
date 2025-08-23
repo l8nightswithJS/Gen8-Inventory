@@ -23,4 +23,7 @@ router.post(
   auth.login,
 );
 
+// Add this new route for our test
+router.post('/test-login', auth.testLogin);
+
 module.exports = router;
