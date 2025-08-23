@@ -1,15 +1,7 @@
 // backend/middleware/authMiddleware.js
-const jwt = require('jsonwebtoken');
+const supabase = require('../lib/supabaseClient');
 
-// Read JWT secret straight from the environment
-const { JWT_SECRET } = process.env;
-
-if (!JWT_SECRET) {
-  console.error('🚨 Missing JWT_SECRET in environment!');
-  // You may want to throw here so the app fails fast if env var is missing
-}
-
-module.exports = function authenticate(req, res, next) {
+module.exports = async function authenticate(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
@@ -17,12 +9,15 @@ module.exports = function authenticate(req, res, next) {
     return res.status(401).json({ message: 'Missing token' });
   }
 
-  jwt.verify(token, JWT_SECRET, (err, payload) => {
-    if (err) {
-      return res.status(403).json({ message: 'Invalid or expired token' });
-    }
-    // Attach the decoded JWT payload (user info) to the request
-    req.user = payload;
-    next();
-  });
+  // Use the Supabase client to verify the token
+  const { data, error } = await supabase.auth.getUser(token);
+
+  if (error || !data.user) {
+    // This will catch invalid tokens, expired tokens, or other auth errors
+    return res.status(403).json({ message: 'Invalid or expired token' });
+  }
+
+  // The token is valid. Attach the user object from Supabase to the request.
+  req.user = data.user;
+  next();
 };
