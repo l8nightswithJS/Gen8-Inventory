@@ -9,11 +9,12 @@ module.exports = async function authenticate(req, res, next) {
     return res.status(401).json({ message: 'Missing token' });
   }
 
-  // Use the Supabase client to verify the token
+  // Use the Supabase client to verify the token.
+  // This correctly verifies the token against Supabase's own secret.
   const { data, error } = await supabase.auth.getUser(token);
 
   if (error || !data.user) {
-    // This will catch invalid tokens, expired tokens, or other auth errors
+    // This will catch invalid tokens, expired tokens, or other auth errors.
     return res.status(403).json({ message: 'Invalid or expired token' });
   }
 
