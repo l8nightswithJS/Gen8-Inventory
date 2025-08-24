@@ -1,130 +1,96 @@
 // backend/controllers/authController.js
 const supabase = require('../lib/supabaseClient');
 
-exports.register = async (req, res, next) => {
-  try {
-    const { username, password, role = 'staff' } = req.body || {};
-    if (!username || !password) {
-      return res
-        .status(400)
-        .json({ message: 'Username and password are required' });
-    }
+exports.register = async (req, res) => {
+  const { username, email, password } = req.body;
 
-    const { error } = await supabase.auth.signUp({
-      email: `${username.trim().toLowerCase()}@inventory.app`,
-      password: password,
-      options: {
-        data: {
-          username: username.trim(),
-          role: role,
-        },
-      },
-    });
-
-    if (error) {
-      // Add a specific check for rate-limiting errors (status 429)
-      if (error.status === 429) {
-        return res.status(429).json({
-          message: 'Too many requests. Please wait a minute and try again.',
-        });
-      }
-      if (error.message.includes('User already registered')) {
-        return res.status(409).json({ message: 'Username already exists' });
-      }
-      // Pass other unexpected errors to the main error handler
-      return next(error);
-    }
-
-    res
-      .status(201)
-      .json({ message: 'Registration received. Awaiting approval.' });
-  } catch (err) {
-    next(err);
+  // Input validation
+  if (!username || !email || !password) {
+    return res.status(400).json({ message: 'All fields are required' });
   }
+
+  // Create user in Supabase Auth
+  const { data: authData, error: authError } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: {
+        username,
+      },
+    },
+  });
+
+  if (authError) {
+    return res.status(400).json({ message: authError.message });
+  }
+
+  if (!authData.user) {
+    return res
+      .status(500)
+      .json({ message: 'Registration successful, but no user data returned.' });
+  }
+
+  // Insert into public.users table
+  const { error: publicError } = await supabase.from('users').insert({
+    id: authData.user.id,
+    username,
+    // BEFORE: role: req.body.role || 'staff',
+    // AFTER: Always default new users to 'staff' for security.
+    role: 'staff',
+    approved: false, // Ensure users are not approved by default
+  });
+
+  if (publicError) {
+    // If this fails, we should ideally delete the auth user to prevent orphans
+    await supabase.auth.admin.deleteUser(authData.user.id);
+    return res.status(500).json({ message: publicError.message });
+  }
+
+  res.status(201).json({
+    message: 'User registered successfully. Please wait for admin approval.',
+    user: authData.user,
+  });
 };
 
-exports.login = async (req, res, next) => {
-  try {
-    const { username, password } = req.body || {};
-    if (!username || !password) {
-      return res
-        .status(400)
-        .json({ message: 'Username and password are required' });
-    }
+exports.login = async (req, res) => {
+  const { email, password } = req.body;
 
-    const { data, error: signInError } = await supabase.auth.signInWithPassword(
-      {
-        email: `${username.trim().toLowerCase()}@inventory.app`,
-        password: password,
-      },
-    );
-
-    if (signInError) {
-      // Also handle rate limiting on login for better user feedback
-      if (signInError.status === 429) {
-        return res.status(429).json({
-          message:
-            'Too many login attempts. Please wait a minute and try again.',
-        });
-      }
-      return res.status(401).json({ message: 'Invalid username or password' });
-    }
-
-    const { data: userProfile, error: profileError } = await supabase
-      .from('users')
-      .select('approved, role, username')
-      .eq('id', data.user.id)
-      .single();
-
-    if (profileError || !userProfile) {
-      await supabase.auth.signOut();
-      return res.status(401).json({ message: 'User profile not found.' });
-    }
-
-    if (userProfile.approved === false) {
-      await supabase.auth.signOut();
-      return res.status(403).json({ message: 'Account pending approval' });
-    }
-
-    res.json({
-      token: data.session.access_token,
-      role: userProfile.role,
-      username: userProfile.username,
-    });
-  } catch (err) {
-    next(err);
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Email and password are required' });
   }
-};
 
-// Add this entire new function to the end of your authController.js file
-exports.testLogin = async (req, res, next) => {
-  console.log('--- RUNNING LOGIN TEST ---');
-  try {
-    const testUsername = 'admin';
-    const testPassword = 'admin';
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
 
-    console.log(`Attempting to sign in with user: ${testUsername}`);
-
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: `${testUsername}@inventory.app`,
-      password: testPassword,
-    });
-
-    if (error) {
-      console.error('Test failed. Supabase returned an error:', error);
-      return res.status(500).json({
-        message: 'Test failed. See backend logs for Supabase error.',
-        errorDetails: error,
-      });
-    }
-
-    console.log('Test successful. Supabase returned session data:', data);
-    res.json({
-      message: 'Test successful! Supabase authentication is working.',
-      sessionData: data,
-    });
-  } catch (err) {
-    console.error('--- A CRITICAL ERROR OCCURRED IN THE TEST ---', err);
-    next(err);
+  if (error) {
+    return res.status(401).json({ message: error.message });
   }
+
+  // Check if the user is approved in our public.users table
+  const { data: userProfile, error: profileError } = await supabase
+    .from('users')
+    .select('approved, role')
+    .eq('id', data.user.id)
+    .single();
+
+  if (profileError || !userProfile) {
+    return res
+      .status(401)
+      .json({ message: 'User profile not found or error fetching it.' });
+  }
+
+  if (!userProfile.approved) {
+    return res
+      .status(403)
+      .json({ message: 'Account not approved by an administrator yet.' });
+  }
+
+  res.json({
+    message: 'Login successful',
+    user: data.user,
+    session: data.session,
+    role: userProfile.role, // Send the user's role to the frontend
+  });
 };
