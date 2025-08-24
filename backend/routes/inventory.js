@@ -43,33 +43,33 @@ router.get(
   controller.getItemById,
 );
 
+// Allow any authenticated user to create (RLS checks ownership of client_id)
 router.post(
   '/',
-  requireRole('admin'),
   body('client_id').isInt().withMessage('client_id is required').toInt(),
   body('attributes').isObject().withMessage('attributes object is required'),
   handleValidation,
   controller.createItem,
 );
 
+// Allow any authenticated user to update (RLS checks ownership)
 router.put(
   '/:id',
-  requireRole('admin'),
   param('id').isInt().withMessage('Invalid id').toInt(),
   body('attributes').isObject().withMessage('attributes object is required'),
   handleValidation,
   controller.updateItem,
 );
 
+// Allow any authenticated user to delete (RLS checks ownership)
 router.delete(
   '/:id',
-  requireRole('admin'),
   param('id').isInt().withMessage('Invalid id').toInt(),
   handleValidation,
   controller.deleteItem,
 );
 
-// ---------- Bulk import (and legacy alias /import) ----------
+// ---------- Bulk import (remains admin-only) ----------
 const bulkValidators = [
   body('client_id').isInt().withMessage('client_id is required').toInt(),
   body('items')

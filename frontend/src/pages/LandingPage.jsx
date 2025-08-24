@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import SignupModal from '../components/SignupModal';
 import Button from '../components/ui/Button';
-import logoSvg from '../assets/logo.svg';
+import logoG8 from '../assets/logog8.png';
 import dashboardPreview from '../assets/dashboard-preview.png';
 
 export default function LandingPage() {
@@ -12,29 +12,14 @@ export default function LandingPage() {
   return (
     <div className="bg-slate-50">
       <div className="relative bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 animate-gradient-xy overflow-hidden">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="container mx-auto px-6 sm:px-6 lg:px-8">
           <header className="relative py-6 flex justify-between items-center">
             <Link to="/" className="flex items-center gap-2.5">
-              <img src={logoSvg} alt="Gener8 Logo" className="h-8 w-8" />
+              <img src={logoG8} alt="Gener8 Logo" className="h-8 w-8" />
               <div className="font-semibold text-lg text-blue-400">
                 Gener8 <span className="text-white">Inventory</span>
               </div>
             </Link>
-            <nav className="flex items-center gap-4">
-              <Link
-                to="/login"
-                className="text-sm font-medium text-slate-300 hover:text-white transition-colors"
-              >
-                Login
-              </Link>
-              <Button
-                onClick={() => setShowSignup(true)}
-                variant="secondary"
-                size="sm"
-              >
-                Request Access
-              </Button>
-            </nav>
           </header>
 
           <div className="relative grid grid-cols-1 lg:grid-cols-2 gap-12 items-center py-16 sm:py-24 lg:py-32">

@@ -17,22 +17,26 @@ const upload = multer({ storage });
 
 router.use(authenticate);
 
-// Applying requireRole('admin') to all routes for consistency and security
+// This route remains admin-only for a global view.
 router.get('/', requireRole('admin'), clientsController.getAllClients);
-router.get('/:id', requireRole('admin'), clientsController.getClientById);
-router.post(
-  '/',
-  requireRole('admin'),
-  upload.single('logo'),
-  clientsController.createClient,
-);
-router.put(
-  '/:id',
-  requireRole('admin'),
-  upload.single('logo'),
-  clientsController.updateClient,
-);
-router.delete('/:id', requireRole('admin'), clientsController.deleteClient);
+
+// Specific routes for a user's own clients don't need an admin check.
+// Note: I'm assuming you have a getUserClients function; if not, we can add it.
+// router.get('/my-clients', clientsController.getUserClients);
+
+// This allows any authenticated user to get a client by ID (RLS will check ownership).
+router.get('/:id', clientsController.getClientById);
+
+// Any authenticated user can create a client (RLS will enforce ownership).
+router.post('/', upload.single('logo'), clientsController.createClient);
+
+// Any authenticated user can attempt an update (RLS will check ownership).
+router.put('/:id', upload.single('logo'), clientsController.updateClient);
+
+// Any authenticated user can attempt a delete (RLS will check ownership).
+router.delete('/:id', clientsController.deleteClient);
+
+// This should likely remain admin-only as it's a high-level overview.
 router.get(
   '/:id/alerts',
   requireRole('admin'),
