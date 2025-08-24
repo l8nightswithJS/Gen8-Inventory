@@ -8,22 +8,26 @@ const { handleValidation } = require('../middleware/validationMiddleware');
 
 const router = express.Router();
 
+// A simple wrapper to catch errors in async routes
+const asyncHandler = (fn) => (req, res, next) =>
+  Promise.resolve(fn(req, res, next)).catch(next);
+
 // All /api/users routes require admin authentication
 router.use(authenticate);
 router.use(requireRole('admin'));
 
 // GET /api/users -> list all approved users
-router.get('/', ctrl.getAllUsers);
+router.get('/', asyncHandler(ctrl.getAllUsers));
 
 // GET /api/users/pending -> list pending sign-ups
-router.get('/pending', ctrl.getPendingUsers);
+router.get('/pending', asyncHandler(ctrl.getPendingUsers));
 
 // GET /api/users/:id -> get a single user
 router.get(
   '/:id',
   param('id').isInt().withMessage('Invalid user ID'),
   handleValidation,
-  ctrl.getUserById,
+  asyncHandler(ctrl.getUserById),
 );
 
 // POST /api/users/:id/approve -> approve a pending sign-up
@@ -31,7 +35,7 @@ router.post(
   '/:id/approve',
   param('id').isInt().withMessage('Invalid user ID'),
   handleValidation,
-  ctrl.approveUser,
+  asyncHandler(ctrl.approveUser),
 );
 
 // PUT /api/users/:id -> update username/role only
@@ -41,7 +45,7 @@ router.put(
   body('username').optional().isString().notEmpty(),
   body('role').optional().isIn(['admin', 'staff']),
   handleValidation,
-  ctrl.updateUser,
+  asyncHandler(ctrl.updateUser),
 );
 
 // DELETE /api/users/:id -> delete a user
@@ -49,7 +53,7 @@ router.delete(
   '/:id',
   param('id').isInt().withMessage('Invalid user ID'),
   handleValidation,
-  ctrl.deleteUser,
+  asyncHandler(ctrl.deleteUser),
 );
 
 module.exports = router;
