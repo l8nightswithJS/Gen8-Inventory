@@ -1,7 +1,7 @@
 // backend/routes/users.js
 const express = require('express');
-const { body, param } = require('express-validator');
-const ctrl = require('../controllers/userController'); // Corrected controller name
+const { param, body } = require('express-validator');
+const ctrl = require('../controllers/userController');
 const authenticate = require('../middleware/authMiddleware');
 const requireRole = require('../middleware/requireRole');
 const { handleValidation } = require('../middleware/validationMiddleware');
@@ -26,20 +26,6 @@ router.get(
   ctrl.getUserById,
 );
 
-// POST /api/users -> create a new user (admin only)
-router.post(
-  '/',
-  body('username').isString().notEmpty().withMessage('Username is required'),
-  body('password')
-    .isLength({ min: 6 })
-    .withMessage('Password must be >= 6 chars'),
-  body('role')
-    .isIn(['admin', 'staff'])
-    .withMessage('Role must be admin or staff'),
-  handleValidation,
-  ctrl.createUser,
-);
-
 // POST /api/users/:id/approve -> approve a pending sign-up
 router.post(
   '/:id/approve',
@@ -48,15 +34,11 @@ router.post(
   ctrl.approveUser,
 );
 
-// PUT /api/users/:id -> update username/password/role
+// PUT /api/users/:id -> update username/role only
 router.put(
   '/:id',
   param('id').isInt().withMessage('Invalid user ID'),
   body('username').optional().isString().notEmpty(),
-  body('password')
-    .optional()
-    .isLength({ min: 6 })
-    .withMessage('Password must be >= 6 chars'),
   body('role').optional().isIn(['admin', 'staff']),
   handleValidation,
   ctrl.updateUser,

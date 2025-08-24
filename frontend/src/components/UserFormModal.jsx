@@ -42,14 +42,14 @@ export default function UserFormModal({
 
     try {
       const payload = { username: username.trim(), role };
-      if (!userToEdit || password.trim()) {
-        payload.password = password.trim();
-      }
 
       if (userToEdit) {
+        // ✅ Editing user (no password here, backend doesn't allow)
         await axios.put(`/api/users/${userToEdit.id}`, payload);
       } else {
-        await axios.post('/api/users', payload);
+        // ✅ Creating user -> go through auth/register (Supabase handles password)
+        payload.password = password.trim();
+        await axios.post('/api/auth/register', payload);
       }
       onSuccess?.();
     } catch (err) {
@@ -92,7 +92,6 @@ export default function UserFormModal({
       <form id="user-form" onSubmit={handleSubmit} className="space-y-4">
         {error && <p className="text-red-600 mb-3 text-sm">{error}</p>}
         <div>
-          {/* Added htmlFor and id */}
           <label
             htmlFor="username-input"
             className="block text-sm font-medium text-gray-700 mb-1"
@@ -109,28 +108,30 @@ export default function UserFormModal({
             disabled={loading}
           />
         </div>
+
+        {!userToEdit && (
+          <div>
+            <label
+              htmlFor="password-input"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
+              Password
+            </label>
+            <input
+              id="password-input"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password"
+              className="w-full border border-gray-300 px-3 py-2 rounded"
+              required
+              autoComplete="new-password"
+              disabled={loading}
+            />
+          </div>
+        )}
+
         <div>
-          {/* Added htmlFor and id */}
-          <label
-            htmlFor="password-input"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Password
-          </label>
-          <input
-            id="password-input"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder={userToEdit ? 'New Password (optional)' : 'Password'}
-            className="w-full border border-gray-300 px-3 py-2 rounded"
-            required={!userToEdit}
-            autoComplete="new-password"
-            disabled={loading}
-          />
-        </div>
-        <div>
-          {/* Added htmlFor and id */}
           <label
             htmlFor="role-select"
             className="block text-sm font-medium text-gray-700 mb-1"

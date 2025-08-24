@@ -1,5 +1,4 @@
-// backend/controllers/usersController.js
-const bcrypt = require('bcryptjs');
+// backend/controllers/userController.js
 const supabase = require('../lib/supabaseClient');
 
 /**
@@ -10,7 +9,7 @@ exports.getAllUsers = async (req, res, next) => {
     const { data: users, error } = await supabase
       .from('users')
       .select('id, username, role, approved, created_at')
-      .eq('approved', true) // Only fetch approved users for the main list
+      .eq('approved', true)
       .order('id', { ascending: true });
     if (error) throw error;
     res.json(users || []);
@@ -56,36 +55,6 @@ exports.getUserById = async (req, res, next) => {
 };
 
 /**
- * POST /api/users - Create a new user (admin only).
- */
-exports.createUser = async (req, res, next) => {
-  try {
-    const { username, password, role } = req.body;
-    const hash = bcrypt.hashSync(password, 10);
-    const { data, error } = await supabase
-      .from('users')
-      .insert({
-        username,
-        password: hash,
-        role,
-        approved: true, // admin-created accounts are auto-approved
-      })
-      .select('id, username, role, approved')
-      .single();
-
-    if (error) {
-      if (error.code === '23505') {
-        return res.status(400).json({ message: 'Username already exists' });
-      }
-      throw error;
-    }
-    res.status(201).json(data);
-  } catch (err) {
-    next(err);
-  }
-};
-
-/**
  * POST /api/users/:id/approve - Approve a pending user.
  */
 exports.approveUser = async (req, res, next) => {
@@ -112,16 +81,13 @@ exports.approveUser = async (req, res, next) => {
 };
 
 /**
- * PUT /api/users/:id - Update username, password, or role.
+ * PUT /api/users/:id - Update username or role (NOT password).
  */
 exports.updateUser = async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
     const updates = {};
     if (req.body.username) updates.username = req.body.username;
-    if (req.body.password) {
-      updates.password = bcrypt.hashSync(req.body.password, 10);
-    }
     if (req.body.role) updates.role = req.body.role;
 
     if (Object.keys(updates).length === 0) {
