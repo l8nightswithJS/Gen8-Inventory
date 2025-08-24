@@ -6,13 +6,17 @@ const auth = require('../controllers/authController');
 
 const router = express.Router();
 
+// A simple wrapper to catch errors in async routes
+const asyncHandler = (fn) => (req, res, next) =>
+  Promise.resolve(fn(req, res, next)).catch(next);
+
 router.post(
   '/register',
   body('username').isString().notEmpty(),
   body('password').isString().isLength({ min: 6 }),
   body('role').optional().isIn(['admin', 'staff']),
   handleValidation,
-  auth.register,
+  asyncHandler(auth.register),
 );
 
 router.post(
@@ -20,10 +24,10 @@ router.post(
   body('username').isString().notEmpty(),
   body('password').isString().notEmpty(),
   handleValidation,
-  auth.login,
+  asyncHandler(auth.login),
 );
 
-// Add this new route for our test
-router.post('/test-login', auth.testLogin);
+// Apply the asyncHandler to the test route as well
+router.post('/test-login', asyncHandler(auth.testLogin));
 
 module.exports = router;
