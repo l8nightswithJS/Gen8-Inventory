@@ -108,6 +108,7 @@ const SortableHeader = ({
   sortConfig,
   className,
 }) => {
+  // This component is now safe because sortConfig has a default value
   const isSorted = sortConfig.key === sortKey;
   const isAsc = sortConfig.direction === 'ascending';
   return (
@@ -135,7 +136,8 @@ export default function InventoryTable({
   items,
   totalItems,
   columns = [],
-  sortConfig,
+  // FIX: Provide a default value for sortConfig to prevent the crash
+  sortConfig = { key: null, direction: 'ascending' },
   onSort,
   page,
   totalPages,
@@ -180,7 +182,6 @@ export default function InventoryTable({
   const ResponsiveTable = () => (
     <div className="overflow-x-auto bg-white shadow-md rounded-lg">
       <table className="w-full table-auto border-collapse text-sm">
-        {/* Changed bg-slate-50 to bg-white to make the table pop */}
         <thead className="bg-white border-b border-slate-200">
           <tr>
             {columns.map((key) => (
