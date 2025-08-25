@@ -14,6 +14,18 @@ const labelsRouter = require('./routes/labels'); // ⬅️ NEW
 
 const app = express();
 
+// --> ADD THIS CODE BLOCK <--
+// Simple route to check API status and deployed version
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Gener8 Inventory API is running.',
+    version: '2.0-login-fix',
+  });
+});
+// ------------------------------------
+
+// ... (the rest of your server.js file)
+
 // CORS — keep your original, proven behavior
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN;
 app.use(
