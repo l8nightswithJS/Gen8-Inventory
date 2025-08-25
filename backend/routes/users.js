@@ -6,55 +6,41 @@ const authenticate = require('../middleware/authMiddleware');
 const requireRole = require('../middleware/requireRole');
 const { handleValidation } = require('../middleware/validationMiddleware');
 
-// --- START DEBUG LOGGING ---
-console.log(`[DEBUG] Type of authenticate middleware: ${typeof authenticate}`);
-console.log(`[DEBUG] Type of requireRole middleware: ${typeof requireRole}`);
-// --- END DEBUG LOGGING ---
-
 const router = express.Router();
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
+// Apply middleware
 router.use(asyncHandler(authenticate));
-router.use(asyncHandler(requireRole('admin')));
+router.use(requireRole('admin')); // No asyncHandler needed here due to refactor
 
-// GET /api/users -> list all approved users
+// Define routes
 router.get('/', asyncHandler(ctrl.getAllUsers));
-
-// GET /api/users/pending -> list pending sign-ups
 router.get('/pending', asyncHandler(ctrl.getPendingUsers));
-
-// GET /api/users/:id -> get a single user
 router.get(
   '/:id',
-  param('id').isString().withMessage('Invalid user ID'),
+  param('id').isString().notEmpty(),
   handleValidation,
   asyncHandler(ctrl.getUserById),
 );
-
-// POST /api/users/:id/approve -> approve a pending sign-up
 router.post(
   '/:id/approve',
-  param('id').isString().withMessage('Invalid user ID'),
+  param('id').isString().notEmpty(),
   handleValidation,
   asyncHandler(ctrl.approveUser),
 );
-
-// PUT /api/users/:id -> update username/role only
 router.put(
   '/:id',
-  param('id').isString().withMessage('Invalid user ID'),
+  param('id').isString().notEmpty(),
   body('username').optional().isString().notEmpty(),
   body('role').optional().isIn(['admin', 'staff']),
   handleValidation,
   asyncHandler(ctrl.updateUser),
 );
-
-// DELETE /api/users/:id -> delete a user
 router.delete(
   '/:id',
-  param('id').isString().withMessage('Invalid user ID'),
+  param('id').isString().notEmpty(),
   handleValidation,
   asyncHandler(ctrl.deleteUser),
 );
