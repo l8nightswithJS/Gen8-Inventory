@@ -1,7 +1,6 @@
-// src/pages/Login.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from '../utils/axiosConfig';
+import api from '../utils/axiosConfig';
 import logoSvg from '../assets/logo.svg';
 import SignupModal from '../components/SignupModal';
 import { FiUser, FiLock } from 'react-icons/fi';
@@ -37,7 +36,7 @@ export default function Login() {
     e.preventDefault();
     setError('');
     try {
-      const { data } = await axios.post('/api/auth/login', {
+      const { data } = await api.post('/api/auth/login', {
         username,
         password,
       });
@@ -118,7 +117,6 @@ export default function Login() {
               </div>
 
               <div className="text-sm text-right">
-                {/* Changed from an <a> tag to a <button> to fix the accessibility error */}
                 <button
                   type="button"
                   className="font-medium text-blue-600 hover:text-blue-500"
@@ -134,7 +132,6 @@ export default function Login() {
                 Sign In
               </button>
             </form>
-            {/* Changed "Don't" to "Don&apos;t" to fix the unescaped entity error */}
             <p className="mt-6 text-center text-sm text-slate-600">
               Don&apos;t have an account?{' '}
               <button
