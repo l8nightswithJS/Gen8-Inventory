@@ -1,9 +1,8 @@
-// backend/routes/inventory.js
 const express = require('express');
 const { body, param, query } = require('express-validator');
 
 const controller = require('../controllers/inventoryController');
-const authenticate = require('../middleware/authMiddleware');
+const { authenticate } = require('../middleware/authMiddleware'); // CORRECTED LINE
 const requireRole = require('../middleware/requireRole');
 const { handleValidation } = require('../middleware/validationMiddleware');
 
