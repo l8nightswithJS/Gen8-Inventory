@@ -113,5 +113,5 @@ module.exports = {
   computeLowState,
   normalizeKey,
   cleanAttributes,
+  categorizeStockLevel,
 };
-module.exports = { categorizeStockLevel }; // Export for testing
