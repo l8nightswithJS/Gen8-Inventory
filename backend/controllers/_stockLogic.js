@@ -114,3 +114,4 @@ module.exports = {
   normalizeKey,
   cleanAttributes,
 };
+module.exports = { categorizeStockLevel }; // Export for testing

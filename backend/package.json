@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "cross-env NODE_ENV=test jest",
     "start": "node server.js",
     "postinstall": "npm rebuild better-sqlite3 --build-from-source"
   },
@@ -26,5 +26,10 @@
     "pg": "^8.16.3",
     "postgres": "^3.4.7",
     "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "cross-env": "^10.0.0",
+    "jest": "^30.0.5",
+    "supertest": "^7.1.4"
   }
 }
