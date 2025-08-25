@@ -31,6 +31,7 @@ export default function EditClientModal({ client, onClose, onUpdated }) {
       });
 
       onUpdated?.(data);
+      onClose?.(); // <-- This line closes the modal on success
     } catch (err) {
       setError(err?.response?.data?.message || 'Failed to update client.');
     } finally {

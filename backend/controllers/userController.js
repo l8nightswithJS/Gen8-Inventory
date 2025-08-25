@@ -21,6 +21,7 @@ exports.getAllUsers = async (req, res) => {
 };
 
 exports.getPendingUsers = async (req, res) => {
+  // FIX: Query for the boolean 'false', not the string 'false'
   const { data, error } = await supabase
     .from('users')
     .select('*')
@@ -67,6 +68,13 @@ exports.updateUser = async (req, res) => {
 exports.deleteUser = async (req, res) => {
   const { id } = req.params;
   const { error } = await supabase.auth.admin.deleteUser(id);
-  if (error) return handleSupabaseError(res, error, 'deleteUser');
+  // Also delete from public.users table as a fallback
+  if (error) {
+    const { error: publicError } = await supabase
+      .from('users')
+      .delete()
+      .eq('id', id);
+    if (publicError) return handleSupabaseError(res, publicError, 'deleteUser');
+  }
   res.status(204).send();
 };

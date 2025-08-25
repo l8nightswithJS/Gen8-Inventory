@@ -8,31 +8,32 @@ const { handleValidation } = require('../middleware/validationMiddleware');
 
 const router = express.Router();
 
+// A simple wrapper to catch errors in async routes
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
-// Apply middleware
+// FIX: Apply the asyncHandler to the async middleware to prevent crashes
 router.use(asyncHandler(authenticate));
-router.use(requireRole('admin')); // No asyncHandler needed here due to refactor
+router.use(asyncHandler(requireRole('admin')));
 
-// Define routes
+// --- Routes ---
 router.get('/', asyncHandler(ctrl.getAllUsers));
 router.get('/pending', asyncHandler(ctrl.getPendingUsers));
 router.get(
   '/:id',
-  param('id').isString().notEmpty(),
+  param('id').isString().withMessage('Invalid user ID'),
   handleValidation,
   asyncHandler(ctrl.getUserById),
 );
 router.post(
   '/:id/approve',
-  param('id').isString().notEmpty(),
+  param('id').isString().withMessage('Invalid user ID'),
   handleValidation,
   asyncHandler(ctrl.approveUser),
 );
 router.put(
   '/:id',
-  param('id').isString().notEmpty(),
+  param('id').isString().withMessage('Invalid user ID'),
   body('username').optional().isString().notEmpty(),
   body('role').optional().isIn(['admin', 'staff']),
   handleValidation,
@@ -40,7 +41,7 @@ router.put(
 );
 router.delete(
   '/:id',
-  param('id').isString().notEmpty(),
+  param('id').isString().withMessage('Invalid user ID'),
   handleValidation,
   asyncHandler(ctrl.deleteUser),
 );
