@@ -11,6 +11,8 @@ const clientsRouter = require('./routes/clients');
 const inventoryRouter = require('./routes/inventory');
 const barcodeRoutes = require('./routes/barcodes');
 const labelsRouter = require('./routes/labels'); // ⬅️ NEW
+const scanRouter = require('./routes/scan'); // ⬅️ ADD THIS LINE
+const locationsRouter = require('./routes/locations');
 
 const app = express();
 
@@ -51,6 +53,8 @@ app.use('/api/clients', clientsRouter);
 app.use('/api/items', inventoryRouter);
 app.use('/api/barcodes', barcodeRoutes);
 app.use('/api/labels', labelsRouter); // ⬅️ NEW
+app.use('/api/locations', locationsRouter);
+app.use('/api/scan', scanRouter); // ⬅️ ADD THIS LINE
 
 // Health
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
