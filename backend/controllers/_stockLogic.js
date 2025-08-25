@@ -113,5 +113,4 @@ module.exports = {
   computeLowState,
   normalizeKey,
   cleanAttributes,
-  categorizeStockLevel,
 };

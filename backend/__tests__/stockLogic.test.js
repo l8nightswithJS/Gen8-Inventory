@@ -1,26 +1,50 @@
-const { categorizeStockLevel } = require('../controllers/_stockLogic');
+// We are destructuring the imported object to get the specific functions we need.
+const { computeLowState } = require('../controllers/_stockLogic');
 
 describe('Stock Logic', () => {
-  describe('categorizeStockLevel', () => {
-    it('should return "In Stock" when quantity is above low stock threshold', () => {
-      const item = { quantity: 20, low_stock_threshold: 10 };
-      expect(categorizeStockLevel(item)).toBe('In Stock');
+  describe('computeLowState', () => {
+    it('should return "low: false" when alerts are disabled', () => {
+      const item = {
+        quantity: 5,
+        low_stock_threshold: 10,
+        alert_enabled: false,
+      };
+      const result = computeLowState(item);
+      expect(result.low).toBe(false);
     });
 
-    it('should return "Low Stock" when quantity is at or below the threshold but above 0', () => {
+    it('should return "low: true" when quantity is below the low_stock_threshold', () => {
+      const item = { quantity: 5, low_stock_threshold: 10 };
+      const result = computeLowState(item);
+      expect(result.low).toBe(true);
+      expect(result.reason).toBe('low_stock_threshold');
+    });
+
+    it('should return "low: true" when quantity is equal to the low_stock_threshold', () => {
       const item = { quantity: 10, low_stock_threshold: 10 };
-      expect(categorizeStockLevel(item)).toBe('Low Stock');
+      const result = computeLowState(item);
+      expect(result.low).toBe(true);
     });
 
-    it('should return "Out of Stock" when quantity is 0', () => {
-      const item = { quantity: 0, low_stock_threshold: 10 };
-      expect(categorizeStockLevel(item)).toBe('Out of Stock');
+    it('should return "low: false" when quantity is above all thresholds', () => {
+      const item = { quantity: 100, low_stock_threshold: 10, reorder_level: 5 };
+      const result = computeLowState(item);
+      expect(result.low).toBe(false);
     });
 
-    it('should handle missing low_stock_threshold gracefully', () => {
-      const item = { quantity: 5 };
-      // Assuming a default threshold or specific behavior
-      expect(categorizeStockLevel(item)).toBe('In Stock'); // Or whatever the expected default is
+    it('should use the reorder_level if it is lower than the low_stock_threshold', () => {
+      const item = { quantity: 3, low_stock_threshold: 10, reorder_level: 5 };
+      const result = computeLowState(item);
+      expect(result.low).toBe(true);
+      expect(result.reason).toBe('reorder_level'); // Because reorder_level is the lower (minimum) threshold
+      expect(result.threshold).toBe(5);
+    });
+
+    it('should handle items with no quantity information gracefully', () => {
+      const item = { low_stock_threshold: 10 };
+      const result = computeLowState(item);
+      expect(result.low).toBe(false);
+      expect(result.qty).toBe(null);
     });
   });
 });
