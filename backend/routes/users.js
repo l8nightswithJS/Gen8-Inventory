@@ -6,13 +6,16 @@ const authenticate = require('../middleware/authMiddleware');
 const requireRole = require('../middleware/requireRole');
 const { handleValidation } = require('../middleware/validationMiddleware');
 
+// --- START DEBUG LOGGING ---
+console.log(`[DEBUG] Type of authenticate middleware: ${typeof authenticate}`);
+console.log(`[DEBUG] Type of requireRole middleware: ${typeof requireRole}`);
+// --- END DEBUG LOGGING ---
+
 const router = express.Router();
 
-// A simple wrapper to catch errors in async routes
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
-// FIX: Apply the asyncHandler to the async middleware
 router.use(asyncHandler(authenticate));
 router.use(asyncHandler(requireRole('admin')));
 
