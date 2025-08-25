@@ -1,38 +1,38 @@
-// src/components/AddItemModal.jsx
 import { useState } from 'react';
-import axios from '../utils/axiosConfig';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
 
-const NUMERIC_KEYS = new Set([
-  'on_hand',
-  'quantity',
-  'qty_in_stock',
-  'stock',
-  'low_stock_threshold',
-  'reorder_level',
-  'reorder_qty',
-]);
-
-const SYSTEM_KEYS = new Set([
-  'has_lot',
-  'lot_number',
-  'alert_enabled',
-  'low_stock_threshold',
-  'reorder_level',
-  'reorder_qty',
-]);
-
+// The new `api` prop is now a required part of the function signature
 export default function AddItemModal({
   clientId,
   schema = [],
   onClose,
   onCreated,
   isLotTrackingLocked,
+  api, // The inventoryApi instance passed from ClientPage.jsx
 }) {
   const [form, setForm] = useState({ alert_enabled: true });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const NUMERIC_KEYS = new Set([
+    'on_hand',
+    'quantity',
+    'qty_in_stock',
+    'stock',
+    'low_stock_threshold',
+    'reorder_level',
+    'reorder_qty',
+  ]);
+
+  const SYSTEM_KEYS = new Set([
+    'has_lot',
+    'lot_number',
+    'alert_enabled',
+    'low_stock_threshold',
+    'reorder_level',
+    'reorder_qty',
+  ]);
 
   const handleChange = (e) => {
     const { name, type, checked, value } = e.target;
@@ -45,7 +45,6 @@ export default function AddItemModal({
   const buildAttributes = () => {
     const attrs = {};
     schema.forEach((key) => {
-      // Don't include system keys in the main loop
       if (SYSTEM_KEYS.has(key)) return;
       const raw = form[key];
       if (raw != null && raw !== '') {
@@ -73,7 +72,8 @@ export default function AddItemModal({
 
     try {
       setSubmitting(true);
-      const { data } = await axios.post('/api/items', {
+      // UPDATED: Use the passed-in `api` instance
+      const { data } = await api.post('/api/items', {
         client_id: parseInt(clientId, 10),
         attributes,
       });

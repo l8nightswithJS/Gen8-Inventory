@@ -1,8 +1,6 @@
-// backend/controllers/clientsController.js
 const fs = require('fs');
 const path = require('path');
 const supabase = require('../lib/supabaseClient');
-const { computeLowState } = require('./_stockLogic');
 
 // GET /api/clients
 exports.getAllClients = async (req, res, next) => {
@@ -46,9 +44,7 @@ async function uploadToBucket(localPath, fileName) {
     if (upErr) throw upErr;
     const {
       data: { publicUrl },
-      error: urlErr,
     } = supabase.storage.from('client-logos').getPublicUrl(fileName);
-    if (urlErr) throw urlErr;
     return publicUrl;
   } catch (e) {
     console.warn(
@@ -65,7 +61,6 @@ exports.createClient = async (req, res, next) => {
     const name = (req.body.name || '').trim();
     if (!name) return res.status(400).json({ message: 'name is required' });
 
-    // optional barcode; empty string -> null
     let barcode =
       typeof req.body.barcode === 'string' ? req.body.barcode.trim() : null;
     if (barcode === '') barcode = null;
@@ -116,7 +111,6 @@ exports.updateClient = async (req, res, next) => {
     const fields = {};
     if (typeof req.body.name === 'string') fields.name = req.body.name.trim();
 
-    // allow updating/clearing barcode
     if (Object.prototype.hasOwnProperty.call(req.body, 'barcode')) {
       if (typeof req.body.barcode === 'string') {
         const v = req.body.barcode.trim();
@@ -175,63 +169,6 @@ exports.deleteClient = async (req, res, next) => {
     if (error) throw error;
     if (count === 0) return res.status(404).json({ message: 'Not found' });
     res.json({ message: 'Client deleted' });
-  } catch (err) {
-    next(err);
-  }
-};
-
-// GET /api/clients/:id/alerts
-exports.getClientAlerts = async (req, res, next) => {
-  try {
-    const id = parseInt(req.params.id, 10);
-    if (isNaN(id))
-      return res.status(400).json({ message: 'Invalid client id' });
-
-    const { data: items, error } = await supabase
-      .from('items')
-      .select('id, client_id, attributes, last_updated')
-      .eq('client_id', id);
-
-    if (error) throw error;
-
-    const alerts = (items || []).flatMap((row) => {
-      const attrs = row.attributes || {};
-      const { low, reason, threshold, qty } = computeLowState(attrs);
-      if (!low) return [];
-      return [
-        {
-          id: row.id,
-          triggered_at: row.last_updated || new Date().toISOString(),
-          item: { id: row.id, attributes: attrs },
-          reason,
-          threshold,
-          qty,
-        },
-      ];
-    });
-
-    res.json({ alerts });
-  } catch (err) {
-    next(err);
-  }
-};
-
-// OPTIONAL: GET /api/clients/lookup?barcode=CODE
-exports.lookupByBarcode = async (req, res, next) => {
-  try {
-    const code = String(req.query.barcode || '').trim();
-    if (!code) return res.status(400).json({ message: 'barcode is required' });
-
-    const { data, error } = await supabase
-      .from('clients')
-      .select('id')
-      .eq('barcode', code)
-      .single();
-
-    if (error && error.code !== 'PGRST116') throw error; // PGRST116: no rows
-    if (!data) return res.status(404).json({ message: 'Not found' });
-
-    res.json({ id: data.id });
   } catch (err) {
     next(err);
   }

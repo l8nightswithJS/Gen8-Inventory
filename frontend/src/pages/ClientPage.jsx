@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import api from '../utils/axiosConfig';
+import axios from '../utils/axiosConfig'; // We'll use this to create other instances
 
 // --- Main Components ---
 import InventoryTable from '../components/InventoryTable';
@@ -28,6 +28,29 @@ import {
   FiChevronLeft,
 } from 'react-icons/fi';
 
+// --- Create dedicated API clients for our new services ---
+const inventoryApi = axios.create({
+  baseURL: process.env.REACT_APP_INVENTORY_API_URL,
+});
+const clientApi = axios.create({
+  baseURL: process.env.REACT_APP_CLIENT_API_URL,
+});
+
+// Add the auth token to every request for these new instances
+[inventoryApi, clientApi].forEach((apiInstance) => {
+  apiInstance.interceptors.request.use(
+    (config) => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        config.headers['Authorization'] = `Bearer ${token}`;
+      }
+      return config;
+    },
+    (error) => Promise.reject(error),
+  );
+});
+// -----------------------------------------------------------
+
 const QTY_KEYS = ['quantity', 'on_hand', 'qty_in_stock', 'stock'];
 
 export default function ClientPage() {
@@ -40,7 +63,7 @@ export default function ClientPage() {
   const [items, setItems] = useState([]);
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
-  const [viewMode] = useState('desktop'); // setViewMode removed
+  const [viewMode] = useState('desktop');
 
   // --- Modal State ---
   const [modalState, setModalState] = useState({
@@ -54,7 +77,7 @@ export default function ClientPage() {
     scannedItem: null,
   });
 
-  const [schema, setSchema] = useState(() => getSavedSchema(clientId)); // setSchema is now used
+  const [schema, setSchema] = useState(() => getSavedSchema(clientId));
 
   // --- Sorting & Pagination State ---
   const [sortConfig, setSortConfig] = useState({
@@ -66,7 +89,8 @@ export default function ClientPage() {
 
   const fetchItems = useCallback(async () => {
     try {
-      const { data } = await api.get(`/api/items`, {
+      // UPDATED: Use inventoryApi
+      const { data } = await inventoryApi.get(`/api/items`, {
         params: { client_id: clientId },
       });
       setItems(Array.isArray(data) ? data : []);
@@ -75,10 +99,21 @@ export default function ClientPage() {
     }
   }, [clientId]);
 
+  const fetchClientDetails = useCallback(async () => {
+    try {
+      // UPDATED: Use clientApi
+      const res = await clientApi.get(`/api/clients/${clientId}`);
+      setClient(res.data);
+    } catch (err) {
+      console.error('Failed to fetch client details:', err);
+      navigate('/dashboard');
+    }
+  }, [clientId, navigate]);
+
   useEffect(() => {
-    api.get(`/api/clients/${clientId}`).then((res) => setClient(res.data));
+    fetchClientDetails();
     fetchItems();
-  }, [clientId, fetchItems]);
+  }, [clientId, fetchItems, fetchClientDetails]);
 
   const handleModal = (modal, value) => {
     setModalState((prev) => ({ ...prev, [modal]: value }));
@@ -96,7 +131,8 @@ export default function ClientPage() {
   const confirmDelete = async () => {
     if (!modalState.deleteItem) return;
     try {
-      await api.delete(`/api/items/${modalState.deleteItem.id}`);
+      // UPDATED: Use inventoryApi
+      await inventoryApi.delete(`/api/items/${modalState.deleteItem.id}`);
       handleModal('deleteItem', null);
       fetchItems();
     } catch (err) {
@@ -104,7 +140,7 @@ export default function ClientPage() {
     }
   };
 
-  // --- Memoized Calculations ---
+  // --- Memoized Calculations (No changes needed here) ---
   const filteredItems = useMemo(() => {
     if (!query) return items;
     return items.filter((item) =>
@@ -190,7 +226,8 @@ export default function ClientPage() {
             </Button>
             <Button
               as="a"
-              href={`/api/items/export?client_id=${clientId}`}
+              // UPDATED: Use full URL for export
+              href={`${process.env.REACT_APP_INVENTORY_API_URL}/api/items/export?client_id=${clientId}`}
               variant="secondary"
               title="Export Data"
             >
@@ -244,7 +281,7 @@ export default function ClientPage() {
           onClose={() => handleModal('columnSetup', false)}
           onSave={(cols) => {
             const newSchema = saveSchema(clientId, cols);
-            setSchema(newSchema); // Directly update schema state
+            setSchema(newSchema);
             handleModal('columnSetup', false);
           }}
           initial={columns}
@@ -255,6 +292,8 @@ export default function ClientPage() {
           clientId={clientId}
           onClose={() => handleModal('import', false)}
           refresh={fetchItems}
+          // UPDATED: Pass the correct API instance to the modal
+          api={inventoryApi}
         />
       )}
       {modalState.addItem && (
@@ -263,6 +302,8 @@ export default function ClientPage() {
           clientId={clientId}
           onClose={() => handleModal('addItem', false)}
           onCreated={fetchItems}
+          // UPDATED: Pass the correct API instance to the modal
+          api={inventoryApi}
         />
       )}
       {modalState.editItem && (
@@ -271,6 +312,8 @@ export default function ClientPage() {
           item={modalState.editItem}
           onClose={() => handleModal('editItem', null)}
           onUpdated={fetchItems}
+          // UPDATED: Pass the correct API instance to the modal
+          api={inventoryApi}
         />
       )}
       {modalState.deleteItem && (

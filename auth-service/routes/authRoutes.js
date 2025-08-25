@@ -1,4 +1,3 @@
-// backend/routes/authRoutes.js
 const express = require('express');
 const { body } = require('express-validator');
 const { handleValidation } = require('../middleware/validationMiddleware');
@@ -11,7 +10,7 @@ const asyncHandler = (fn) => (req, res, next) =>
 
 router.post(
   '/register',
-  body('username').isString().notEmpty(),
+  body('email').isEmail().withMessage('A valid email is required'),
   body('password').isString().isLength({ min: 6 }),
   body('role').optional().isIn(['admin', 'staff']),
   handleValidation,
@@ -20,12 +19,12 @@ router.post(
 
 router.post(
   '/login',
-  body('username').isString().notEmpty(),
+  body('email').isEmail().withMessage('A valid email is required'),
   body('password').isString().notEmpty(),
   handleValidation,
   asyncHandler(auth.login),
 );
 
-router.post('/test-login', asyncHandler(auth.testLogin));
+router.post('/verify', auth.verifyToken);
 
 module.exports = router;

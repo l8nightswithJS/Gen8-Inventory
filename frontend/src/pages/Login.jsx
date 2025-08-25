@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../utils/axiosConfig';
+import axios from '../utils/axiosConfig'; // Using axios directly for a specific URL
 import logoSvg from '../assets/logo.svg';
 import SignupModal from '../components/SignupModal';
-import { FiUser, FiLock } from 'react-icons/fi';
+import { FiMail, FiLock } from 'react-icons/fi';
 
 function isTokenValid(token) {
   if (!token) return false;
@@ -17,7 +17,7 @@ function isTokenValid(token) {
 
 export default function Login() {
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState(''); // Changed from username to email
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [showSignup, setShowSignup] = useState(false);
@@ -36,15 +36,19 @@ export default function Login() {
     e.preventDefault();
     setError('');
     try {
-      const { data } = await api.post('/api/auth/login', {
-        username,
-        password,
-      });
+      // Use the new AUTH_API_URL and send 'email'
+      const { data } = await axios.post(
+        `${process.env.REACT_APP_AUTH_API_URL}/api/auth/login`,
+        {
+          email,
+          password,
+        },
+      );
       localStorage.setItem('token', data.token);
       localStorage.setItem('role', data.role);
       navigate('/dashboard');
     } catch {
-      setError('Invalid username or password.');
+      setError('Invalid email or password.');
     }
   };
 
@@ -87,17 +91,17 @@ export default function Login() {
 
             <form onSubmit={handleSubmit} className="mt-8 space-y-6">
               <div className="relative">
-                <FiUser className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
+                <FiMail className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
                 <input
-                  id="username"
-                  name="username"
-                  type="text"
-                  autoComplete="username"
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
                   required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="w-full border border-gray-300 pl-10 pr-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Username"
+                  placeholder="Email address"
                 />
               </div>
 

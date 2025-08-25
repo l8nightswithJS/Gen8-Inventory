@@ -1,34 +1,23 @@
-// backend/server.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 
-const authRouter = require('./routes/authRoutes');
-const usersRouter = require('./routes/users');
-const clientsRouter = require('./routes/clients');
+// Remaining core routes
 const inventoryRouter = require('./routes/inventory');
-const barcodeRoutes = require('./routes/barcodes');
-const labelsRouter = require('./routes/labels'); // ⬅️ NEW
-const scanRouter = require('./routes/scan'); // ⬅️ ADD THIS LINE
+const labelsRouter = require('./routes/labels');
 const locationsRouter = require('./routes/locations');
 
 const app = express();
 
-// --> ADD THIS CODE BLOCK <--
-// Simple route to check API status and deployed version
 app.get('/', (req, res) => {
   res.json({
     message: 'Gener8 Inventory API is running.',
     version: '2.0-login-fix',
   });
 });
-// ------------------------------------
 
-// ... (the rest of your server.js file)
-
-// CORS — keep your original, proven behavior
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN;
 app.use(
   cors({
@@ -37,29 +26,20 @@ app.use(
   }),
 );
 
-// Parsers
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Static uploads dir
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 app.use('/uploads', express.static(uploadDir));
 
-// Routes
-app.use('/api/auth', authRouter);
-app.use('/api/users', usersRouter);
-app.use('/api/clients', clientsRouter);
+// Routes are now cleaned up
 app.use('/api/items', inventoryRouter);
-app.use('/api/barcodes', barcodeRoutes);
-app.use('/api/labels', labelsRouter); // ⬅️ NEW
+app.use('/api/labels', labelsRouter);
 app.use('/api/locations', locationsRouter);
-app.use('/api/scan', scanRouter); // ⬅️ ADD THIS LINE
 
-// Health
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
-// Error handler (keep last)
 const errorHandler = require('./middleware/errorHandler');
 app.use(errorHandler);
 

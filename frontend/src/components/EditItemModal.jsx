@@ -1,40 +1,37 @@
-// src/components/EditItemModal.jsx
 import { useEffect, useState } from 'react';
-import axios from '../utils/axiosConfig';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
 
-// Added the missing QTY_KEYS constant
-const QTY_KEYS = new Set(['on_hand', 'quantity', 'qty_in_stock', 'stock']);
-
-const NUMERIC_KEYS = new Set([
-  'on_hand',
-  'quantity',
-  'qty_in_stock',
-  'stock',
-  'reorder_level',
-  'reorder_qty',
-]);
-
-const SYSTEM_KEYS = new Set([
-  'has_lot',
-  'lot_number',
-  'alert_enabled',
-  'reorder_level',
-  'reorder_qty',
-]);
-
-const titleFor = (key) =>
-  key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-
+// Accept the new `api` prop
 export default function EditItemModal({
   item,
   schema = [],
   onClose,
   onUpdated,
   isLotTrackingLocked,
+  api, // The inventoryApi instance passed from ClientPage.jsx
 }) {
   const [form, setForm] = useState({});
+
+  const QTY_KEYS = new Set(['on_hand', 'quantity', 'qty_in_stock', 'stock']);
+  const NUMERIC_KEYS = new Set([
+    'on_hand',
+    'quantity',
+    'qty_in_stock',
+    'stock',
+    'reorder_level',
+    'reorder_qty',
+  ]);
+  const SYSTEM_KEYS = new Set([
+    'has_lot',
+    'lot_number',
+    'alert_enabled',
+    'reorder_level',
+    'reorder_qty',
+  ]);
+
+  const titleFor = (key) =>
+    key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
   useEffect(() => {
     if (!item) return;
@@ -68,7 +65,8 @@ export default function EditItemModal({
         delete payload.attributes.reorder_qty;
       }
 
-      await axios.put(`/api/items/${item.id}?merge=true`, payload);
+      // UPDATED: Use the passed-in `api` instance
+      await api.put(`/api/items/${item.id}?merge=true`, payload);
       onUpdated?.();
       onClose?.();
     } catch (e) {
@@ -127,7 +125,6 @@ export default function EditItemModal({
         </div>
         {form.has_lot && (
           <div className="pl-6">
-            {/* Added htmlFor and id to link the label and input */}
             <label
               htmlFor="edit-lot_number"
               className="block text-sm font-medium text-gray-700 mb-1"
@@ -159,7 +156,6 @@ export default function EditItemModal({
         {form.alert_enabled && (
           <div className="pl-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              {/* Added htmlFor and id to link the label and input */}
               <label
                 htmlFor="edit-reorder_level"
                 className="block text-sm font-medium text-gray-700 mb-1"
@@ -177,7 +173,6 @@ export default function EditItemModal({
               />
             </div>
             <div>
-              {/* Added htmlFor and id to link the label and input */}
               <label
                 htmlFor="edit-reorder_qty"
                 className="block text-sm font-medium text-gray-700 mb-1"

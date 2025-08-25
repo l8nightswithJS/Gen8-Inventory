@@ -1,9 +1,27 @@
-// src/pages/Dashboard.jsx
 import { useState, useEffect, useCallback } from 'react';
-import axios from '../utils/axiosConfig';
+import axios from '../utils/axiosConfig'; // Keep original for creating new instances
 import ClientCarousel from '../components/ClientCarousel';
 import AddClientModal from '../components/AddClientModal';
 import Button from '../components/ui/Button';
+
+// Create a new, separate axios instance specifically for the client service
+const clientApi = axios.create({
+  baseURL: `${process.env.REACT_APP_CLIENT_API_URL}`,
+});
+
+// Add the auth token interceptor to every request for the new instance
+clientApi.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  },
+);
 
 export default function Dashboard() {
   const [clients, setClients] = useState([]);
@@ -12,7 +30,8 @@ export default function Dashboard() {
 
   const fetchClients = useCallback(async () => {
     try {
-      const res = await axios.get('/api/clients');
+      // Use the new clientApi instance to make the request
+      const res = await clientApi.get('/api/clients');
       setClients(res.data);
       setError('');
     } catch {
@@ -27,7 +46,8 @@ export default function Dashboard() {
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this client?')) return;
     try {
-      await axios.delete(`/api/clients/${id}`);
+      // Use the new clientApi instance for the delete request
+      await clientApi.delete(`/api/clients/${id}`);
       fetchClients();
     } catch {
       setError('Failed to delete client.');
@@ -40,7 +60,6 @@ export default function Dashboard() {
         <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
           Clients
         </h1>
-        {/* Changed button to the secondary style for a cleaner look */}
         <Button variant="secondary" onClick={() => setShowAddModal(true)}>
           + Add Client
         </Button>

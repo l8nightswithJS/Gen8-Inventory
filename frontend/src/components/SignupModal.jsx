@@ -1,11 +1,10 @@
-// src/components/SignupModal.jsx
 import { useState } from 'react';
 import axios from '../utils/axiosConfig';
 import Button from './ui/Button';
 
 export default function SignupModal({ onClose }) {
   const [form, setForm] = useState({
-    username: '',
+    email: '', // Changed from username to email
     password: '',
     role: 'staff',
   });
@@ -22,7 +21,11 @@ export default function SignupModal({ onClose }) {
     setMsg('');
     setLoading(true);
     try {
-      const { data } = await axios.post('/api/auth/register', form);
+      // Use the new AUTH_API_URL and send 'email'
+      const { data } = await axios.post(
+        `${process.env.REACT_APP_AUTH_API_URL}/api/auth/register`,
+        form,
+      );
       setMsg(data.message);
       setTimeout(onClose, 2500); // Give user time to read success message
     } catch (err) {
@@ -46,10 +49,11 @@ export default function SignupModal({ onClose }) {
         )}
 
         <input
-          name="username"
-          placeholder="Username"
+          name="email"
+          type="email"
+          placeholder="Email address"
           required
-          value={form.username}
+          value={form.email}
           onChange={handleChange}
           className="w-full border border-gray-300 px-3 py-2 rounded text-sm"
           disabled={loading}
