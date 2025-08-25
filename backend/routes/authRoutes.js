@@ -20,7 +20,6 @@ router.post(
 
 router.post(
   '/login',
-  // FIX: This now validates for 'username' to match the frontend
   body('username').isString().notEmpty(),
   body('password').isString().notEmpty(),
   handleValidation,
