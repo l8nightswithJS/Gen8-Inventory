@@ -37,11 +37,25 @@ exports.processScan = async (req, res) => {
   }
 
   if (location) {
-    return res.json({ type: 'location', data: location });
+    // If location is found, fetch its inventory
+    const { data: inventory, error: inventoryError } = await supabase
+      .from('inventory')
+      .select('quantity, items(*)')
+      .eq('location_id', location.id);
+
+    if (inventoryError) {
+      return handleSupabaseError(
+        res,
+        inventoryError,
+        'processScan (inventory)',
+      );
+    }
+
+    const response = { ...location, items: inventory || [] };
+    return res.json({ type: 'location', data: response });
   }
 
   // 2. If not a location, check if it's an Item barcode
-  // Note: The 'items' table uses 'barcode' column, 'locations' uses 'code'
   const { data: item, error: itemError } = await supabase
     .from('items')
     .select('*')
