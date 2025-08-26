@@ -4,7 +4,24 @@ const cors = require('cors');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();
-app.use(cors());
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://your-vercel-app-name.vercel.app', // Your deployed Vercel URL
+];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+};
+
+// Your original app.use(cors()) should be replaced with this:
+app.use(cors(corsOptions));
 
 // --- Proxy Routes ---
 

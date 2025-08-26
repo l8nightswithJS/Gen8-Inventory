@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from '../utils/axiosConfig'; // Using axios directly for a specific URL
+import axios from '../utils/axiosConfig';
 import logoSvg from '../assets/logo.svg';
 import SignupModal from '../components/SignupModal';
 import { FiMail, FiLock } from 'react-icons/fi';
@@ -17,7 +17,7 @@ function isTokenValid(token) {
 
 export default function Login() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState(''); // Changed from username to email
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [showSignup, setShowSignup] = useState(false);
@@ -36,65 +36,41 @@ export default function Login() {
     e.preventDefault();
     setError('');
     try {
-      // Use the new AUTH_API_URL and send 'email'
-      const { data } = await axios.post(
-        `${process.env.REACT_APP_AUTH_API_URL}/api/auth/login`,
-        {
-          email,
-          password,
-        },
-      );
+      // UPDATED: Use a relative path to go through the API Gateway
+      const { data } = await axios.post('/api/auth/login', {
+        email: email.trim().toLowerCase(),
+        password,
+      });
       localStorage.setItem('token', data.token);
       localStorage.setItem('role', data.role);
       navigate('/dashboard');
-    } catch {
-      setError('Invalid email or password.');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Login failed');
     }
   };
 
   return (
     <>
-      <div className="min-h-screen flex flex-col md:flex-row">
-        {/* Left Panel: Branded side, hidden on mobile */}
-        <div className="hidden md:flex md:w-1/2 lg:w-2/5 bg-slate-900 text-white p-12 flex-col justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <img src={logoSvg} alt="Gener8 Logo" className="h-10 w-10" />
-              <span className="font-semibold text-2xl text-blue-400">
-                Gener8 <span className="text-white">Inventory</span>
-              </span>
-            </div>
-            <p className="mt-8 text-2xl font-light text-slate-300">
-              “Inventory accuracy is the hallmark of operational excellence.”
-            </p>
-          </div>
-          <p className="text-sm text-slate-400">
-            &copy; {new Date().getFullYear()} Gener8, Inc.
-          </p>
+      {showSignup && <SignupModal onClose={() => setShowSignup(false)} />}
+      <div className="min-h-screen bg-slate-100 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+        <div className="sm:mx-auto sm:w-full sm:max-w-md">
+          <img className="mx-auto h-12 w-auto" src={logoSvg} alt="Gener8" />
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-slate-900">
+            Sign in to your account
+          </h2>
         </div>
 
-        {/* Right Panel: Login Form */}
-        <div className="w-full md:w-1/2 lg:w-3/5 bg-slate-50 flex flex-col items-center justify-center p-4">
-          <div className="w-full max-w-sm">
-            <h2 className="text-3xl font-extrabold text-slate-900 text-center">
-              Welcome Back
-            </h2>
-            <p className="text-center text-slate-500 mt-2">
-              Sign in to continue
-            </p>
-
-            {error && (
-              <div className="bg-red-100 border border-red-300 text-red-800 px-4 py-3 rounded-lg my-6 text-center text-sm">
-                {error}
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="mt-8 space-y-6">
+        <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+          <div className="bg-white py-8 px-4 shadow-lg sm:rounded-lg sm:px-10">
+            <form className="space-y-6" onSubmit={handleSubmit}>
+              {error && (
+                <div className="rounded-md bg-red-50 p-4">
+                  <p className="text-sm font-medium text-red-800">{error}</p>
+                </div>
+              )}
               <div className="relative">
-                <FiMail className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
+                <FiMail className="pointer-events-none w-5 h-5 absolute top-1/2 transform -translate-y-1/2 left-3 text-slate-400" />
                 <input
-                  id="email"
-                  name="email"
                   type="email"
                   autoComplete="email"
                   required
@@ -106,10 +82,8 @@ export default function Login() {
               </div>
 
               <div className="relative">
-                <FiLock className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
+                <FiLock className="pointer-events-none w-5 h-5 absolute top-1/2 transform -translate-y-1/2 left-3 text-slate-400" />
                 <input
-                  id="password"
-                  name="password"
                   type="password"
                   autoComplete="current-password"
                   required
@@ -148,8 +122,6 @@ export default function Login() {
           </div>
         </div>
       </div>
-
-      {showSignup && <SignupModal onClose={() => setShowSignup(false)} />}
     </>
   );
 }
