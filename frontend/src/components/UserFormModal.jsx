@@ -1,16 +1,16 @@
-// src/components/UserFormModal.jsx
 import { useState, useEffect } from 'react';
-import axios from '../utils/axiosConfig';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
 
+// Accept the new `api` prop
 export default function UserFormModal({
   isOpen,
   onSuccess,
   userToEdit,
   onClose,
+  api, // The authApi instance passed from UsersPage.jsx
 }) {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState(''); // Changed from username to email
   const [role, setRole] = useState('staff');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -19,10 +19,12 @@ export default function UserFormModal({
   useEffect(() => {
     if (isOpen) {
       if (userToEdit) {
-        setUsername(userToEdit.username);
+        // The user object from the DB has a username, but we need the email for auth
+        // Assuming email might not be present on the old user object, default to empty
+        setEmail(userToEdit.email || userToEdit.username);
         setRole(userToEdit.role || 'staff');
       } else {
-        setUsername('');
+        setEmail('');
         setRole('staff');
       }
       setPassword('');
@@ -34,22 +36,27 @@ export default function UserFormModal({
     e.preventDefault();
     setError('');
 
-    if (!username.trim() || (!userToEdit && !password.trim())) {
-      setError('Username and password are required.');
+    if (!email.trim() || (!userToEdit && !password.trim())) {
+      setError('Email and password are required.');
       return;
     }
     setLoading(true);
 
     try {
-      const payload = { username: username.trim(), role };
-
       if (userToEdit) {
-        // ✅ Editing user (no password here, backend doesn't allow)
-        await axios.put(`/api/users/${userToEdit.id}`, payload);
+        // Editing user - payload only needs role
+        const payload = { role };
+        // UPDATED: Use the passed-in `api` instance
+        await api.put(`/api/users/${userToEdit.id}`, payload);
       } else {
-        // ✅ Creating user -> go through auth/register (Supabase handles password)
-        payload.password = password.trim();
-        await axios.post('/api/auth/register', payload);
+        // Creating user - payload needs email, password, and role
+        const payload = {
+          email: email.trim(),
+          role,
+          password: password.trim(),
+        };
+        // UPDATED: Use the passed-in `api` instance
+        await api.post('/api/auth/register', payload);
       }
       onSuccess?.();
     } catch (err) {
@@ -93,19 +100,19 @@ export default function UserFormModal({
         {error && <p className="text-red-600 mb-3 text-sm">{error}</p>}
         <div>
           <label
-            htmlFor="username-input"
+            htmlFor="email-input" // Changed from username-input
             className="block text-sm font-medium text-gray-700 mb-1"
           >
-            Username
+            Email
           </label>
           <input
-            id="username-input"
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            id="email-input" // Changed from username-input
+            type="email" // Changed from text to email
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             className="w-full border border-gray-300 px-3 py-2 rounded"
             required
-            disabled={loading}
+            disabled={loading || userToEdit} // Disable email editing
           />
         </div>
 

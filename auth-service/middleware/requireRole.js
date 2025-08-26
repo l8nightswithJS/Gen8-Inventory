@@ -1,36 +1,32 @@
-// backend/middleware/requireRole.js
-const supabase = require('../lib/supabaseClient');
+// This middleware assumes that a previous middleware (like authMiddleware)
+// has already verified a JWT and attached the user payload to req.user.
 
 const requireRole =
   (...allowedRoles) =>
-  async (req, res, next) => {
-    if (!req.user) {
-      return res.status(401).json({ message: 'Authentication required.' });
+  (req, res, next) => {
+    // 1. Check if a user object with a role exists on the request.
+    // This user object comes from the decoded JWT, not a new database call.
+    if (!req.user || !req.user.role) {
+      return res
+        .status(403)
+        .json({ message: 'Forbidden: Role information missing from token.' });
     }
 
-    try {
-      const { data: profile, error } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', req.user.id)
-        .single();
+    // 2. Check if the user's role is in the list of allowed roles.
+    // We make it case-insensitive for robustness.
+    const userRole = req.user.role.toLowerCase();
+    const hasPermission = allowedRoles.some(
+      (allowedRole) => allowedRole.toLowerCase() === userRole,
+    );
 
-      if (error || !profile) {
-        return res
-          .status(403)
-          .json({ message: 'Access denied. User profile not found.' });
-      }
-
-      const hasPermission = allowedRoles.includes(profile.role);
-      if (!hasPermission) {
-        return res
-          .status(403)
-          .json({ message: 'Access denied. Insufficient permissions.' });
-      }
-
+    if (hasPermission) {
+      // 3. If they have permission, continue to the next handler.
       next();
-    } catch (err) {
-      next(err);
+    } else {
+      // 4. If not, deny access.
+      return res
+        .status(403)
+        .json({ message: 'Forbidden: Insufficient permissions.' });
     }
   };
 

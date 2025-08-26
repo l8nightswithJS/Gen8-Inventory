@@ -1,8 +1,24 @@
-// src/components/EditClientModal.jsx
 import { useId, useState } from 'react';
 import axios from '../utils/axiosConfig';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
+
+// Create a new, separate axios instance specifically for the client service
+const clientApi = axios.create({
+  baseURL: process.env.REACT_APP_CLIENT_API_URL,
+});
+
+// Add the auth token interceptor to every request
+clientApi.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error),
+);
 
 export default function EditClientModal({ client, onClose, onUpdated }) {
   const [name, setName] = useState(client.name || '');
@@ -26,12 +42,17 @@ export default function EditClientModal({ client, onClose, onUpdated }) {
       formData.append('barcode', barcode);
       if (logoFile) formData.append('logo', logoFile);
 
-      const { data } = await axios.put(`/api/clients/${client.id}`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      // UPDATED: Use the new clientApi instance
+      const { data } = await clientApi.put(
+        `/api/clients/${client.id}`,
+        formData,
+        {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        },
+      );
 
       onUpdated?.(data);
-      onClose?.(); // <-- This line closes the modal on success
+      onClose?.();
     } catch (err) {
       setError(err?.response?.data?.message || 'Failed to update client.');
     } finally {
@@ -44,21 +65,30 @@ export default function EditClientModal({ client, onClose, onUpdated }) {
       <Button variant="secondary" onClick={onClose} disabled={loading}>
         Cancel
       </Button>
-      <Button variant="primary" onClick={handleSubmit} disabled={loading}>
-        {loading ? 'Updating…' : 'Update Client'}
+      <Button
+        type="submit"
+        form="edit-client-form"
+        variant="primary"
+        disabled={loading}
+      >
+        {loading ? 'Saving...' : 'Save Changes'}
       </Button>
     </>
   );
 
   return (
     <BaseModal
-      isOpen={true}
+      isOpen={!!client}
       onClose={onClose}
-      title="Edit Client"
+      title={`Edit: ${client.name}`}
       footer={Footer}
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {error && <p className="text-sm text-red-600">{error}</p>}
+      <form
+        id="edit-client-form"
+        onSubmit={handleSubmit}
+        className="p-4 space-y-4"
+      >
+        {error && <p className="text-red-600 text-sm">{error}</p>}
         <div>
           <label
             htmlFor={nameId}
@@ -111,7 +141,7 @@ export default function EditClientModal({ client, onClose, onUpdated }) {
             <img
               src={client.logo_url}
               alt="Current logo"
-              className="mt-2 max-h-16 rounded border"
+              className="mt-2 h-16 w-16 object-contain rounded"
             />
           )}
         </div>

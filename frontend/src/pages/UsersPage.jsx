@@ -1,10 +1,27 @@
-// src/pages/UsersPage.jsx
 import { useState, useEffect, useCallback } from 'react';
-import axios from '../utils/axiosConfig';
+import axios from '../utils/axiosConfig'; // Used to create the new instance
 import ConfirmModal from '../components/ConfirmModal';
 import UserFormModal from '../components/UserFormModal';
 import Button from '../components/ui/Button';
 import { FiEdit2, FiTrash2, FiCheck, FiX } from 'react-icons/fi';
+
+// --- Create a dedicated API client for our auth service ---
+const authApi = axios.create({
+  baseURL: process.env.REACT_APP_AUTH_API_URL,
+});
+
+// Add the auth token to every request for this new instance
+authApi.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error),
+);
+// -----------------------------------------------------------
 
 const UserCard = ({ user, onApprove, onDeny, onEdit, onDelete, isPending }) => (
   <div
@@ -80,9 +97,10 @@ export default function UsersPage() {
 
   const fetchAllUsers = useCallback(async () => {
     try {
+      // UPDATED: Use the new authApi instance
       const [usersRes, pendingRes] = await Promise.all([
-        axios.get('/api/users'),
-        axios.get('/api/users/pending'),
+        authApi.get('/api/users'),
+        authApi.get('/api/users/pending'),
       ]);
       setUsers(usersRes.data);
       setPendingUsers(pendingRes.data);
@@ -122,9 +140,11 @@ export default function UsersPage() {
     setConfirm((c) => ({ ...c, loading: true }));
     try {
       if (confirm.type === 'approve') {
-        await axios.post(`/api/users/${confirm.id}/approve`);
+        // UPDATED: Use the new authApi instance
+        await authApi.post(`/api/users/${confirm.id}/approve`);
       } else {
-        await axios.delete(`/api/users/${confirm.id}`);
+        // UPDATED: Use the new authApi instance
+        await authApi.delete(`/api/users/${confirm.id}`);
       }
       await fetchAllUsers();
     } catch (err) {
@@ -164,7 +184,6 @@ export default function UsersPage() {
               <td className="px-4 py-3 capitalize text-slate-600">{u.role}</td>
               <td className="px-4 py-3 text-center">
                 <div className="flex items-center justify-center gap-2">
-                  {/* Changed to new 'success' variant */}
                   <Button
                     onClick={() => openConfirm('approve', u)}
                     size="sm"
@@ -220,7 +239,6 @@ export default function UsersPage() {
         <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight">
           Manage Users
         </h1>
-        {/* Changed to 'secondary' variant */}
         <Button variant="secondary" onClick={() => openForm(null)}>
           + Add User
         </Button>
@@ -258,6 +276,8 @@ export default function UsersPage() {
           setShowForm(false);
         }}
         onClose={() => setShowForm(false)}
+        // UPDATED: Pass the new authApi instance as a prop
+        api={authApi}
       />
 
       {confirm.open && (

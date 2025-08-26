@@ -1,45 +1,10 @@
-// src/components/BulkImport.jsx
 import { useRef, useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import axios from '../utils/axiosConfig';
 import Button from './ui/Button';
 import { FiUploadCloud } from 'react-icons/fi';
 
-const normalizeKey = (str) =>
-  str
-    ?.toString()
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '_')
-    .replace(/[^\w]/g, '')
-    .replace(/_+/g, '_') || '';
-
-const humanLabel = (key) =>
-  normalizeKey(key)
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-
-const AUTO_MAP_SUGGESTIONS = {
-  part_number: ['part', 'part_number', 'part #', 'sku'],
-  description: ['desc', 'description'],
-  quantity: ['qty', 'quantity', 'on_hand', 'stock', 'qty_in_stock'],
-  reorder_level: ['reorder_level', 'reorder level', 'threshold', 'restock_at'],
-  reorder_qty: ['reorder_qty', 'reorder quantity', 'restock_qty'],
-  location: ['location', 'loc', 'bin'],
-  lot_number: ['lot', 'lot_number', 'lot #'],
-};
-
-const NUMERIC_KEYS = new Set([
-  'quantity',
-  'on_hand',
-  'qty_in_stock',
-  'stock',
-  'reorder_level',
-  'reorder_qty',
-  'low_stock_threshold',
-]);
-
-export default function BulkImport({ clientId, refresh, onClose }) {
+// The new `api` prop is now a required part of the function signature
+export default function BulkImport({ clientId, refresh, onClose, api }) {
   const fileRef = useRef(null);
   const [fileName, setFileName] = useState('');
   const [headers, setHeaders] = useState([]);
@@ -50,6 +15,45 @@ export default function BulkImport({ clientId, refresh, onClose }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const normalizeKey = (str) =>
+    str
+      ?.toString()
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '_')
+      .replace(/[^\w]/g, '')
+      .replace(/_+/g, '_') || '';
+
+  const humanLabel = (key) =>
+    normalizeKey(key)
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+
+  const AUTO_MAP_SUGGESTIONS = {
+    part_number: ['part', 'part_number', 'part #', 'sku'],
+    description: ['desc', 'description'],
+    quantity: ['qty', 'quantity', 'on_hand', 'stock', 'qty_in_stock'],
+    reorder_level: [
+      'reorder_level',
+      'reorder level',
+      'threshold',
+      'restock_at',
+    ],
+    reorder_qty: ['reorder_qty', 'reorder quantity', 'restock_qty'],
+    location: ['location', 'loc', 'bin'],
+    lot_number: ['lot', 'lot_number', 'lot #'],
+  };
+
+  const NUMERIC_KEYS = new Set([
+    'quantity',
+    'on_hand',
+    'qty_in_stock',
+    'stock',
+    'reorder_level',
+    'reorder_qty',
+    'low_stock_threshold',
+  ]);
 
   useEffect(() => {
     if (!headers.length) return;
@@ -71,7 +75,6 @@ export default function BulkImport({ clientId, refresh, onClose }) {
     setMapping(newMapping);
   }, [headers]);
 
-  // This function now only resets the data state, not the file input itself.
   const resetState = () => {
     setHeaders([]);
     setRawRows([]);
@@ -82,13 +85,11 @@ export default function BulkImport({ clientId, refresh, onClose }) {
   };
 
   const handleFileChange = (e) => {
-    // 1. Get the file from the input event FIRST.
     const file = e.target.files[0];
     if (!file) {
       return;
     }
 
-    // 2. Now that we have the file, reset the previous data state.
     resetState();
     setError('');
     setSuccess('');
@@ -136,7 +137,6 @@ export default function BulkImport({ clientId, refresh, onClose }) {
       setError('An error occurred while trying to read the file.');
     };
 
-    // 3. Finally, read the file.
     reader.readAsBinaryString(file);
   };
 
@@ -174,14 +174,14 @@ export default function BulkImport({ clientId, refresh, onClose }) {
 
     setSubmitting(true);
     try {
-      const resp = await axios.post('/api/items/bulk', {
+      // UPDATED: Use the passed-in `api` instance
+      const resp = await api.post('/api/items/bulk', {
         client_id: parseInt(clientId, 10),
         items,
       });
       setSuccess(`${resp.data.successCount} items imported successfully.`);
       await refresh?.();
       resetState();
-      // Clear the file input value only after a successful import
       if (fileRef.current) fileRef.current.value = '';
       setTimeout(() => onClose?.(), 1500);
     } catch (err) {

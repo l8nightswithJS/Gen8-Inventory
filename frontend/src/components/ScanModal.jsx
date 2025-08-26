@@ -1,31 +1,46 @@
-// src/components/ScanModal.jsx
 import { useState } from 'react';
-import api from '../utils/axiosConfig';
+import axios from '../utils/axiosConfig';
 import BarcodeScannerComponent from './BarcodeScannerComponent';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
+
+// Create a new, separate axios instance specifically for the barcode service
+const barcodeApi = axios.create({
+  baseURL: process.env.REACT_APP_BARCODE_API_URL,
+});
+
+// Add the auth token interceptor to every request
+barcodeApi.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error),
+);
 
 export default function ScanModal({ client, onClose, onScanSuccess }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // This function is called when the scanner successfully decodes a barcode
   const handleScanResult = async (barcode) => {
-    if (loading) return; // Prevent multiple scans while one is processing
+    if (loading) return;
 
     setLoading(true);
     setError('');
 
     try {
-      const { data: result } = await api.post('/api/scan', {
+      // UPDATED: Use the new barcodeApi instance
+      const { data: result } = await barcodeApi.post('/api/scan', {
         barcode: barcode,
         client_id: client.id,
       });
 
-      // Pass the successful, typed result to the parent component
       if (result && result.type) {
         onScanSuccess(result);
-        onClose(); // Close the modal on success
+        onClose();
       } else {
         setError('Received an invalid response from the server.');
       }
@@ -63,11 +78,8 @@ export default function ScanModal({ client, onClose, onScanSuccess }) {
             error ? 'border-red-500' : 'border-gray-300'
           }`}
         >
-          <BarcodeScannerComponent onResult={handleScanResult} />
+          <BarcodeScannerComponent onDetected={handleScanResult} />
         </div>
-        <p className="mt-4 text-sm text-gray-600">
-          Point your camera at an item or location barcode.
-        </p>
       </div>
     </BaseModal>
   );

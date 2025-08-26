@@ -72,6 +72,9 @@ exports.login = async (req, res, next) => {
       await supabase.auth.signOut();
       return res.status(401).json({ message: 'User profile not found.' });
     }
+    console.log('--- User Profile from DB for Token Creation ---');
+    console.log(userProfile);
+    console.log('-------------------------------------------');
 
     if (userProfile.approved === false) {
       await supabase.auth.signOut();
@@ -97,6 +100,7 @@ exports.login = async (req, res, next) => {
 
 exports.verifyToken = (req, res) => {
   const { token } = req.body;
+  console.log('Verifying token:', token);
   if (!token) {
     return res.status(400).json({ message: 'Token is required' });
   }
@@ -104,6 +108,7 @@ exports.verifyToken = (req, res) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     res.json({ user: decoded });
+    console.log(decoded);
   } catch (error) {
     res.status(401).json({ message: 'Invalid or expired token' });
   }

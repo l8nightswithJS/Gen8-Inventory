@@ -1,49 +1,37 @@
-// backend/routes/users.js
 const express = require('express');
-const { param, body } = require('express-validator');
-const ctrl = require('../controllers/userController');
-const authenticate = require('../middleware/authMiddleware');
-const requireRole = require('../middleware/requireRole');
+const { body, param } = require('express-validator');
+const userController = require('../controllers/userController');
+const requireRole = require('../middleware/requireRole'); // Import the middleware
 const { handleValidation } = require('../middleware/validationMiddleware');
 
 const router = express.Router();
 
-// A simple wrapper to catch errors in async routes
-const asyncHandler = (fn) => (req, res, next) =>
-  Promise.resolve(fn(req, res, next)).catch(next);
+// Protect all routes in this file, allowing only admins
+router.use(requireRole('admin'));
 
-// FIX: Apply the asyncHandler to the async middleware to prevent crashes
-router.use(asyncHandler(authenticate));
-router.use(asyncHandler(requireRole('admin')));
+router.get('/', userController.getAllUsers);
+router.get('/pending', userController.getPendingUsers);
 
-// --- Routes ---
-router.get('/', asyncHandler(ctrl.getAllUsers));
-router.get('/pending', asyncHandler(ctrl.getPendingUsers));
-router.get(
-  '/:id',
-  param('id').isString().withMessage('Invalid user ID'),
-  handleValidation,
-  asyncHandler(ctrl.getUserById),
-);
 router.post(
   '/:id/approve',
-  param('id').isString().withMessage('Invalid user ID'),
+  param('id').isUUID(),
   handleValidation,
-  asyncHandler(ctrl.approveUser),
+  userController.approveUser,
 );
+
 router.put(
   '/:id',
-  param('id').isString().withMessage('Invalid user ID'),
-  body('username').optional().isString().notEmpty(),
-  body('role').optional().isIn(['admin', 'staff']),
+  param('id').isUUID(),
+  body('role').isIn(['admin', 'staff']),
   handleValidation,
-  asyncHandler(ctrl.updateUser),
+  userController.updateUserRole,
 );
+
 router.delete(
   '/:id',
-  param('id').isString().withMessage('Invalid user ID'),
+  param('id').isUUID(),
   handleValidation,
-  asyncHandler(ctrl.deleteUser),
+  userController.deleteUser,
 );
 
 module.exports = router;

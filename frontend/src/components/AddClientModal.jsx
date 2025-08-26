@@ -1,10 +1,25 @@
-// src/components/AddClientModal.jsx
 import { useState } from 'react';
 import axios from '../utils/axiosConfig';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
 
-// The form logic is now inside the modal component.
+// Create a new, separate axios instance specifically for the client service
+const clientApi = axios.create({
+  baseURL: process.env.REACT_APP_CLIENT_API_URL,
+});
+
+// Add the auth token interceptor to every request
+clientApi.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error),
+);
+
 function AddClientForm({ onSuccess, onCancel }) {
   const [name, setName] = useState('');
   const [logoFile, setLogoFile] = useState(null);
@@ -25,7 +40,8 @@ function AddClientForm({ onSuccess, onCancel }) {
       if (logoFile) {
         formData.append('logo', logoFile);
       }
-      const res = await axios.post('/api/clients', formData, {
+      // UPDATED: Use the new clientApi instance
+      const res = await clientApi.post('/api/clients', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       onSuccess?.(res.data);
@@ -38,7 +54,11 @@ function AddClientForm({ onSuccess, onCancel }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {error && <p className="text-red-600 text-sm">{error}</p>}
+      {error && (
+        <p className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </p>
+      )}
       <div>
         <label
           htmlFor="clientName"
@@ -50,9 +70,8 @@ function AddClientForm({ onSuccess, onCancel }) {
           id="clientName"
           type="text"
           value={name}
-          placeholder="e.g., Acme Labs"
           onChange={(e) => setName(e.target.value)}
-          className="w-full border border-gray-300 px-3 py-2 rounded"
+          className="w-full border px-3 py-2 rounded"
           required
           disabled={loading}
         />
@@ -90,16 +109,17 @@ function AddClientForm({ onSuccess, onCancel }) {
   );
 }
 
-// The main modal component that is exported.
 export default function AddClientModal({ isOpen, onClose, onClientAdded }) {
   const handleSuccess = (client) => {
     onClientAdded?.(client);
-    onClose?.();
+    onClose();
   };
 
   return (
     <BaseModal isOpen={isOpen} onClose={onClose} title="Add New Client">
-      <AddClientForm onSuccess={handleSuccess} onCancel={onClose} />
+      <div className="p-4">
+        <AddClientForm onSuccess={handleSuccess} onCancel={onClose} />
+      </div>
     </BaseModal>
   );
 }
