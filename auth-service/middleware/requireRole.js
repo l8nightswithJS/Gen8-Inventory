@@ -11,6 +11,7 @@ const requireRole =
         .status(403)
         .json({ message: 'Forbidden: Role information missing from token.' });
     }
+    console.log(`[requireRole] Checking role: "'${req.user.role}'"`);
 
     // 2. Check if the user's role is in the list of allowed roles.
     // We make it case-insensitive for robustness.
