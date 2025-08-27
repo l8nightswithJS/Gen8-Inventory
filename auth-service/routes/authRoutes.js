@@ -1,31 +1,33 @@
+// auth-service/routes/authRoutes.js  (CommonJS)
 const express = require('express');
-const { body } = require('express-validator');
-const { handleValidation } = require('../middleware/validationMiddleware');
-const auth = require('../controllers/authController');
-
 const router = express.Router();
 
-const asyncHandler = (fn) => (req, res, next) =>
-  Promise.resolve(fn(req, res, next)).catch(next);
+// Import the controller (works with both CJS and ESM default)
+let ctrl = require('../controllers/authController'); // do not add .js if your env resolves it
+ctrl = ctrl && ctrl.default ? ctrl.default : ctrl;
 
-router.post(
-  '/register',
-  body('email').isEmail().withMessage('A valid email is required'),
-  body('password').isString().isLength({ min: 6 }),
-  body('role').optional().isIn(['admin', 'staff']),
-  handleValidation,
-  asyncHandler(auth.register),
-);
+// Pick the handlers we expect
+const { login, register, me, logout } = ctrl || {};
 
-router.post(
-  '/login',
-  body('email').isEmail().withMessage('A valid email is required'),
-  body('password').isString().notEmpty(),
-  handleValidation,
-  asyncHandler(auth.login),
-  console.log(auth.login),
-);
+// Validate handlers early with clear messages
+const mustBeFn = (fn, name) => {
+  if (fn && typeof fn !== 'function') {
+    throw new TypeError(
+      `authController.${name} must be a function; got ${typeof fn}`,
+    );
+  }
+};
 
-router.post('/verify', auth.verifyToken);
+mustBeFn(login, 'login');
+mustBeFn(register, 'register');
+mustBeFn(me, 'me');
+mustBeFn(logout, 'logout');
+
+// NOTE: your API gateway rewrites `/api/auth/*` -> `/*`.
+// So exposing `/login` here is correct.
+router.post('/login', login);
+router.post('/register', register);
+router.get('/me', me);
+router.post('/logout', logout);
 
 module.exports = router;
