@@ -2,32 +2,28 @@
 const express = require('express');
 const router = express.Router();
 
-// Import the controller (works with both CJS and ESM default)
-let ctrl = require('../controllers/authController'); // do not add .js if your env resolves it
+// Import the controller (supports both CJS and ESM default export)
+let ctrl = require('../controllers/authController');
 ctrl = ctrl && ctrl.default ? ctrl.default : ctrl;
 
-// Pick the handlers we expect
-const { login, register, me, logout } = ctrl || {};
+// Grab existing handlers from the controller
+const { login, register, verifyToken } = ctrl || {};
 
-// Validate handlers early with clear messages
-const mustBeFn = (fn, name) => {
-  if (fn && typeof fn !== 'function') {
+// Assert the handlers exist and are functions (fail early with a clear message)
+const requireFn = (fn, name) => {
+  if (typeof fn !== 'function') {
     throw new TypeError(
       `authController.${name} must be a function; got ${typeof fn}`,
     );
   }
 };
+requireFn(login, 'login');
+requireFn(register, 'register');
+requireFn(verifyToken, 'verifyToken');
 
-mustBeFn(login, 'login');
-mustBeFn(register, 'register');
-mustBeFn(me, 'me');
-mustBeFn(logout, 'logout');
-
-// NOTE: your API gateway rewrites `/api/auth/*` -> `/*`.
-// So exposing `/login` here is correct.
+// Routes (your gateway rewrites /api/auth/* → /* here)
 router.post('/login', login);
 router.post('/register', register);
-router.get('/me', me);
-router.post('/logout', logout);
+router.post('/verify', verifyToken);
 
 module.exports = router;
