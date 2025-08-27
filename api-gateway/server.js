@@ -1,12 +1,15 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { createProxyMiddleware } = require('http-proxy-middleware');
+// THIS LINE IS THE FIX: Use the older import style
+const proxy = require('http-proxy-middleware');
 
 const app = express();
+
+// --- CORS Configuration ---
 const allowedOrigins = [
   'http://localhost:3000',
-  'https://your-vercel-app-name.vercel.app', // Your deployed Vercel URL
+  'https://gen8-inventory.vercel.app', // Your Vercel URL
 ];
 
 const corsOptions = {
@@ -20,69 +23,35 @@ const corsOptions = {
   credentials: true,
 };
 
-// Your original app.use(cors()) should be replaced with this:
 app.use(cors(corsOptions));
 
 // --- Proxy Routes ---
-
-// Auth Service
-app.use(
-  '/api/auth',
-  createProxyMiddleware({
-    target: process.env.AUTH_SERVICE_URL,
+// Helper function to create the proxy middleware
+const createProxy = (target) => {
+  // Use the 'proxy' function directly, as required by the older version
+  return proxy({
+    target,
     changeOrigin: true,
-    pathRewrite: { '^/api/auth': '/api/auth' },
-  }),
-);
+  });
+};
 
-// Users (managed by Auth Service)
-app.use(
-  '/api/users',
-  createProxyMiddleware({
-    target: process.env.AUTH_SERVICE_URL,
-    changeOrigin: true,
-    pathRewrite: { '^/api/users': '/api/users' },
-  }),
-);
+// Define service URLs from environment variables
+const AUTH_SERVICE_URL =
+  process.env.AUTH_SERVICE_URL || 'http://auth-service:8002';
+const CLIENT_SERVICE_URL =
+  process.env.CLIENT_SERVICE_URL || 'http://client-service:8004';
+const INVENTORY_SERVICE_URL =
+  process.env.INVENTORY_SERVICE_URL || 'http://inventory-service:8003';
+const BARCODE_SERVICE_URL =
+  process.env.BARCODE_SERVICE_URL || 'http://barcode-service:8005';
 
-// Client Service
-app.use(
-  '/api/clients',
-  createProxyMiddleware({
-    target: process.env.CLIENT_SERVICE_URL,
-    changeOrigin: true,
-    pathRewrite: { '^/api/clients': '/api/clients' },
-  }),
-);
-
-// Inventory Service
-app.use(
-  '/api/items',
-  createProxyMiddleware({
-    target: process.env.INVENTORY_SERVICE_URL,
-    changeOrigin: true,
-    pathRewrite: { '^/api/items': '/api/items' },
-  }),
-);
-
-// Barcode Service
-app.use(
-  '/api/barcodes',
-  createProxyMiddleware({
-    target: process.env.BARCODE_SERVICE_URL,
-    changeOrigin: true,
-    pathRewrite: { '^/api/barcodes': '/api/barcodes' },
-  }),
-);
-
-app.use(
-  '/api/scan',
-  createProxyMiddleware({
-    target: process.env.BARCODE_SERVICE_URL,
-    changeOrigin: true,
-    pathRewrite: { '^/api/scan': '/api/scan' },
-  }),
-);
+// Apply the proxies
+app.use('/api/auth', createProxy(AUTH_SERVICE_URL));
+app.use('/api/users', createProxy(AUTH_SERVICE_URL));
+app.use('/api/clients', createProxy(CLIENT_SERVICE_URL));
+app.use('/api/items', createProxy(INVENTORY_SERVICE_URL));
+app.use('/api/barcodes', createProxy(BARCODE_SERVICE_URL));
+app.use('/api/scan', createProxy(BARCODE_SERVICE_URL));
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
