@@ -1,17 +1,23 @@
-// backend/lib/supabaseClient.js
+// backend/lib/supabaseClient.js (CommonJS)
 const { createClient } = require('@supabase/supabase-js');
 
-// these env‑vars must be set in Render (or your env):
-//   SUPABASE_URL
-//   SUPABASE_SERVICE_ROLE_KEY   (or SUPABASE_ANON_KEY if you're OK with anon access)
 const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY; // <- NEW
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  throw new Error(
-    'Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variable',
-  );
-}
+if (!SUPABASE_URL) throw new Error('Missing SUPABASE_URL');
+if (!SUPABASE_ANON_KEY) throw new Error('Missing SUPABASE_ANON_KEY');
+if (!SUPABASE_SERVICE_ROLE_KEY)
+  throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY');
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-module.exports = supabase;
+// Use anon client strictly for user auth flows
+const sbAuth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: false },
+});
+
+// Use admin client strictly for privileged DB ops (bypasses RLS)
+const sbAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  auth: { persistSession: false },
+});
+
+module.exports = { sbAuth, sbAdmin };

@@ -1,26 +1,27 @@
-// auth-service/controllers/authController.js  (CommonJS)
-const supabase = require('../lib/supabaseClient');
+// auth-service/controllers/authController.js (CommonJS)
+const { sbAuth, sbAdmin } = require('../lib/supabaseClient');
 const jwt = require('jsonwebtoken');
 
-const log = (...args) => console.log('[AUTH]', ...args);
+const log = (...a) => console.log('[AUTH]', ...a);
 
-// ---- helper: ensure profile row exists in public.users ----
 async function ensureUserProfile(authUser, defaults = {}) {
-  const userId = authUser?.id;
-  if (!userId) throw new Error('ensureUserProfile: missing authUser.id');
+  const id = authUser?.id;
+  if (!id) throw new Error('ensureUserProfile: missing authUser.id');
 
   const meta = authUser.user_metadata || authUser.raw_user_meta_data || {};
   const email = authUser.email || meta.email || '';
   const username =
     meta.username ||
-    (email.includes('@') ? email.split('@')[0] : `user_${userId.slice(0, 8)}`);
+    (email.includes('@') ? email.split('@')[0] : `user_${id.slice(0, 8)}`);
+
   const role = meta.role || defaults.role || 'staff';
   const approved =
     typeof defaults.approved === 'boolean' ? defaults.approved : true;
 
-  const { data, error } = await supabase
+  // IMPORTANT: use the ADMIN client so RLS cannot block us
+  const { data, error } = await sbAdmin
     .from('users')
-    .upsert({ id: userId, username, role, approved }, { onConflict: 'id' })
+    .upsert({ id, username, role, approved }, { onConflict: 'id' })
     .select('id, username, role, approved')
     .single();
 
@@ -28,19 +29,18 @@ async function ensureUserProfile(authUser, defaults = {}) {
   return data;
 }
 
-// ---- controller actions ----
 async function register(req, res, next) {
   try {
     const { email, password, role = 'staff' } = req.body || {};
-    if (!email || !password) {
+    if (!email || !password)
       return res
         .status(400)
         .json({ message: 'Email and password are required' });
-    }
 
     const normalizedEmail = String(email).trim().toLowerCase();
 
-    const { data, error } = await supabase.auth.signUp({
+    // Use ANON client for auth
+    const { data, error } = await sbAuth.auth.signUp({
       email: normalizedEmail,
       password,
       options: {
@@ -51,26 +51,15 @@ async function register(req, res, next) {
         },
       },
     });
-
-    if (error) {
-      log('register: signUp error →', error.message);
-      return res.status(400).json({ message: error.message });
-    }
-    if (!data?.user) {
-      return res
-        .status(500)
-        .json({ message: 'Sign up failed: no user returned' });
-    }
+    if (error) return res.status(400).json({ message: error.message });
+    if (!data?.user) return res.status(500).json({ message: 'Sign up failed' });
 
     const profile = await ensureUserProfile(data.user, {
       role,
       approved: true,
     });
-    log('register: profile upserted →', profile);
-
-    return res
-      .status(201)
-      .json({ message: 'Registered', userId: data.user.id });
+    log('register: profile', profile);
+    res.status(201).json({ message: 'Registered', userId: data.user.id });
   } catch (err) {
     next(err);
   }
@@ -79,82 +68,76 @@ async function register(req, res, next) {
 async function login(req, res, next) {
   try {
     const { email, password } = req.body || {};
-    if (!email || !password) {
+    if (!email || !password)
       return res.status(400).json({ message: 'Missing email or password.' });
-    }
 
     const normalizedEmail = String(email).trim().toLowerCase();
-    const { data, error: signInError } = await supabase.auth.signInWithPassword(
-      {
-        email: normalizedEmail,
-        password,
-      },
-    );
 
-    if (signInError) {
-      log('login: signIn error →', signInError.message);
+    // Use ANON client for sign-in
+    const { data, error: signInError } = await sbAuth.auth.signInWithPassword({
+      email: normalizedEmail,
+      password,
+    });
+    if (signInError)
       return res.status(401).json({ message: 'Invalid email or password' });
-    }
 
-    const authUser = data.user;
-    if (!authUser)
+    const user = data?.user;
+    if (!user)
       return res.status(500).json({ message: 'No user returned from sign in' });
 
-    // Load or auto-create profile
-    let { data: userProfile, error: profileError } = await supabase
+    // Ensure profile using ADMIN client
+    let { data: profile, error: selErr } = await sbAdmin
       .from('users')
-      .select('approved, role, username')
-      .eq('id', authUser.id)
+      .select('id, username, role, approved')
+      .eq('id', user.id)
       .single();
 
-    if (profileError || !userProfile) {
+    if (selErr || !profile) {
       log('login: profile missing, auto-creating', {
-        userId: authUser.id,
-        email: authUser.email,
-        profileError: profileError?.message,
+        userId: user.id,
+        email: user.email,
+        profileError: selErr?.message,
       });
-      const created = await ensureUserProfile(authUser, {
+      profile = await ensureUserProfile(user, {
         role: 'staff',
         approved: true,
       });
-      userProfile = {
-        username: created.username,
-        role: created.role,
-        approved: created.approved,
-      };
     }
 
-    if (userProfile.approved === false) {
-      await supabase.auth.signOut();
+    if (profile.approved === false) {
+      await sbAuth.auth.signOut();
       return res.status(403).json({ message: 'Account pending approval' });
     }
 
+    if (!process.env.JWT_SECRET) {
+      log('WARN: JWT_SECRET not set – refusing to issue token');
+      return res.status(500).json({ message: 'Server misconfigured (JWT)' });
+    }
+
     const token = jwt.sign(
-      { id: authUser.id, role: userProfile.role, email: authUser.email },
+      { id: user.id, role: profile.role, email: user.email },
       process.env.JWT_SECRET,
       { expiresIn: '8h' },
     );
 
     log('login: success', {
-      id: authUser.id,
-      role: userProfile.role,
-      username: userProfile.username,
+      id: user.id,
+      role: profile.role,
+      username: profile.username,
     });
-    return res.json({
-      token,
-      role: userProfile.role,
-      username: userProfile.username,
-    });
+    return res.json({ token, role: profile.role, username: profile.username });
   } catch (err) {
+    log(
+      'login error',
+      JSON.stringify({ message: err.message, stack: err.stack }, null, 2),
+    );
     next(err);
   }
 }
 
 async function verify(req, res) {
   const { token } = req.body || {};
-  log('verify: token present?', Boolean(token));
   if (!token) return res.status(400).json({ message: 'Token is required' });
-
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     return res.json({ user: decoded });
@@ -162,13 +145,11 @@ async function verify(req, res) {
     return res.status(401).json({ message: 'Invalid or expired token' });
   }
 }
-
-// alias expected by some routes/middleware
 const verifyToken = verify;
 
 async function me(req, res) {
   const auth = req.headers['authorization'] || '';
-  const t = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length) : null;
+  const t = auth.startsWith('Bearer ') ? auth.slice(7) : null;
   if (!t) return res.status(401).json({ message: 'Missing token' });
   try {
     const decoded = jwt.verify(t, process.env.JWT_SECRET);
@@ -180,16 +161,9 @@ async function me(req, res) {
 
 async function logout(_req, res) {
   try {
-    await supabase.auth.signOut();
+    await sbAuth.auth.signOut();
   } catch {}
   return res.json({ ok: true });
 }
 
-module.exports = {
-  register,
-  login,
-  verify,
-  verifyToken, // keep this name for compatibility
-  me,
-  logout,
-};
+module.exports = { register, login, verify, verifyToken, me, logout };
