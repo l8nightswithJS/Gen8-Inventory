@@ -1,68 +1,77 @@
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-// Use the modern, correct import style
-const { createProxyMiddleware } = require('http-proxy-middleware');
+// server.js (gateway)
+import { createProxyMiddleware } from 'http-proxy-middleware';
+import express from 'express';
 
 const app = express();
+app.set('trust proxy', true); // behind Render's proxy
 
-// --- CORS Configuration ---
-const allowedOrigins = [
-  'http://localhost:3000',
-  'https://gen8-inventory.vercel.app', // Your Vercel URL
-];
+// Build internal URLs if host+port are provided; otherwise fall back to a public URL
+const mk = (host, port, pub) => (host && port ? `http://${host}:${port}` : pub);
 
-const corsOptions = {
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
+const AUTH_URL = mk(
+  process.env.AUTH_HOST,
+  process.env.AUTH_PORT,
+  process.env.AUTH_PUBLIC_URL,
+);
+const CLIENT_URL = mk(
+  process.env.CLIENT_HOST,
+  process.env.CLIENT_PORT,
+  process.env.CLIENT_PUBLIC_URL,
+);
+const INVENTORY_URL = mk(
+  process.env.INVENTORY_HOST,
+  process.env.INVENTORY_PORT,
+  process.env.INVENTORY_PUBLIC_URL,
+);
+const BARCODE_URL = mk(
+  process.env.BARCODE_HOST,
+  process.env.BARCODE_PORT,
+  process.env.BARCODE_PUBLIC_URL,
+);
+
+// shared proxy options: fail fast, good logs, proper headers
+const opts = (target) => ({
+  target,
+  changeOrigin: true,
+  xfwd: true,
+  proxyTimeout: 12000,
+  timeout: 15000,
+  onError(err, req, res) {
+    console.error('Proxy error:', err.code || err.message, '→', target);
+    res
+      .status(502)
+      .json({ error: 'Upstream unavailable', code: err.code || 'EUPSTREAM' });
   },
-  credentials: true,
-};
+});
 
-app.use(cors(corsOptions));
-
-// --- Proxy Routes ---
-// Define service URLs from environment variables
-const AUTH_SERVICE_URL =
-  process.env.AUTH_SERVICE_URL || 'http://auth-service:8001';
-const CLIENT_SERVICE_URL =
-  process.env.CLIENT_SERVICE_URL || 'http://client-service:8003';
-const INVENTORY_SERVICE_URL =
-  process.env.INVENTORY_SERVICE_URL || 'http://inventory-service:8000';
-const BARCODE_SERVICE_URL =
-  process.env.BARCODE_SERVICE_URL || 'http://barcode-service:8002';
-
-// Apply the proxies using the modern 'createProxyMiddleware' function
+// wire routes (adjust paths if yours differ)
 app.use(
   '/api/auth',
-  createProxyMiddleware({ target: AUTH_SERVICE_URL, changeOrigin: true }),
-);
-app.use(
-  '/api/users',
-  createProxyMiddleware({ target: AUTH_SERVICE_URL, changeOrigin: true }),
+  createProxyMiddleware({
+    ...opts(AUTH_URL),
+    pathRewrite: { '^/api/auth': '' },
+  }),
 );
 app.use(
   '/api/clients',
-  createProxyMiddleware({ target: CLIENT_SERVICE_URL, changeOrigin: true }),
+  createProxyMiddleware({
+    ...opts(CLIENT_URL),
+    pathRewrite: { '^/api/clients': '' },
+  }),
 );
 app.use(
   '/api/items',
-  createProxyMiddleware({ target: INVENTORY_SERVICE_URL, changeOrigin: true }),
+  createProxyMiddleware({
+    ...opts(INVENTORY_URL),
+    pathRewrite: { '^/api/items': '' },
+  }),
 );
 app.use(
   '/api/barcodes',
-  createProxyMiddleware({ target: BARCODE_SERVICE_URL, changeOrigin: true }),
-);
-app.use(
-  '/api/scan',
-  createProxyMiddleware({ target: BARCODE_SERVICE_URL, changeOrigin: true }),
+  createProxyMiddleware({
+    ...opts(BARCODE_URL),
+    pathRewrite: { '^/api/barcodes': '' },
+  }),
 );
 
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => {
-  console.log(`✅ API Gateway listening on :${PORT}`);
-});
+app.get('/healthz', (_, res) => res.send('ok')); // for Render health checks
