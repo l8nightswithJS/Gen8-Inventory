@@ -9,8 +9,8 @@ import crypto from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 
-// ---------- boot tag (verifies correct build is running) ----------
-const BUILD_TAG = `[BOOT] GW v2.1 @ ${new Date().toISOString()}`;
+// ---------- boot tag ----------
+const BUILD_TAG = `[BOOT] GW v2.2 @ ${new Date().toISOString()}`;
 console.log(BUILD_TAG);
 
 // ---------- helpers ----------
@@ -30,46 +30,42 @@ const chooseTarget = (name, host, port, publicUrl, required = true) => {
   return target;
 };
 
-// ---------- tunables (env can override) ----------
-const PROXY_TIMEOUT_MS = Number(process.env.PROXY_TIMEOUT_MS || 45000); // upstream socket timeout
-const CLIENT_TIMEOUT_MS = Number(process.env.CLIENT_TIMEOUT_MS || 50000); // client connection timeout
+// ---------- tunables ----------
+const PROXY_TIMEOUT_MS = Number(process.env.PROXY_TIMEOUT_MS || 45000);
+const CLIENT_TIMEOUT_MS = Number(process.env.CLIENT_TIMEOUT_MS || 50000);
 
-// keep-alive agents to cut TLS handshake overhead
+// keep-alive agents
 const httpAgent = new http.Agent({ keepAlive: true });
 const httpsAgent = new https.Agent({ keepAlive: true });
-
-// redact helper for header logs
-const redact = (obj = {}, keys = ['authorization', 'cookie']) => {
-  const lower = Object.fromEntries(
-    Object.entries(obj || {}).map(([k, v]) => [String(k).toLowerCase(), v]),
-  );
-  keys.forEach((k) => {
-    if (lower[k] !== undefined) lower[k] = '[REDACTED]';
-  });
-  return lower;
-};
 
 // correlation id
 const requestId = (req) =>
   req.headers['x-request-id']?.toString() || crypto.randomUUID();
 
-// build proxy opts with deep logging
+// build proxy opts with deep logging (safe)
 const proxyOpts = (name, target, options = {}) => ({
   target,
   changeOrigin: true,
   xfwd: true,
   agent: target.startsWith('https') ? httpsAgent : httpAgent,
-  proxyTimeout: PROXY_TIMEOUT_MS, // if upstream doesn't respond in time
-  timeout: CLIENT_TIMEOUT_MS, // idle client socket timeout
+  proxyTimeout: PROXY_TIMEOUT_MS,
+  timeout: CLIENT_TIMEOUT_MS,
   logLevel: 'warn',
   ...options,
 
-  // If express.json() parsed the body, re-send it to upstream.
   onProxyReq(proxyReq, req, _res) {
-    const upstreamPath = proxyReq.path || req.url;
     const id = req.id || 'unknown';
+    const upstreamPath = proxyReq.path || req.url;
 
-    // attach low-level timeout/error listeners so we can SEE timeouts
+    // print BEFORE doing anything risky, and avoid getHeaders()
+    const hostHdr = proxyReq.getHeader ? proxyReq.getHeader('host') : undefined;
+    console.log(
+      `[GW→UP] ${id} ${req.method} ${
+        req.originalUrl
+      } → ${target}${upstreamPath} :: host=${hostHdr || '(n/a)'}`,
+    );
+
+    // explicit timeouts/error hooks
     proxyReq.setTimeout(PROXY_TIMEOUT_MS, () => {
       const elapsed = req._gwUpStart
         ? `${(Number(process.hrtime.bigint() - req._gwUpStart) / 1e6).toFixed(
@@ -88,20 +84,18 @@ const proxyOpts = (name, target, options = {}) => ({
       );
     });
 
-    console.log(
-      `[GW→UP] ${id} ${req.method} ${
-        req.originalUrl
-      } → ${target}${upstreamPath} :: headers=${JSON.stringify(
-        redact(proxyReq.getHeaders()),
-      )}`,
-    );
-
     // forward parsed JSON body (if any)
-    if (req.body && Object.keys(req.body).length) {
-      const body = JSON.stringify(req.body);
-      proxyReq.setHeader('Content-Type', 'application/json');
-      proxyReq.setHeader('Content-Length', Buffer.byteLength(body));
-      proxyReq.write(body);
+    try {
+      if (req.body && Object.keys(req.body).length) {
+        const body = JSON.stringify(req.body);
+        proxyReq.setHeader('Content-Type', 'application/json');
+        proxyReq.setHeader('Content-Length', Buffer.byteLength(body));
+        proxyReq.write(body);
+      }
+    } catch (e) {
+      console.error(
+        `[PERR] ${id} could not serialize body: ${e?.message || e}`,
+      );
     }
 
     req._gwUpStart = process.hrtime.bigint();
@@ -191,22 +185,18 @@ const BARCODE_URL = chooseTarget(
 const app = express();
 app.set('trust proxy', true);
 
-// request-level correlation + total timing
+// request trace + total timing
 app.use((req, res, next) => {
   req.id = requestId(req);
   const start = process.hrtime.bigint();
-  const srcIp = req.headers['x-forwarded-for'] || req.ip;
-  console.log(
-    `[IN  ] ${req.id} ${req.method} ${
-      req.originalUrl
-    } from ${srcIp} :: headers=${JSON.stringify(redact(req.headers))}`,
-  );
+  const src = req.headers['x-forwarded-for'] || req.ip;
+  console.log(`[IN  ] ${req.id} ${req.method} ${req.originalUrl} from ${src}`);
   res.on('finish', () => {
-    const durMs = Number(process.hrtime.bigint() - start) / 1e6;
+    const ms = Number(process.hrtime.bigint() - start) / 1e6;
     console.log(
       `[OUT ] ${req.id} ${req.method} ${req.originalUrl} → ${
         res.statusCode
-      } total=${durMs.toFixed(1)}ms`,
+      } total=${ms.toFixed(1)}ms`,
     );
   });
   next();
@@ -219,10 +209,8 @@ app.use(
   morgan(':method :url :status :res[content-length] - :response-time ms'),
 );
 
-// health
+// health + version
 app.get('/healthz', (_, res) => res.status(200).send('ok'));
-
-// version/debug
 app.get('/__version', (req, res) => {
   res.json({
     tag: BUILD_TAG,
@@ -237,7 +225,7 @@ app.get('/_diag/auth/health', async (_req, res) => {
   try {
     const url = new URL('/healthz', AUTH_URL).toString();
     const t0 = performance.now();
-    const r = await fetch(url, { method: 'GET' });
+    const r = await fetch(url);
     const txt = await r.text();
     const t1 = performance.now();
     res
@@ -275,7 +263,7 @@ const trace = (label) => (req, _res, next) => {
   next();
 };
 
-// Preserve the FULL original path so upstreams receive /api/... unchanged
+// Preserve full original path so upstreams get /api/... unchanged
 if (AUTH_URL) {
   app.use(
     '/api/auth',
