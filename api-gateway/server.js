@@ -116,23 +116,13 @@ app.get('/healthz', (_, res) => res.status(200).send('ok'));
 // ---------- proxies ----------
 // NOTE: strip the /api/* prefix so upstreams receive clean paths.
 // Adjust prefixes if your upstream routes differ.
-if (AUTH_URL)
-  app.use('/api/auth', createProxyMiddleware(proxyOpts(AUTH_URL, '/api/auth')));
+if (AUTH_URL) app.use('/api/auth', createProxyMiddleware(proxyOpts(AUTH_URL)));
 if (INVENTORY_URL)
-  app.use(
-    '/api/items',
-    createProxyMiddleware(proxyOpts(INVENTORY_URL, '/api/items')),
-  );
+  app.use('/api/items', createProxyMiddleware(proxyOpts(INVENTORY_URL)));
 if (CLIENT_URL)
-  app.use(
-    '/api/clients',
-    createProxyMiddleware(proxyOpts(CLIENT_URL, '/api/clients')),
-  );
+  app.use('/api/clients', createProxyMiddleware(proxyOpts(CLIENT_URL)));
 if (BARCODE_URL)
-  app.use(
-    '/api/barcodes',
-    createProxyMiddleware(proxyOpts(BARCODE_URL, '/api/barcodes')),
-  );
+  app.use('/api/barcodes', createProxyMiddleware(proxyOpts(BARCODE_URL)));
 
 // ---------- start ----------
 const PORT = process.env.PORT || 10_000;
