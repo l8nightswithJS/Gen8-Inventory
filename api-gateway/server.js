@@ -6,7 +6,12 @@ import morgan from 'morgan';
 import http from 'node:http';
 import https from 'node:https';
 import crypto from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import { createProxyMiddleware } from 'http-proxy-middleware';
+
+// ---------- boot tag (verifies correct build is running) ----------
+const BUILD_TAG = `[BOOT] GW v2.0 @ ${new Date().toISOString()}`;
+console.log(BUILD_TAG);
 
 // ---------- helpers ----------
 const buildInternalURL = (host, port) =>
@@ -25,11 +30,11 @@ const chooseTarget = (name, host, port, publicUrl, required = true) => {
   return target;
 };
 
-// tunables (env can override)
+// ---------- tunables (env can override) ----------
 const PROXY_TIMEOUT_MS = Number(process.env.PROXY_TIMEOUT_MS || 30000);
 const CLIENT_TIMEOUT_MS = Number(process.env.CLIENT_TIMEOUT_MS || 35000);
 
-// keep-alive to cut TLS handshake overhead
+// keep-alive agents to cut TLS handshake overhead
 const httpAgent = new http.Agent({ keepAlive: true });
 const httpsAgent = new https.Agent({ keepAlive: true });
 
@@ -48,7 +53,7 @@ const redact = (obj = {}, keys = ['authorization', 'cookie']) => {
 const requestId = (req) =>
   req.headers['x-request-id']?.toString() || crypto.randomUUID();
 
-// proxy opts + deep logs
+// build proxy opts with deep logging
 const proxyOpts = (name, target, options = {}) => ({
   target,
   changeOrigin: true,
@@ -59,17 +64,17 @@ const proxyOpts = (name, target, options = {}) => ({
   logLevel: 'warn',
   ...options,
 
+  // If express.json() parsed the body, re-send it to upstream.
   onProxyReq(proxyReq, req, _res) {
     const upstreamPath = proxyReq.path || req.url;
     console.log(
-      `[GW→UP] ${req.id} ${req.method} ${
+      `[GW→UP] ${req.id || 'unknown'} ${req.method} ${
         req.originalUrl
       } → ${target}${upstreamPath} :: headers=${JSON.stringify(
         redact(proxyReq.getHeaders()),
       )}`,
     );
 
-    // forward parsed JSON body (if any)
     if (req.body && Object.keys(req.body).length) {
       const body = JSON.stringify(req.body);
       proxyReq.setHeader('Content-Type', 'application/json');
@@ -84,7 +89,7 @@ const proxyOpts = (name, target, options = {}) => ({
     const start = req._gwUpStart || process.hrtime.bigint();
     const ms = Number(process.hrtime.bigint() - start) / 1e6;
     console.log(
-      `[UP→GW] ${req.id} ${req.method} ${
+      `[UP→GW] ${req.id || 'unknown'} ${req.method} ${
         req.originalUrl
       } ← ${target} :: status=${proxyRes.statusCode} upstream=${ms.toFixed(
         1,
@@ -102,9 +107,9 @@ const proxyOpts = (name, target, options = {}) => ({
         )}ms`
       : 'n/a';
     console.error(
-      `[ERR ] ${req.id} ${req.method} ${req.originalUrl} → ${target} :: ${
-        err.code || err.message
-      } after ${ms}`,
+      `[ERR ] ${req.id || 'unknown'} ${req.method} ${
+        req.originalUrl
+      } → ${target} :: ${err.code || err.message} after ${ms}`,
     );
     if (!res.headersSent)
       res
@@ -115,6 +120,7 @@ const proxyOpts = (name, target, options = {}) => ({
 
 // ---------- envs ----------
 const {
+  // allow either internal HOST/PORT or PUBLIC_URL per service
   AUTH_HOST,
   AUTH_PORT,
   AUTH_PUBLIC_URL,
@@ -127,6 +133,7 @@ const {
   BARCODE_HOST,
   BARCODE_PORT,
   BARCODE_PUBLIC_URL,
+  // cors origin for browser app
   ALLOW_ORIGIN,
 } = process.env;
 
@@ -164,22 +171,22 @@ const BARCODE_URL = chooseTarget(
 const app = express();
 app.set('trust proxy', true);
 
-// correlation + end-to-end timing
+// request-level correlation + total timing
 app.use((req, res, next) => {
   req.id = requestId(req);
   const start = process.hrtime.bigint();
-  const src = req.headers['x-forwarded-for'] || req.ip;
+  const srcIp = req.headers['x-forwarded-for'] || req.ip;
   console.log(
     `[IN  ] ${req.id} ${req.method} ${
       req.originalUrl
-    } from ${src} :: headers=${JSON.stringify(redact(req.headers))}`,
+    } from ${srcIp} :: headers=${JSON.stringify(redact(req.headers))}`,
   );
   res.on('finish', () => {
-    const ms = Number(process.hrtime.bigint() - start) / 1e6;
+    const durMs = Number(process.hrtime.bigint() - start) / 1e6;
     console.log(
       `[OUT ] ${req.id} ${req.method} ${req.originalUrl} → ${
         res.statusCode
-      } total=${ms.toFixed(1)}ms`,
+      } total=${durMs.toFixed(1)}ms`,
     );
   });
   next();
@@ -188,8 +195,6 @@ app.use((req, res, next) => {
 app.use(helmet());
 app.use(express.json({ limit: '1mb' }));
 app.use(cors({ origin: ALLOW_ORIGIN || true, credentials: true }));
-
-// concise access log
 app.use(
   morgan(':method :url :status :res[content-length] - :response-time ms'),
 );
@@ -197,7 +202,17 @@ app.use(
 // health
 app.get('/healthz', (_, res) => res.status(200).send('ok'));
 
-// ---------- diagnostics (temporary; useful during debugging) ----------
+// version/debug
+app.get('/_version', (req, res) => {
+  res.json({
+    tag: BUILD_TAG,
+    commit: process.env.RENDER_GIT_COMMIT || null,
+    targets: { AUTH_URL, INVENTORY_URL, CLIENT_URL, BARCODE_URL },
+    timeouts: { PROXY_TIMEOUT_MS, CLIENT_TIMEOUT_MS },
+  });
+});
+
+// ---------- diagnostics (gateway → auth) ----------
 app.get('/_diag/auth/health', async (_req, res) => {
   try {
     const url = new URL('/healthz', AUTH_URL).toString();
@@ -233,7 +248,7 @@ app.post('/_diag/auth/login', async (req, res) => {
 });
 
 // ---------- proxies ----------
-// Pre-proxy tracer proves we hit the proxy chain and shows Express' base/url
+// Pre-proxy tracer proves we hit the proxy chain and shows base/url/originalUrl
 const trace = (label) => (req, _res, next) => {
   console.log(
     `[HIT ${label}] id=${req.id} baseUrl=${req.baseUrl} url=${req.url} originalUrl=${req.originalUrl}`,
@@ -241,7 +256,8 @@ const trace = (label) => (req, _res, next) => {
   next();
 };
 
-// Preserve the FULL original path so upstreams see /api/... unchanged.
+// Preserve the FULL original path so upstreams receive /api/... unchanged.
+// If any upstream expects paths *without* /api/*, change that service's pathRewrite accordingly.
 if (AUTH_URL)
   app.use(
     '/api/auth',
