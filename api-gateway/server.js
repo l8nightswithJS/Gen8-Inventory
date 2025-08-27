@@ -1,77 +1,145 @@
-// server.js (gateway)
-import { createProxyMiddleware } from 'http-proxy-middleware';
+// api-gateway/server.js
 import express from 'express';
+import helmet from 'helmet';
+import cors from 'cors';
+import morgan from 'morgan';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 
-const app = express();
-app.set('trust proxy', true); // behind Render's proxy
+// ---------- helpers ----------
+const buildInternalURL = (host, port) =>
+  host && port ? `http://${host}:${port}` : undefined;
 
-// Build internal URLs if host+port are provided; otherwise fall back to a public URL
-const mk = (host, port, pub) => (host && port ? `http://${host}:${port}` : pub);
+const chooseTarget = (name, host, port, publicUrl, required = true) => {
+  const internal = buildInternalURL(host, port);
+  const target = internal || publicUrl;
+  if (!target && required) {
+    console.error(
+      `[BOOT] Missing target for ${name}. Set either ${name}_HOST + ${name}_PORT (internal) or ${name}_PUBLIC_URL (public).`,
+    );
+    process.exit(1);
+  }
+  console.log(
+    `[BOOT] ${name} → ${target ? target : '(disabled: no target provided)'}`,
+  );
+  return target;
+};
 
-const AUTH_URL = mk(
-  process.env.AUTH_HOST,
-  process.env.AUTH_PORT,
-  process.env.AUTH_PUBLIC_URL,
-);
-const CLIENT_URL = mk(
-  process.env.CLIENT_HOST,
-  process.env.CLIENT_PORT,
-  process.env.CLIENT_PUBLIC_URL,
-);
-const INVENTORY_URL = mk(
-  process.env.INVENTORY_HOST,
-  process.env.INVENTORY_PORT,
-  process.env.INVENTORY_PUBLIC_URL,
-);
-const BARCODE_URL = mk(
-  process.env.BARCODE_HOST,
-  process.env.BARCODE_PORT,
-  process.env.BARCODE_PUBLIC_URL,
-);
-
-// shared proxy options: fail fast, good logs, proper headers
-const opts = (target) => ({
+const proxyOpts = (target, stripPrefix) => ({
   target,
   changeOrigin: true,
   xfwd: true,
-  proxyTimeout: 12000,
-  timeout: 15000,
+  proxyTimeout: 12_000,
+  timeout: 15_000,
+  logLevel: 'warn',
+  pathRewrite: stripPrefix ? { [`^${stripPrefix}`]: '' } : undefined,
   onError(err, req, res) {
     console.error('Proxy error:', err.code || err.message, '→', target);
-    res
-      .status(502)
-      .json({ error: 'Upstream unavailable', code: err.code || 'EUPSTREAM' });
+    if (!res.headersSent) {
+      res
+        .status(502)
+        .json({ error: 'Upstream unavailable', code: err.code || 'EUPSTREAM' });
+    }
   },
 });
 
-// wire routes (adjust paths if yours differ)
-app.use(
-  '/api/auth',
-  createProxyMiddleware({
-    ...opts(AUTH_URL),
-    pathRewrite: { '^/api/auth': '' },
-  }),
+// ---------- envs ----------
+const {
+  // required upstreams (set either internal or public)
+  AUTH_HOST,
+  AUTH_PORT,
+  AUTH_PUBLIC_URL,
+
+  INVENTORY_HOST,
+  INVENTORY_PORT,
+  INVENTORY_PUBLIC_URL,
+
+  // optional upstreams
+  CLIENT_HOST,
+  CLIENT_PORT,
+  CLIENT_PUBLIC_URL,
+
+  BARCODE_HOST,
+  BARCODE_PORT,
+  BARCODE_PUBLIC_URL,
+
+  // CORS origin for browser apps (e.g., your Vercel domain)
+  ALLOW_ORIGIN,
+} = process.env;
+
+// ---------- build targets ----------
+const AUTH_URL = chooseTarget(
+  'AUTH',
+  AUTH_HOST,
+  AUTH_PORT,
+  AUTH_PUBLIC_URL,
+  true,
 );
-app.use(
-  '/api/clients',
-  createProxyMiddleware({
-    ...opts(CLIENT_URL),
-    pathRewrite: { '^/api/clients': '' },
-  }),
+const INVENTORY_URL = chooseTarget(
+  'INVENTORY',
+  INVENTORY_HOST,
+  INVENTORY_PORT,
+  INVENTORY_PUBLIC_URL,
+  true,
 );
-app.use(
-  '/api/items',
-  createProxyMiddleware({
-    ...opts(INVENTORY_URL),
-    pathRewrite: { '^/api/items': '' },
-  }),
+const CLIENT_URL = chooseTarget(
+  'CLIENT',
+  CLIENT_HOST,
+  CLIENT_PORT,
+  CLIENT_PUBLIC_URL,
+  false,
 );
-app.use(
-  '/api/barcodes',
-  createProxyMiddleware({
-    ...opts(BARCODE_URL),
-    pathRewrite: { '^/api/barcodes': '' },
-  }),
+const BARCODE_URL = chooseTarget(
+  'BARCODE',
+  BARCODE_HOST,
+  BARCODE_PORT,
+  BARCODE_PUBLIC_URL,
+  false,
 );
 
-app.get('/healthz', (_, res) => res.send('ok')); // for Render health checks
+// ---------- app ----------
+const app = express();
+app.set('trust proxy', true);
+app.use(helmet());
+app.use(express.json({ limit: '1mb' }));
+app.use(
+  cors({
+    origin: ALLOW_ORIGIN || true, // set exact origin in prod
+    credentials: true,
+  }),
+);
+app.use(
+  morgan(':method :url :status :res[content-length] - :response-time ms'),
+);
+
+app.get('/healthz', (_, res) => res.status(200).send('ok'));
+
+// ---------- proxies ----------
+// NOTE: strip the /api/* prefix so upstreams receive clean paths.
+// Adjust prefixes if your upstream routes differ.
+if (AUTH_URL)
+  app.use('/api/auth', createProxyMiddleware(proxyOpts(AUTH_URL, '/api/auth')));
+if (INVENTORY_URL)
+  app.use(
+    '/api/items',
+    createProxyMiddleware(proxyOpts(INVENTORY_URL, '/api/items')),
+  );
+if (CLIENT_URL)
+  app.use(
+    '/api/clients',
+    createProxyMiddleware(proxyOpts(CLIENT_URL, '/api/clients')),
+  );
+if (BARCODE_URL)
+  app.use(
+    '/api/barcodes',
+    createProxyMiddleware(proxyOpts(BARCODE_URL, '/api/barcodes')),
+  );
+
+// ---------- start ----------
+const PORT = process.env.PORT || 10_000;
+app.listen(PORT, () => {
+  console.log(`✅ API Gateway listening on :${PORT}`);
+});
+console.log(`   → Auth:      ${AUTH_URL}`);
+console.log(`   → Inventory: ${INVENTORY_URL}`);
+if (CLIENT_URL) console.log(`   → Client:    ${CLIENT_URL}`);
+if (BARCODE_URL) console.log(`   → Barcode:   ${BARCODE_URL}`);
