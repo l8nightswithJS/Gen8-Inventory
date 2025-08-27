@@ -1,4 +1,4 @@
-// api-gateway/server.js
+// api-gateway/server.js  — v2.6 (preserve paths; proxies before body parser)
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -6,43 +6,12 @@ import morgan from 'morgan';
 import http from 'node:http';
 import https from 'node:https';
 import crypto from 'node:crypto';
-import { performance } from 'node:perf_hooks';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 
-// ---------- boot tag ----------
-const BUILD_TAG = `[BOOT] GW v2.5 @ ${new Date().toISOString()}`;
+const BUILD_TAG = `[BOOT] GW v2.6 @ ${new Date().toISOString()}`;
 console.log(BUILD_TAG);
 
-// ---------- helpers ----------
-const buildInternalURL = (host, port) =>
-  host && port ? `http://${host}:${port}` : undefined;
-
-const chooseTarget = (name, host, port, publicUrl, required = true) => {
-  const internal = buildInternalURL(host, port);
-  const target = internal || publicUrl;
-  if (!target && required) {
-    console.error(
-      `[BOOT] Missing target for ${name}. Set either ${name}_HOST + ${name}_PORT (internal) or ${name}_PUBLIC_URL (public).`,
-    );
-    process.exit(1);
-  }
-  console.log(`[BOOT] ${name} → ${target ? target : '(disabled)'}`);
-  return target;
-};
-
-// ---------- tunables ----------
-const PROXY_TIMEOUT_MS = Number(process.env.PROXY_TIMEOUT_MS || 45000);
-const CLIENT_TIMEOUT_MS = Number(process.env.CLIENT_TIMEOUT_MS || 50000);
-
-// keep-alive agents
-const httpAgent = new http.Agent({ keepAlive: true });
-const httpsAgent = new https.Agent({ keepAlive: true });
-
-// correlation id
-const requestId = (req) =>
-  req.headers['x-request-id']?.toString() || crypto.randomUUID();
-
-// ---------- envs ----------
+// ---- env + targets ----
 const {
   AUTH_HOST,
   AUTH_PORT,
@@ -59,29 +28,35 @@ const {
   ALLOW_ORIGIN,
 } = process.env;
 
-// ---------- build targets ----------
-const AUTH_URL = chooseTarget(
-  'AUTH',
-  AUTH_HOST,
-  AUTH_PORT,
-  AUTH_PUBLIC_URL,
-  true,
-);
-const INVENTORY_URL = chooseTarget(
+const buildInternal = (h, p) => (h && p ? `http://${h}:${p}` : undefined);
+const choose = (name, h, p, pub, required = true) => {
+  const t = buildInternal(h, p) || pub;
+  if (!t && required) {
+    console.error(
+      `[BOOT] Missing target for ${name} (set ${name}_HOST+_PORT or ${name}_PUBLIC_URL)`,
+    );
+    process.exit(1);
+  }
+  console.log(`[BOOT] ${name} → ${t || '(disabled)'}`);
+  return t;
+};
+
+const AUTH_URL = choose('AUTH', AUTH_HOST, AUTH_PORT, AUTH_PUBLIC_URL, true);
+const INVENTORY_URL = choose(
   'INVENTORY',
   INVENTORY_HOST,
   INVENTORY_PORT,
   INVENTORY_PUBLIC_URL,
   true,
 );
-const CLIENT_URL = chooseTarget(
+const CLIENT_URL = choose(
   'CLIENT',
   CLIENT_HOST,
   CLIENT_PORT,
   CLIENT_PUBLIC_URL,
   false,
 );
-const BARCODE_URL = chooseTarget(
+const BARCODE_URL = choose(
   'BARCODE',
   BARCODE_HOST,
   BARCODE_PORT,
@@ -89,13 +64,78 @@ const BARCODE_URL = chooseTarget(
   false,
 );
 
-// ---------- app ----------
+// ---- proxy setup (before body parser!) ----
+const PROXY_TIMEOUT_MS = Number(process.env.PROXY_TIMEOUT_MS || 45000);
+const CLIENT_TIMEOUT_MS = Number(process.env.CLIENT_TIMEOUT_MS || 50000);
+const httpAgent = new http.Agent({ keepAlive: true });
+const httpsAgent = new https.Agent({ keepAlive: true });
+
+const reqId = (req) =>
+  req.headers['x-request-id']?.toString() || crypto.randomUUID();
+const trace = (label) => (req, _res, next) => {
+  console.log(`[HIT ${label}] id=${req.id} ${req.method} ${req.originalUrl}`);
+  next();
+};
+
+const mkProxy = (label, target) =>
+  createProxyMiddleware({
+    target,
+    changeOrigin: true,
+    xfwd: true,
+    agent: target.startsWith('https') ? httpsAgent : httpAgent,
+    proxyTimeout: PROXY_TIMEOUT_MS,
+    timeout: CLIENT_TIMEOUT_MS,
+    logLevel: 'warn',
+    onProxyReq(proxyReq, req) {
+      const path = proxyReq.path || req.url;
+      console.log(
+        `[GW→UP] ${req.id} ${req.method} ${req.originalUrl} → ${target}${path}`,
+      );
+      req._upStart = process.hrtime.bigint();
+      proxyReq.setTimeout(PROXY_TIMEOUT_MS, () => {
+        const ms = req._upStart
+          ? (Number(process.hrtime.bigint() - req._upStart) / 1e6).toFixed(1)
+          : 'n/a';
+        console.error(
+          `[TIMEOUT] ${req.id} ${req.method} ${req.originalUrl} → ${target}${path} after ${ms}`,
+        );
+      });
+    },
+    onProxyRes(proxyRes, req) {
+      const ms = req._upStart
+        ? (Number(process.hrtime.bigint() - req._upStart) / 1e6).toFixed(1)
+        : 'n/a';
+      console.log(
+        `[UP→GW] ${req.id} ${req.method} ${req.originalUrl} ← ${target} :: status=${proxyRes.statusCode} upstream=${ms}ms`,
+      );
+    },
+    onError(err, req, res) {
+      const ms = req._upStart
+        ? (Number(process.hrtime.bigint() - req._upStart) / 1e6).toFixed(1)
+        : 'n/a';
+      console.error(
+        `[ERR ] ${req.id} ${req.method} ${req.originalUrl} → ${target} :: ${
+          err.code || err.message
+        } after ${ms}ms`,
+      );
+      if (!res.headersSent)
+        res
+          .status(502)
+          .json({
+            error: 'Upstream unavailable',
+            code: err.code || 'EUPSTREAM',
+          });
+    },
+    // IMPORTANT: do NOT set pathRewrite here for AUTH; we want to preserve /api/auth/*
+  });
+
+// ---- app ----
 const app = express();
 app.set('trust proxy', true);
 
-// minimal request trace + total timing (works for all routes)
+// lightweight request log + total timing
 app.use((req, res, next) => {
-  req.id = requestId(req);
+  req.id = reqId(req);
   const start = process.hrtime.bigint();
   const src = req.headers['x-forwarded-for'] || req.ip;
   console.log(`[IN  ] ${req.id} ${req.method} ${req.originalUrl} from ${src}`);
@@ -110,169 +150,14 @@ app.use((req, res, next) => {
   next();
 });
 
-// security, cors, access logs
 app.use(helmet());
 app.use(cors({ origin: ALLOW_ORIGIN || true, credentials: true }));
 app.use(
   morgan(':method :url :status :res[content-length] - :response-time ms'),
 );
 
-// ---------- PROXIES FIRST (no body parsing before proxy) ----------
-const trace = (label) => (req, _res, next) => {
-  console.log(
-    `[HIT ${label}] id=${req.id} baseUrl=${req.baseUrl} url=${req.url} originalUrl=${req.originalUrl}`,
-  );
-  next();
-};
-
-const mkProxy = (name, target) =>
-  createProxyMiddleware({
-    target,
-    changeOrigin: true,
-    xfwd: true,
-    agent: target.startsWith('https') ? httpsAgent : httpAgent,
-    proxyTimeout: PROXY_TIMEOUT_MS,
-    timeout: CLIENT_TIMEOUT_MS,
-    logLevel: 'warn',
-
-    onProxyReq(proxyReq, req) {
-      const id = req.id || 'unknown';
-      const path = proxyReq.path || req.url;
-      console.log(
-        `[GW→UP] ${id} ${req.method} ${req.originalUrl} → ${target}${path}`,
-      );
-      proxyReq.setTimeout(PROXY_TIMEOUT_MS, () => {
-        const elapsed = req._gwUpStart
-          ? `${(Number(process.hrtime.bigint() - req._gwUpStart) / 1e6).toFixed(
-              1,
-            )}ms`
-          : 'n/a';
-        console.error(
-          `[TIMEOUT] ${id} ${req.method} ${req.originalUrl} → ${target}${path} after ${elapsed}`,
-        );
-      });
-      proxyReq.on('error', (e) => {
-        console.error(
-          `[PERR] ${id} ${req.method} ${
-            req.originalUrl
-          } → ${target}${path} :: ${e.code || e.message}`,
-        );
-      });
-      req._gwUpStart = process.hrtime.bigint();
-    },
-
-    onProxyRes(proxyRes, req) {
-      const id = req.id || 'unknown';
-      const start = req._gwUpStart || process.hrtime.bigint();
-      const ms = Number(process.hrtime.bigint() - start) / 1e6;
-      console.log(
-        `[UP→GW] ${id} ${req.method} ${req.originalUrl} ← ${target} :: status=${
-          proxyRes.statusCode
-        } upstream=${ms.toFixed(1)}ms`,
-      );
-    },
-
-    onError(err, req, res) {
-      const id = req.id || 'unknown';
-      const ms = req._gwUpStart
-        ? `${(Number(process.hrtime.bigint() - req._gwUpStart) / 1e6).toFixed(
-            1,
-          )}ms`
-        : 'n/a';
-      console.error(
-        `[ERR ] ${id} ${req.method} ${req.originalUrl} → ${target} :: ${
-          err.code || err.message
-        } after ${ms}`,
-      );
-      if (!res.headersSent)
-        res
-          .status(502)
-          .json({
-            error: 'Upstream unavailable',
-            code: err.code || 'EUPSTREAM',
-          });
-    },
-  });
-
-// AUTH: strip '/api/auth' → upstream sees '/login'
-if (AUTH_URL) {
-  app.use(
-    '/api/auth',
-    trace('AUTH'),
-    createProxyMiddleware({
-      target: AUTH_URL,
-      changeOrigin: true,
-      xfwd: true,
-      agent: AUTH_URL.startsWith('https') ? httpsAgent : httpAgent,
-      proxyTimeout: PROXY_TIMEOUT_MS,
-      timeout: CLIENT_TIMEOUT_MS,
-      logLevel: 'warn',
-      pathRewrite: { '^/api/auth': '' }, // '/api/auth/login' -> '/login'
-      onProxyReq(proxyReq, req) {
-        const id = req.id || 'unknown';
-        const path = proxyReq.path || req.url;
-        console.log(
-          `[GW→UP] ${id} ${req.method} ${req.originalUrl} → ${AUTH_URL}${path}`,
-        );
-        proxyReq.setTimeout(PROXY_TIMEOUT_MS, () => {
-          const elapsed = req._gwUpStart
-            ? `${(
-                Number(process.hrtime.bigint() - req._gwUpStart) / 1e6
-              ).toFixed(1)}ms`
-            : 'n/a';
-          console.error(
-            `[TIMEOUT] ${id} ${req.method} ${req.originalUrl} → ${AUTH_URL}${path} after ${elapsed}`,
-          );
-        });
-        proxyReq.on('error', (e) => {
-          console.error(
-            `[PERR] ${id} ${req.method} ${
-              req.originalUrl
-            } → ${AUTH_URL}${path} :: ${e.code || e.message}`,
-          );
-        });
-        req._gwUpStart = process.hrtime.bigint();
-      },
-      onProxyRes(proxyRes, req) {
-        const id = req.id || 'unknown';
-        const ms =
-          Number(
-            process.hrtime.bigint() -
-              (req._gwUpStart || process.hrtime.bigint()),
-          ) / 1e6;
-        console.log(
-          `[UP→GW] ${id} ${req.method} ${
-            req.originalUrl
-          } ← ${AUTH_URL} :: status=${
-            proxyRes.statusCode
-          } upstream=${ms.toFixed(1)}ms`,
-        );
-      },
-      onError(err, req, res) {
-        const id = req.id || 'unknown';
-        const ms = req._gwUpStart
-          ? `${(Number(process.hrtime.bigint() - req._gwUpStart) / 1e6).toFixed(
-              1,
-            )}ms`
-          : 'n/a';
-        console.error(
-          `[ERR ] ${id} ${req.method} ${req.originalUrl} → ${AUTH_URL} :: ${
-            err.code || err.message
-          } after ${ms}`,
-        );
-        if (!res.headersSent)
-          res
-            .status(502)
-            .json({
-              error: 'Upstream unavailable',
-              code: err.code || 'EUPSTREAM',
-            });
-      },
-    }),
-  );
-}
-
-// INVENTORY/CLIENT/BARCODE: preserve original path (adjust if needed)
+// PROXIES FIRST (preserve full original path)
+if (AUTH_URL) app.use('/api/auth', trace('AUTH'), mkProxy('AUTH', AUTH_URL));
 if (INVENTORY_URL)
   app.use('/api/items', trace('ITEMS'), mkProxy('INVENTORY', INVENTORY_URL));
 if (CLIENT_URL)
@@ -280,10 +165,10 @@ if (CLIENT_URL)
 if (BARCODE_URL)
   app.use('/api/barcodes', trace('BARCODES'), mkProxy('BARCODE', BARCODE_URL));
 
-// ---------- AFTER proxies: body parser for our own handlers ----------
+// AFTER proxies: JSON body parser for our own handlers
 app.use(express.json({ limit: '1mb' }));
 
-// health + version (again here is fine)
+// health + version
 app.get('/healthz', (_, res) => res.status(200).send('ok'));
 app.get('/__version', (req, res) => {
   res.json({
@@ -294,42 +179,7 @@ app.get('/__version', (req, res) => {
   });
 });
 
-// ---------- diagnostics (gateway → auth) ----------
-app.get('/_diag/auth/health', async (_req, res) => {
-  try {
-    const url = new URL('/healthz', AUTH_URL).toString();
-    const t0 = performance.now();
-    const r = await fetch(url);
-    const txt = await r.text();
-    const t1 = performance.now();
-    res
-      .status(200)
-      .json({ url, status: r.status, body: txt, ms: +(t1 - t0).toFixed(1) });
-  } catch (e) {
-    res.status(500).json({ error: String(e) });
-  }
-});
-
-app.post('/_diag/auth/login', async (req, res) => {
-  try {
-    const url = new URL('/login', AUTH_URL).toString(); // auth expects /login at root
-    const t0 = performance.now();
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(req.body || { email: 'test@x', password: 'x' }),
-    });
-    const txt = await r.text();
-    const t1 = performance.now();
-    res
-      .status(200)
-      .json({ url, status: r.status, body: txt, ms: +(t1 - t0).toFixed(1) });
-  } catch (e) {
-    res.status(500).json({ error: String(e) });
-  }
-});
-
-// ---------- start ----------
+// start
 const PORT = process.env.PORT || 10_000;
 app.listen(PORT, () => {
   console.log(`✅ API Gateway listening on :${PORT}`);
