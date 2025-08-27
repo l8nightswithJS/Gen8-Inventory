@@ -8,7 +8,7 @@ import https from 'node:https';
 import crypto from 'node:crypto';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 
-// ----- helpers -----
+// ---------- helpers ----------
 const buildInternalURL = (host, port) =>
   host && port ? `http://${host}:${port}` : undefined;
 
@@ -25,18 +25,18 @@ const chooseTarget = (name, host, port, publicUrl, required = true) => {
   return target;
 };
 
-// env overrides for timeouts if you want to tune later
+// tunables (env can override)
 const PROXY_TIMEOUT_MS = Number(process.env.PROXY_TIMEOUT_MS || 30000);
 const CLIENT_TIMEOUT_MS = Number(process.env.CLIENT_TIMEOUT_MS || 35000);
 
-// keep-alive agents (lower TLS handshake overhead)
+// keep-alive to cut TLS handshake overhead
 const httpAgent = new http.Agent({ keepAlive: true });
 const httpsAgent = new https.Agent({ keepAlive: true });
 
-// redact helper for headers
+// redact helper for header logs
 const redact = (obj = {}, keys = ['authorization', 'cookie']) => {
   const lower = Object.fromEntries(
-    Object.entries(obj).map(([k, v]) => [String(k).toLowerCase(), v]),
+    Object.entries(obj || {}).map(([k, v]) => [String(k).toLowerCase(), v]),
   );
   keys.forEach((k) => {
     if (lower[k] !== undefined) lower[k] = '[REDACTED]';
@@ -48,7 +48,7 @@ const redact = (obj = {}, keys = ['authorization', 'cookie']) => {
 const requestId = (req) =>
   req.headers['x-request-id']?.toString() || crypto.randomUUID();
 
-// build proxy opts with deep logging
+// proxy opts + deep logs
 const proxyOpts = (name, target, options = {}) => ({
   target,
   changeOrigin: true,
@@ -59,39 +59,36 @@ const proxyOpts = (name, target, options = {}) => ({
   logLevel: 'warn',
   ...options,
 
-  // If you've parsed the body with express.json(), re-send it to the upstream.
-  onProxyReq(proxyReq, req, res) {
-    const id = req.id || 'unknown';
-    // Log the *actual* path going upstream (req.url is path after mount)
+  onProxyReq(proxyReq, req, _res) {
     const upstreamPath = proxyReq.path || req.url;
     console.log(
-      `[GW→UP] ${id} ${req.method} ${
+      `[GW→UP] ${req.id} ${req.method} ${
         req.originalUrl
       } → ${target}${upstreamPath} :: headers=${JSON.stringify(
         redact(proxyReq.getHeaders()),
       )}`,
     );
 
-    // Re-send JSON body if present (prevents empty-body issues)
+    // forward parsed JSON body (if any)
     if (req.body && Object.keys(req.body).length) {
-      const bodyData = JSON.stringify(req.body);
+      const body = JSON.stringify(req.body);
       proxyReq.setHeader('Content-Type', 'application/json');
-      proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
-      proxyReq.write(bodyData);
+      proxyReq.setHeader('Content-Length', Buffer.byteLength(body));
+      proxyReq.write(body);
     }
 
-    // timing marker for upstream leg
-    req._gwUpstreamStart = process.hrtime.bigint();
+    req._gwUpStart = process.hrtime.bigint();
   },
 
   onProxyRes(proxyRes, req, res) {
-    const id = req.id || 'unknown';
-    const started = req._gwUpstreamStart || process.hrtime.bigint();
-    const durMs = Number(process.hrtime.bigint() - started) / 1e6;
+    const start = req._gwUpStart || process.hrtime.bigint();
+    const ms = Number(process.hrtime.bigint() - start) / 1e6;
     console.log(
-      `[UP→GW] ${id} ${req.method} ${req.originalUrl} ← ${target} :: status=${
-        proxyRes.statusCode
-      } upstream=${durMs.toFixed(1)}ms`,
+      `[UP→GW] ${req.id} ${req.method} ${
+        req.originalUrl
+      } ← ${target} :: status=${proxyRes.statusCode} upstream=${ms.toFixed(
+        1,
+      )}ms`,
     );
     if (typeof options.onProxyRes === 'function') {
       options.onProxyRes(proxyRes, req, res);
@@ -99,22 +96,20 @@ const proxyOpts = (name, target, options = {}) => ({
   },
 
   onError(err, req, res) {
-    const id = req.id || 'unknown';
-    const dur = req._gwUpstreamStart
-      ? `${(
-          Number(process.hrtime.bigint() - req._gwUpstreamStart) / 1e6
-        ).toFixed(1)}ms`
+    const ms = req._gwUpStart
+      ? `${(Number(process.hrtime.bigint() - req._gwUpStart) / 1e6).toFixed(
+          1,
+        )}ms`
       : 'n/a';
     console.error(
-      `[ERR ] ${id} ${req.method} ${req.originalUrl} → ${target} :: ${
+      `[ERR ] ${req.id} ${req.method} ${req.originalUrl} → ${target} :: ${
         err.code || err.message
-      } after ${dur}`,
+      } after ${ms}`,
     );
-    if (!res.headersSent) {
+    if (!res.headersSent)
       res
         .status(502)
         .json({ error: 'Upstream unavailable', code: err.code || 'EUPSTREAM' });
-    }
   },
 });
 
@@ -169,22 +164,22 @@ const BARCODE_URL = chooseTarget(
 const app = express();
 app.set('trust proxy', true);
 
-// request-level correlation + timing
+// correlation + end-to-end timing
 app.use((req, res, next) => {
   req.id = requestId(req);
   const start = process.hrtime.bigint();
-  const srcIp = req.headers['x-forwarded-for'] || req.ip;
+  const src = req.headers['x-forwarded-for'] || req.ip;
   console.log(
     `[IN  ] ${req.id} ${req.method} ${
       req.originalUrl
-    } from ${srcIp} :: headers=${JSON.stringify(redact(req.headers))}`,
+    } from ${src} :: headers=${JSON.stringify(redact(req.headers))}`,
   );
   res.on('finish', () => {
-    const durMs = Number(process.hrtime.bigint() - start) / 1e6;
+    const ms = Number(process.hrtime.bigint() - start) / 1e6;
     console.log(
       `[OUT ] ${req.id} ${req.method} ${req.originalUrl} → ${
         res.statusCode
-      } total=${durMs.toFixed(1)}ms`,
+      } total=${ms.toFixed(1)}ms`,
     );
   });
   next();
@@ -192,36 +187,79 @@ app.use((req, res, next) => {
 
 app.use(helmet());
 app.use(express.json({ limit: '1mb' }));
-app.use(
-  cors({
-    origin: ALLOW_ORIGIN || true, // set exact origin in prod
-    credentials: true,
-  }),
-);
+app.use(cors({ origin: ALLOW_ORIGIN || true, credentials: true }));
 
-// concise access log stays (pairs nicely with the detailed logs)
+// concise access log
 app.use(
   morgan(':method :url :status :res[content-length] - :response-time ms'),
 );
 
+// health
 app.get('/healthz', (_, res) => res.status(200).send('ok'));
 
+// ---------- diagnostics (temporary; useful during debugging) ----------
+app.get('/_diag/auth/health', async (_req, res) => {
+  try {
+    const url = new URL('/healthz', AUTH_URL).toString();
+    const t0 = performance.now();
+    const r = await fetch(url, { method: 'GET' });
+    const txt = await r.text();
+    const t1 = performance.now();
+    res
+      .status(200)
+      .json({ url, status: r.status, body: txt, ms: +(t1 - t0).toFixed(1) });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+app.post('/_diag/auth/login', async (req, res) => {
+  try {
+    const url = new URL('/api/auth/login', AUTH_URL).toString();
+    const t0 = performance.now();
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(req.body || { email: 'test@x', password: 'x' }),
+    });
+    const txt = await r.text();
+    const t1 = performance.now();
+    res
+      .status(200)
+      .json({ url, status: r.status, body: txt, ms: +(t1 - t0).toFixed(1) });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
 // ---------- proxies ----------
-// IMPORTANT: preserve the FULL original path so upstreams receive /api/... unchanged
+// Pre-proxy tracer proves we hit the proxy chain and shows Express' base/url
+const trace = (label) => (req, _res, next) => {
+  console.log(
+    `[HIT ${label}] id=${req.id} baseUrl=${req.baseUrl} url=${req.url} originalUrl=${req.originalUrl}`,
+  );
+  next();
+};
+
+// Preserve the FULL original path so upstreams see /api/... unchanged.
 if (AUTH_URL)
   app.use(
     '/api/auth',
+    trace('AUTH'),
     createProxyMiddleware(
-      proxyOpts('AUTH', AUTH_URL, { pathRewrite: (p, req) => req.originalUrl }),
+      proxyOpts('AUTH', AUTH_URL, {
+        pathRewrite: (_p, req) => req.originalUrl,
+      }),
     ),
   );
 
 if (INVENTORY_URL)
   app.use(
     '/api/items',
+    trace('ITEMS'),
     createProxyMiddleware(
       proxyOpts('INVENTORY', INVENTORY_URL, {
-        pathRewrite: (p, req) => req.originalUrl,
+        pathRewrite: (_p, req) => req.originalUrl,
       }),
     ),
   );
@@ -229,9 +267,10 @@ if (INVENTORY_URL)
 if (CLIENT_URL)
   app.use(
     '/api/clients',
+    trace('CLIENTS'),
     createProxyMiddleware(
       proxyOpts('CLIENT', CLIENT_URL, {
-        pathRewrite: (p, req) => req.originalUrl,
+        pathRewrite: (_p, req) => req.originalUrl,
       }),
     ),
   );
@@ -239,9 +278,10 @@ if (CLIENT_URL)
 if (BARCODE_URL)
   app.use(
     '/api/barcodes',
+    trace('BARCODES'),
     createProxyMiddleware(
       proxyOpts('BARCODE', BARCODE_URL, {
-        pathRewrite: (p, req) => req.originalUrl,
+        pathRewrite: (_p, req) => req.originalUrl,
       }),
     ),
   );
