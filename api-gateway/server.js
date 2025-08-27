@@ -10,7 +10,7 @@ import { performance } from 'node:perf_hooks';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 
 // ---------- boot tag ----------
-const BUILD_TAG = `[BOOT] GW v2.4 @ ${new Date().toISOString()}`;
+const BUILD_TAG = `[BOOT] GW v2.5 @ ${new Date().toISOString()}`;
 console.log(BUILD_TAG);
 
 // ---------- helpers ----------
@@ -93,7 +93,7 @@ const BARCODE_URL = chooseTarget(
 const app = express();
 app.set('trust proxy', true);
 
-// request trace + total timing
+// minimal request trace + total timing (works for all routes)
 app.use((req, res, next) => {
   req.id = requestId(req);
   const start = process.hrtime.bigint();
@@ -110,61 +110,21 @@ app.use((req, res, next) => {
   next();
 });
 
+// security, cors, access logs
 app.use(helmet());
-app.use(express.json({ limit: '1mb' }));
 app.use(cors({ origin: ALLOW_ORIGIN || true, credentials: true }));
 app.use(
   morgan(':method :url :status :res[content-length] - :response-time ms'),
 );
 
-// health + version
-app.get('/healthz', (_, res) => res.status(200).send('ok'));
-app.get('/__version', (req, res) => {
-  res.json({
-    tag: BUILD_TAG,
-    commit: process.env.RENDER_GIT_COMMIT || null,
-    targets: { AUTH_URL, INVENTORY_URL, CLIENT_URL, BARCODE_URL },
-    timeouts: { PROXY_TIMEOUT_MS, CLIENT_TIMEOUT_MS },
-  });
-});
+// ---------- PROXIES FIRST (no body parsing before proxy) ----------
+const trace = (label) => (req, _res, next) => {
+  console.log(
+    `[HIT ${label}] id=${req.id} baseUrl=${req.baseUrl} url=${req.url} originalUrl=${req.originalUrl}`,
+  );
+  next();
+};
 
-// ---------- diagnostics (gateway → auth) ----------
-app.get('/_diag/auth/health', async (_req, res) => {
-  try {
-    const url = new URL('/healthz', AUTH_URL).toString();
-    const t0 = performance.now();
-    const r = await fetch(url);
-    const txt = await r.text();
-    const t1 = performance.now();
-    res
-      .status(200)
-      .json({ url, status: r.status, body: txt, ms: +(t1 - t0).toFixed(1) });
-  } catch (e) {
-    res.status(500).json({ error: String(e) });
-  }
-});
-
-app.post('/_diag/auth/login', async (req, res) => {
-  try {
-    // IMPORTANT: auth expects /login at root (not /api/auth/login)
-    const url = new URL('/login', AUTH_URL).toString();
-    const t0 = performance.now();
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(req.body || { email: 'test@x', password: 'x' }),
-    });
-    const txt = await r.text();
-    const t1 = performance.now();
-    res
-      .status(200)
-      .json({ url, status: r.status, body: txt, ms: +(t1 - t0).toFixed(1) });
-  } catch (e) {
-    res.status(500).json({ error: String(e) });
-  }
-});
-
-// ---------- proxy factory with deep logs ----------
 const mkProxy = (name, target) =>
   createProxyMiddleware({
     target,
@@ -198,21 +158,6 @@ const mkProxy = (name, target) =>
           } → ${target}${path} :: ${e.code || e.message}`,
         );
       });
-
-      // forward parsed JSON body (if any)
-      try {
-        if (req.body && Object.keys(req.body).length) {
-          const body = JSON.stringify(req.body);
-          proxyReq.setHeader('Content-Type', 'application/json');
-          proxyReq.setHeader('Content-Length', Buffer.byteLength(body));
-          proxyReq.write(body);
-        }
-      } catch (e) {
-        console.error(
-          `[PERR] ${id} could not serialize body: ${e?.message || e}`,
-        );
-      }
-
       req._gwUpStart = process.hrtime.bigint();
     },
 
@@ -249,22 +194,11 @@ const mkProxy = (name, target) =>
     },
   });
 
-// ---------- route tracers ----------
-const trace = (label) => (req, _res, next) => {
-  console.log(
-    `[HIT ${label}] id=${req.id} baseUrl=${req.baseUrl} url=${req.url} originalUrl=${req.originalUrl}`,
-  );
-  next();
-};
-
-// ---------- proxies ----------
-// AUTH: strip '/api/auth' so upstream sees '/login'
+// AUTH: strip '/api/auth' → upstream sees '/login'
 if (AUTH_URL) {
   app.use(
     '/api/auth',
     trace('AUTH'),
-    mkProxy('AUTH', AUTH_URL + ''), // target as-is
-    // Use pathRewrite to remove prefix
     createProxyMiddleware({
       target: AUTH_URL,
       changeOrigin: true,
@@ -273,46 +207,48 @@ if (AUTH_URL) {
       proxyTimeout: PROXY_TIMEOUT_MS,
       timeout: CLIENT_TIMEOUT_MS,
       logLevel: 'warn',
-      pathRewrite: (path) => path.replace(/^\/api\/auth/, ''), // '/api/auth/login' -> '/login'
-    }),
-  );
-}
-
-// INVENTORY/CLIENT/BARCODE: keep original path (adjust if your services expect different bases)
-if (INVENTORY_URL) {
-  app.use(
-    '/api/items',
-    trace('ITEMS'),
-    createProxyMiddleware({
-      target: INVENTORY_URL,
-      changeOrigin: true,
-      xfwd: true,
-      agent: INVENTORY_URL.startsWith('https') ? httpsAgent : httpAgent,
-      proxyTimeout: PROXY_TIMEOUT_MS,
-      timeout: CLIENT_TIMEOUT_MS,
-      logLevel: 'warn',
-      pathRewrite: (path) => path, // preserve
-      onProxyReq: (proxyReq, req) => {
+      pathRewrite: { '^/api/auth': '' }, // '/api/auth/login' -> '/login'
+      onProxyReq(proxyReq, req) {
         const id = req.id || 'unknown';
-        const p = proxyReq.path || req.url;
+        const path = proxyReq.path || req.url;
         console.log(
-          `[GW→UP] ${id} ${req.method} ${req.originalUrl} → ${INVENTORY_URL}${p}`,
+          `[GW→UP] ${id} ${req.method} ${req.originalUrl} → ${AUTH_URL}${path}`,
         );
+        proxyReq.setTimeout(PROXY_TIMEOUT_MS, () => {
+          const elapsed = req._gwUpStart
+            ? `${(
+                Number(process.hrtime.bigint() - req._gwUpStart) / 1e6
+              ).toFixed(1)}ms`
+            : 'n/a';
+          console.error(
+            `[TIMEOUT] ${id} ${req.method} ${req.originalUrl} → ${AUTH_URL}${path} after ${elapsed}`,
+          );
+        });
+        proxyReq.on('error', (e) => {
+          console.error(
+            `[PERR] ${id} ${req.method} ${
+              req.originalUrl
+            } → ${AUTH_URL}${path} :: ${e.code || e.message}`,
+          );
+        });
         req._gwUpStart = process.hrtime.bigint();
       },
-      onProxyRes: (proxyRes, req) => {
+      onProxyRes(proxyRes, req) {
         const id = req.id || 'unknown';
-        const start = req._gwUpStart || process.hrtime.bigint();
-        const ms = Number(process.hrtime.bigint() - start) / 1e6;
+        const ms =
+          Number(
+            process.hrtime.bigint() -
+              (req._gwUpStart || process.hrtime.bigint()),
+          ) / 1e6;
         console.log(
           `[UP→GW] ${id} ${req.method} ${
             req.originalUrl
-          } ← ${INVENTORY_URL} :: status=${
+          } ← ${AUTH_URL} :: status=${
             proxyRes.statusCode
           } upstream=${ms.toFixed(1)}ms`,
         );
       },
-      onError: (err, req, res) => {
+      onError(err, req, res) {
         const id = req.id || 'unknown';
         const ms = req._gwUpStart
           ? `${(Number(process.hrtime.bigint() - req._gwUpStart) / 1e6).toFixed(
@@ -320,9 +256,9 @@ if (INVENTORY_URL) {
             )}ms`
           : 'n/a';
         console.error(
-          `[ERR ] ${id} ${req.method} ${
-            req.originalUrl
-          } → ${INVENTORY_URL} :: ${err.code || err.message} after ${ms}`,
+          `[ERR ] ${id} ${req.method} ${req.originalUrl} → ${AUTH_URL} :: ${
+            err.code || err.message
+          } after ${ms}`,
         );
         if (!res.headersSent)
           res
@@ -336,39 +272,62 @@ if (INVENTORY_URL) {
   );
 }
 
-if (CLIENT_URL) {
-  app.use(
-    '/api/clients',
-    trace('CLIENTS'),
-    createProxyMiddleware({
-      target: CLIENT_URL,
-      changeOrigin: true,
-      xfwd: true,
-      agent: CLIENT_URL.startsWith('https') ? httpsAgent : httpAgent,
-      proxyTimeout: PROXY_TIMEOUT_MS,
-      timeout: CLIENT_TIMEOUT_MS,
-      logLevel: 'warn',
-      pathRewrite: (path) => path,
-    }),
-  );
-}
+// INVENTORY/CLIENT/BARCODE: preserve original path (adjust if needed)
+if (INVENTORY_URL)
+  app.use('/api/items', trace('ITEMS'), mkProxy('INVENTORY', INVENTORY_URL));
+if (CLIENT_URL)
+  app.use('/api/clients', trace('CLIENTS'), mkProxy('CLIENT', CLIENT_URL));
+if (BARCODE_URL)
+  app.use('/api/barcodes', trace('BARCODES'), mkProxy('BARCODE', BARCODE_URL));
 
-if (BARCODE_URL) {
-  app.use(
-    '/api/barcodes',
-    trace('BARCODES'),
-    createProxyMiddleware({
-      target: BARCODE_URL,
-      changeOrigin: true,
-      xfwd: true,
-      agent: BARCODE_URL.startsWith('https') ? httpsAgent : httpAgent,
-      proxyTimeout: PROXY_TIMEOUT_MS,
-      timeout: CLIENT_TIMEOUT_MS,
-      logLevel: 'warn',
-      pathRewrite: (path) => path,
-    }),
-  );
-}
+// ---------- AFTER proxies: body parser for our own handlers ----------
+app.use(express.json({ limit: '1mb' }));
+
+// health + version (again here is fine)
+app.get('/healthz', (_, res) => res.status(200).send('ok'));
+app.get('/__version', (req, res) => {
+  res.json({
+    tag: BUILD_TAG,
+    commit: process.env.RENDER_GIT_COMMIT || null,
+    targets: { AUTH_URL, INVENTORY_URL, CLIENT_URL, BARCODE_URL },
+    timeouts: { PROXY_TIMEOUT_MS, CLIENT_TIMEOUT_MS },
+  });
+});
+
+// ---------- diagnostics (gateway → auth) ----------
+app.get('/_diag/auth/health', async (_req, res) => {
+  try {
+    const url = new URL('/healthz', AUTH_URL).toString();
+    const t0 = performance.now();
+    const r = await fetch(url);
+    const txt = await r.text();
+    const t1 = performance.now();
+    res
+      .status(200)
+      .json({ url, status: r.status, body: txt, ms: +(t1 - t0).toFixed(1) });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+app.post('/_diag/auth/login', async (req, res) => {
+  try {
+    const url = new URL('/login', AUTH_URL).toString(); // auth expects /login at root
+    const t0 = performance.now();
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(req.body || { email: 'test@x', password: 'x' }),
+    });
+    const txt = await r.text();
+    const t1 = performance.now();
+    res
+      .status(200)
+      .json({ url, status: r.status, body: txt, ms: +(t1 - t0).toFixed(1) });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
 
 // ---------- start ----------
 const PORT = process.env.PORT || 10_000;
