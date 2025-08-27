@@ -23,6 +23,7 @@ router.post(
   body('password').isString().notEmpty(),
   handleValidation,
   asyncHandler(auth.login),
+  console.log(auth.login),
 );
 
 router.post('/verify', auth.verifyToken);

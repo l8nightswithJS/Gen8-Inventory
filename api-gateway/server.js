@@ -28,13 +28,13 @@ app.use(cors(corsOptions));
 // --- Proxy Routes ---
 // Define service URLs from environment variables
 const AUTH_SERVICE_URL =
-  process.env.AUTH_SERVICE_URL || 'http://auth-service:8002';
+  process.env.AUTH_SERVICE_URL || 'http://auth-service:8001';
 const CLIENT_SERVICE_URL =
-  process.env.CLIENT_SERVICE_URL || 'http://client-service:8004';
+  process.env.CLIENT_SERVICE_URL || 'http://client-service:8003';
 const INVENTORY_SERVICE_URL =
-  process.env.INVENTORY_SERVICE_URL || 'http://inventory-service:8003';
+  process.env.INVENTORY_SERVICE_URL || 'http://inventory-service:8000';
 const BARCODE_SERVICE_URL =
-  process.env.BARCODE_SERVICE_URL || 'http://barcode-service:8005';
+  process.env.BARCODE_SERVICE_URL || 'http://barcode-service:8002';
 
 // Apply the proxies using the modern 'createProxyMiddleware' function
 app.use(
