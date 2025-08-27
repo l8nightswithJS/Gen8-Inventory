@@ -10,7 +10,7 @@ import { performance } from 'node:perf_hooks';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 
 // ---------- boot tag ----------
-const BUILD_TAG = `[BOOT] GW v2.3 @ ${new Date().toISOString()}`;
+const BUILD_TAG = `[BOOT] GW v2.4 @ ${new Date().toISOString()}`;
 console.log(BUILD_TAG);
 
 // ---------- helpers ----------
@@ -146,7 +146,8 @@ app.get('/_diag/auth/health', async (_req, res) => {
 
 app.post('/_diag/auth/login', async (req, res) => {
   try {
-    const url = new URL('/api/auth/login', AUTH_URL).toString();
+    // IMPORTANT: auth expects /login at root (not /api/auth/login)
+    const url = new URL('/login', AUTH_URL).toString();
     const t0 = performance.now();
     const r = await fetch(url, {
       method: 'POST',
@@ -248,7 +249,7 @@ const mkProxy = (name, target) =>
     },
   });
 
-// ---------- route tracers (prove we hit the proxy) ----------
+// ---------- route tracers ----------
 const trace = (label) => (req, _res, next) => {
   console.log(
     `[HIT ${label}] id=${req.id} baseUrl=${req.baseUrl} url=${req.url} originalUrl=${req.originalUrl}`,
@@ -256,39 +257,117 @@ const trace = (label) => (req, _res, next) => {
   next();
 };
 
-// ---------- proxies (prepend the stripped base manually) ----------
-// NOTE: Express strips '/api/auth' from req.url. We add it back ourselves
-//       then hand off to the proxy. No pathRewrite function involved.
+// ---------- proxies ----------
+// AUTH: strip '/api/auth' so upstream sees '/login'
 if (AUTH_URL) {
-  const authProxy = mkProxy('AUTH', AUTH_URL);
-  app.use('/api/auth', trace('AUTH'), (req, res, next) => {
-    req.url = '/api/auth' + req.url; // e.g. '/login' -> '/api/auth/login'
-    authProxy(req, res, next);
-  });
+  app.use(
+    '/api/auth',
+    trace('AUTH'),
+    mkProxy('AUTH', AUTH_URL + ''), // target as-is
+    // Use pathRewrite to remove prefix
+    createProxyMiddleware({
+      target: AUTH_URL,
+      changeOrigin: true,
+      xfwd: true,
+      agent: AUTH_URL.startsWith('https') ? httpsAgent : httpAgent,
+      proxyTimeout: PROXY_TIMEOUT_MS,
+      timeout: CLIENT_TIMEOUT_MS,
+      logLevel: 'warn',
+      pathRewrite: (path) => path.replace(/^\/api\/auth/, ''), // '/api/auth/login' -> '/login'
+    }),
+  );
 }
 
+// INVENTORY/CLIENT/BARCODE: keep original path (adjust if your services expect different bases)
 if (INVENTORY_URL) {
-  const invProxy = mkProxy('INVENTORY', INVENTORY_URL);
-  app.use('/api/items', trace('ITEMS'), (req, res, next) => {
-    req.url = '/api/items' + req.url;
-    invProxy(req, res, next);
-  });
+  app.use(
+    '/api/items',
+    trace('ITEMS'),
+    createProxyMiddleware({
+      target: INVENTORY_URL,
+      changeOrigin: true,
+      xfwd: true,
+      agent: INVENTORY_URL.startsWith('https') ? httpsAgent : httpAgent,
+      proxyTimeout: PROXY_TIMEOUT_MS,
+      timeout: CLIENT_TIMEOUT_MS,
+      logLevel: 'warn',
+      pathRewrite: (path) => path, // preserve
+      onProxyReq: (proxyReq, req) => {
+        const id = req.id || 'unknown';
+        const p = proxyReq.path || req.url;
+        console.log(
+          `[GW→UP] ${id} ${req.method} ${req.originalUrl} → ${INVENTORY_URL}${p}`,
+        );
+        req._gwUpStart = process.hrtime.bigint();
+      },
+      onProxyRes: (proxyRes, req) => {
+        const id = req.id || 'unknown';
+        const start = req._gwUpStart || process.hrtime.bigint();
+        const ms = Number(process.hrtime.bigint() - start) / 1e6;
+        console.log(
+          `[UP→GW] ${id} ${req.method} ${
+            req.originalUrl
+          } ← ${INVENTORY_URL} :: status=${
+            proxyRes.statusCode
+          } upstream=${ms.toFixed(1)}ms`,
+        );
+      },
+      onError: (err, req, res) => {
+        const id = req.id || 'unknown';
+        const ms = req._gwUpStart
+          ? `${(Number(process.hrtime.bigint() - req._gwUpStart) / 1e6).toFixed(
+              1,
+            )}ms`
+          : 'n/a';
+        console.error(
+          `[ERR ] ${id} ${req.method} ${
+            req.originalUrl
+          } → ${INVENTORY_URL} :: ${err.code || err.message} after ${ms}`,
+        );
+        if (!res.headersSent)
+          res
+            .status(502)
+            .json({
+              error: 'Upstream unavailable',
+              code: err.code || 'EUPSTREAM',
+            });
+      },
+    }),
+  );
 }
 
 if (CLIENT_URL) {
-  const cliProxy = mkProxy('CLIENT', CLIENT_URL);
-  app.use('/api/clients', trace('CLIENTS'), (req, res, next) => {
-    req.url = '/api/clients' + req.url;
-    cliProxy(req, res, next);
-  });
+  app.use(
+    '/api/clients',
+    trace('CLIENTS'),
+    createProxyMiddleware({
+      target: CLIENT_URL,
+      changeOrigin: true,
+      xfwd: true,
+      agent: CLIENT_URL.startsWith('https') ? httpsAgent : httpAgent,
+      proxyTimeout: PROXY_TIMEOUT_MS,
+      timeout: CLIENT_TIMEOUT_MS,
+      logLevel: 'warn',
+      pathRewrite: (path) => path,
+    }),
+  );
 }
 
 if (BARCODE_URL) {
-  const bcProxy = mkProxy('BARCODE', BARCODE_URL);
-  app.use('/api/barcodes', trace('BARCODES'), (req, res, next) => {
-    req.url = '/api/barcodes' + req.url;
-    bcProxy(req, res, next);
-  });
+  app.use(
+    '/api/barcodes',
+    trace('BARCODES'),
+    createProxyMiddleware({
+      target: BARCODE_URL,
+      changeOrigin: true,
+      xfwd: true,
+      agent: BARCODE_URL.startsWith('https') ? httpsAgent : httpAgent,
+      proxyTimeout: PROXY_TIMEOUT_MS,
+      timeout: CLIENT_TIMEOUT_MS,
+      logLevel: 'warn',
+      pathRewrite: (path) => path,
+    }),
+  );
 }
 
 // ---------- start ----------
