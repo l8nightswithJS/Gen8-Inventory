@@ -49,7 +49,7 @@ const requestId = (req) =>
   req.headers['x-request-id']?.toString() || crypto.randomUUID();
 
 // build proxy opts with deep logging
-const proxyOpts = (name, target) => ({
+const proxyOpts = (name, target, options = {}) => ({
   target,
   changeOrigin: true,
   xfwd: true,
@@ -57,11 +57,12 @@ const proxyOpts = (name, target) => ({
   proxyTimeout: PROXY_TIMEOUT_MS,
   timeout: CLIENT_TIMEOUT_MS,
   logLevel: 'warn',
+  ...options,
 
   // If you've parsed the body with express.json(), re-send it to the upstream.
   onProxyReq(proxyReq, req, res) {
     const id = req.id || 'unknown';
-    // Log the *actual* path going upstream (req.url is the path *after* mount)
+    // Log the *actual* path going upstream (req.url is path after mount)
     const upstreamPath = proxyReq.path || req.url;
     console.log(
       `[GW→UP] ${id} ${req.method} ${
@@ -92,6 +93,9 @@ const proxyOpts = (name, target) => ({
         proxyRes.statusCode
       } upstream=${durMs.toFixed(1)}ms`,
     );
+    if (typeof options.onProxyRes === 'function') {
+      options.onProxyRes(proxyRes, req, res);
+    }
   },
 
   onError(err, req, res) {
@@ -190,7 +194,7 @@ app.use(helmet());
 app.use(express.json({ limit: '1mb' }));
 app.use(
   cors({
-    origin: ALLOW_ORIGIN || true,
+    origin: ALLOW_ORIGIN || true, // set exact origin in prod
     credentials: true,
   }),
 );
@@ -203,23 +207,43 @@ app.use(
 app.get('/healthz', (_, res) => res.status(200).send('ok'));
 
 // ---------- proxies ----------
-// IMPORTANT: We are NOT rewriting /api/auth so upstream sees /api/auth/login
+// IMPORTANT: preserve the FULL original path so upstreams receive /api/... unchanged
 if (AUTH_URL)
-  app.use('/api/auth', createProxyMiddleware(proxyOpts('AUTH', AUTH_URL)));
+  app.use(
+    '/api/auth',
+    createProxyMiddleware(
+      proxyOpts('AUTH', AUTH_URL, { pathRewrite: (p, req) => req.originalUrl }),
+    ),
+  );
+
 if (INVENTORY_URL)
   app.use(
     '/api/items',
-    createProxyMiddleware(proxyOpts('INVENTORY', INVENTORY_URL)),
+    createProxyMiddleware(
+      proxyOpts('INVENTORY', INVENTORY_URL, {
+        pathRewrite: (p, req) => req.originalUrl,
+      }),
+    ),
   );
+
 if (CLIENT_URL)
   app.use(
     '/api/clients',
-    createProxyMiddleware(proxyOpts('CLIENT', CLIENT_URL)),
+    createProxyMiddleware(
+      proxyOpts('CLIENT', CLIENT_URL, {
+        pathRewrite: (p, req) => req.originalUrl,
+      }),
+    ),
   );
+
 if (BARCODE_URL)
   app.use(
     '/api/barcodes',
-    createProxyMiddleware(proxyOpts('BARCODE', BARCODE_URL)),
+    createProxyMiddleware(
+      proxyOpts('BARCODE', BARCODE_URL, {
+        pathRewrite: (p, req) => req.originalUrl,
+      }),
+    ),
   );
 
 // ---------- start ----------
