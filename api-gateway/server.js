@@ -10,7 +10,7 @@ import { performance } from 'node:perf_hooks';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 
 // ---------- boot tag ----------
-const BUILD_TAG = `[BOOT] GW v2.2 @ ${new Date().toISOString()}`;
+const BUILD_TAG = `[BOOT] GW v2.3 @ ${new Date().toISOString()}`;
 console.log(BUILD_TAG);
 
 // ---------- helpers ----------
@@ -41,98 +41,6 @@ const httpsAgent = new https.Agent({ keepAlive: true });
 // correlation id
 const requestId = (req) =>
   req.headers['x-request-id']?.toString() || crypto.randomUUID();
-
-// build proxy opts with deep logging (safe)
-const proxyOpts = (name, target, options = {}) => ({
-  target,
-  changeOrigin: true,
-  xfwd: true,
-  agent: target.startsWith('https') ? httpsAgent : httpAgent,
-  proxyTimeout: PROXY_TIMEOUT_MS,
-  timeout: CLIENT_TIMEOUT_MS,
-  logLevel: 'warn',
-  ...options,
-
-  onProxyReq(proxyReq, req, _res) {
-    const id = req.id || 'unknown';
-    const upstreamPath = proxyReq.path || req.url;
-
-    // print BEFORE doing anything risky, and avoid getHeaders()
-    const hostHdr = proxyReq.getHeader ? proxyReq.getHeader('host') : undefined;
-    console.log(
-      `[GW→UP] ${id} ${req.method} ${
-        req.originalUrl
-      } → ${target}${upstreamPath} :: host=${hostHdr || '(n/a)'}`,
-    );
-
-    // explicit timeouts/error hooks
-    proxyReq.setTimeout(PROXY_TIMEOUT_MS, () => {
-      const elapsed = req._gwUpStart
-        ? `${(Number(process.hrtime.bigint() - req._gwUpStart) / 1e6).toFixed(
-            1,
-          )}ms`
-        : 'n/a';
-      console.error(
-        `[TIMEOUT] ${id} ${req.method} ${req.originalUrl} → ${target}${upstreamPath} after ${elapsed}`,
-      );
-    });
-    proxyReq.on('error', (e) => {
-      console.error(
-        `[PERR] ${id} ${req.method} ${
-          req.originalUrl
-        } → ${target}${upstreamPath} :: ${e.code || e.message}`,
-      );
-    });
-
-    // forward parsed JSON body (if any)
-    try {
-      if (req.body && Object.keys(req.body).length) {
-        const body = JSON.stringify(req.body);
-        proxyReq.setHeader('Content-Type', 'application/json');
-        proxyReq.setHeader('Content-Length', Buffer.byteLength(body));
-        proxyReq.write(body);
-      }
-    } catch (e) {
-      console.error(
-        `[PERR] ${id} could not serialize body: ${e?.message || e}`,
-      );
-    }
-
-    req._gwUpStart = process.hrtime.bigint();
-  },
-
-  onProxyRes(proxyRes, req, res) {
-    const id = req.id || 'unknown';
-    const start = req._gwUpStart || process.hrtime.bigint();
-    const ms = Number(process.hrtime.bigint() - start) / 1e6;
-    console.log(
-      `[UP→GW] ${id} ${req.method} ${req.originalUrl} ← ${target} :: status=${
-        proxyRes.statusCode
-      } upstream=${ms.toFixed(1)}ms`,
-    );
-    if (typeof options.onProxyRes === 'function') {
-      options.onProxyRes(proxyRes, req, res);
-    }
-  },
-
-  onError(err, req, res) {
-    const id = req.id || 'unknown';
-    const ms = req._gwUpStart
-      ? `${(Number(process.hrtime.bigint() - req._gwUpStart) / 1e6).toFixed(
-          1,
-        )}ms`
-      : 'n/a';
-    console.error(
-      `[ERR ] ${id} ${req.method} ${req.originalUrl} → ${target} :: ${
-        err.code || err.message
-      } after ${ms}`,
-    );
-    if (!res.headersSent)
-      res
-        .status(502)
-        .json({ error: 'Upstream unavailable', code: err.code || 'EUPSTREAM' });
-  },
-});
 
 // ---------- envs ----------
 const {
@@ -255,7 +163,92 @@ app.post('/_diag/auth/login', async (req, res) => {
   }
 });
 
-// ---------- proxies ----------
+// ---------- proxy factory with deep logs ----------
+const mkProxy = (name, target) =>
+  createProxyMiddleware({
+    target,
+    changeOrigin: true,
+    xfwd: true,
+    agent: target.startsWith('https') ? httpsAgent : httpAgent,
+    proxyTimeout: PROXY_TIMEOUT_MS,
+    timeout: CLIENT_TIMEOUT_MS,
+    logLevel: 'warn',
+
+    onProxyReq(proxyReq, req) {
+      const id = req.id || 'unknown';
+      const path = proxyReq.path || req.url;
+      console.log(
+        `[GW→UP] ${id} ${req.method} ${req.originalUrl} → ${target}${path}`,
+      );
+      proxyReq.setTimeout(PROXY_TIMEOUT_MS, () => {
+        const elapsed = req._gwUpStart
+          ? `${(Number(process.hrtime.bigint() - req._gwUpStart) / 1e6).toFixed(
+              1,
+            )}ms`
+          : 'n/a';
+        console.error(
+          `[TIMEOUT] ${id} ${req.method} ${req.originalUrl} → ${target}${path} after ${elapsed}`,
+        );
+      });
+      proxyReq.on('error', (e) => {
+        console.error(
+          `[PERR] ${id} ${req.method} ${
+            req.originalUrl
+          } → ${target}${path} :: ${e.code || e.message}`,
+        );
+      });
+
+      // forward parsed JSON body (if any)
+      try {
+        if (req.body && Object.keys(req.body).length) {
+          const body = JSON.stringify(req.body);
+          proxyReq.setHeader('Content-Type', 'application/json');
+          proxyReq.setHeader('Content-Length', Buffer.byteLength(body));
+          proxyReq.write(body);
+        }
+      } catch (e) {
+        console.error(
+          `[PERR] ${id} could not serialize body: ${e?.message || e}`,
+        );
+      }
+
+      req._gwUpStart = process.hrtime.bigint();
+    },
+
+    onProxyRes(proxyRes, req) {
+      const id = req.id || 'unknown';
+      const start = req._gwUpStart || process.hrtime.bigint();
+      const ms = Number(process.hrtime.bigint() - start) / 1e6;
+      console.log(
+        `[UP→GW] ${id} ${req.method} ${req.originalUrl} ← ${target} :: status=${
+          proxyRes.statusCode
+        } upstream=${ms.toFixed(1)}ms`,
+      );
+    },
+
+    onError(err, req, res) {
+      const id = req.id || 'unknown';
+      const ms = req._gwUpStart
+        ? `${(Number(process.hrtime.bigint() - req._gwUpStart) / 1e6).toFixed(
+            1,
+          )}ms`
+        : 'n/a';
+      console.error(
+        `[ERR ] ${id} ${req.method} ${req.originalUrl} → ${target} :: ${
+          err.code || err.message
+        } after ${ms}`,
+      );
+      if (!res.headersSent)
+        res
+          .status(502)
+          .json({
+            error: 'Upstream unavailable',
+            code: err.code || 'EUPSTREAM',
+          });
+    },
+  });
+
+// ---------- route tracers (prove we hit the proxy) ----------
 const trace = (label) => (req, _res, next) => {
   console.log(
     `[HIT ${label}] id=${req.id} baseUrl=${req.baseUrl} url=${req.url} originalUrl=${req.originalUrl}`,
@@ -263,50 +256,39 @@ const trace = (label) => (req, _res, next) => {
   next();
 };
 
-// Preserve full original path so upstreams get /api/... unchanged
+// ---------- proxies (prepend the stripped base manually) ----------
+// NOTE: Express strips '/api/auth' from req.url. We add it back ourselves
+//       then hand off to the proxy. No pathRewrite function involved.
 if (AUTH_URL) {
-  app.use(
-    '/api/auth',
-    trace('AUTH'),
-    createProxyMiddleware(
-      proxyOpts('AUTH', AUTH_URL, {
-        pathRewrite: (_p, req) => req.originalUrl,
-      }),
-    ),
-  );
+  const authProxy = mkProxy('AUTH', AUTH_URL);
+  app.use('/api/auth', trace('AUTH'), (req, res, next) => {
+    req.url = '/api/auth' + req.url; // e.g. '/login' -> '/api/auth/login'
+    authProxy(req, res, next);
+  });
 }
+
 if (INVENTORY_URL) {
-  app.use(
-    '/api/items',
-    trace('ITEMS'),
-    createProxyMiddleware(
-      proxyOpts('INVENTORY', INVENTORY_URL, {
-        pathRewrite: (_p, req) => req.originalUrl,
-      }),
-    ),
-  );
+  const invProxy = mkProxy('INVENTORY', INVENTORY_URL);
+  app.use('/api/items', trace('ITEMS'), (req, res, next) => {
+    req.url = '/api/items' + req.url;
+    invProxy(req, res, next);
+  });
 }
+
 if (CLIENT_URL) {
-  app.use(
-    '/api/clients',
-    trace('CLIENTS'),
-    createProxyMiddleware(
-      proxyOpts('CLIENT', CLIENT_URL, {
-        pathRewrite: (_p, req) => req.originalUrl,
-      }),
-    ),
-  );
+  const cliProxy = mkProxy('CLIENT', CLIENT_URL);
+  app.use('/api/clients', trace('CLIENTS'), (req, res, next) => {
+    req.url = '/api/clients' + req.url;
+    cliProxy(req, res, next);
+  });
 }
+
 if (BARCODE_URL) {
-  app.use(
-    '/api/barcodes',
-    trace('BARCODES'),
-    createProxyMiddleware(
-      proxyOpts('BARCODE', BARCODE_URL, {
-        pathRewrite: (_p, req) => req.originalUrl,
-      }),
-    ),
-  );
+  const bcProxy = mkProxy('BARCODE', BARCODE_URL);
+  app.use('/api/barcodes', trace('BARCODES'), (req, res, next) => {
+    req.url = '/api/barcodes' + req.url;
+    bcProxy(req, res, next);
+  });
 }
 
 // ---------- start ----------
