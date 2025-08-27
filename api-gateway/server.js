@@ -10,7 +10,7 @@ import { performance } from 'node:perf_hooks';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 
 // ---------- boot tag (verifies correct build is running) ----------
-const BUILD_TAG = `[BOOT] GW v2.0 @ ${new Date().toISOString()}`;
+const BUILD_TAG = `[BOOT] GW v2.1 @ ${new Date().toISOString()}`;
 console.log(BUILD_TAG);
 
 // ---------- helpers ----------
@@ -31,8 +31,8 @@ const chooseTarget = (name, host, port, publicUrl, required = true) => {
 };
 
 // ---------- tunables (env can override) ----------
-const PROXY_TIMEOUT_MS = Number(process.env.PROXY_TIMEOUT_MS || 30000);
-const CLIENT_TIMEOUT_MS = Number(process.env.CLIENT_TIMEOUT_MS || 35000);
+const PROXY_TIMEOUT_MS = Number(process.env.PROXY_TIMEOUT_MS || 45000); // upstream socket timeout
+const CLIENT_TIMEOUT_MS = Number(process.env.CLIENT_TIMEOUT_MS || 50000); // client connection timeout
 
 // keep-alive agents to cut TLS handshake overhead
 const httpAgent = new http.Agent({ keepAlive: true });
@@ -59,22 +59,44 @@ const proxyOpts = (name, target, options = {}) => ({
   changeOrigin: true,
   xfwd: true,
   agent: target.startsWith('https') ? httpsAgent : httpAgent,
-  proxyTimeout: PROXY_TIMEOUT_MS,
-  timeout: CLIENT_TIMEOUT_MS,
+  proxyTimeout: PROXY_TIMEOUT_MS, // if upstream doesn't respond in time
+  timeout: CLIENT_TIMEOUT_MS, // idle client socket timeout
   logLevel: 'warn',
   ...options,
 
   // If express.json() parsed the body, re-send it to upstream.
   onProxyReq(proxyReq, req, _res) {
     const upstreamPath = proxyReq.path || req.url;
+    const id = req.id || 'unknown';
+
+    // attach low-level timeout/error listeners so we can SEE timeouts
+    proxyReq.setTimeout(PROXY_TIMEOUT_MS, () => {
+      const elapsed = req._gwUpStart
+        ? `${(Number(process.hrtime.bigint() - req._gwUpStart) / 1e6).toFixed(
+            1,
+          )}ms`
+        : 'n/a';
+      console.error(
+        `[TIMEOUT] ${id} ${req.method} ${req.originalUrl} → ${target}${upstreamPath} after ${elapsed}`,
+      );
+    });
+    proxyReq.on('error', (e) => {
+      console.error(
+        `[PERR] ${id} ${req.method} ${
+          req.originalUrl
+        } → ${target}${upstreamPath} :: ${e.code || e.message}`,
+      );
+    });
+
     console.log(
-      `[GW→UP] ${req.id || 'unknown'} ${req.method} ${
+      `[GW→UP] ${id} ${req.method} ${
         req.originalUrl
       } → ${target}${upstreamPath} :: headers=${JSON.stringify(
         redact(proxyReq.getHeaders()),
       )}`,
     );
 
+    // forward parsed JSON body (if any)
     if (req.body && Object.keys(req.body).length) {
       const body = JSON.stringify(req.body);
       proxyReq.setHeader('Content-Type', 'application/json');
@@ -86,14 +108,13 @@ const proxyOpts = (name, target, options = {}) => ({
   },
 
   onProxyRes(proxyRes, req, res) {
+    const id = req.id || 'unknown';
     const start = req._gwUpStart || process.hrtime.bigint();
     const ms = Number(process.hrtime.bigint() - start) / 1e6;
     console.log(
-      `[UP→GW] ${req.id || 'unknown'} ${req.method} ${
-        req.originalUrl
-      } ← ${target} :: status=${proxyRes.statusCode} upstream=${ms.toFixed(
-        1,
-      )}ms`,
+      `[UP→GW] ${id} ${req.method} ${req.originalUrl} ← ${target} :: status=${
+        proxyRes.statusCode
+      } upstream=${ms.toFixed(1)}ms`,
     );
     if (typeof options.onProxyRes === 'function') {
       options.onProxyRes(proxyRes, req, res);
@@ -101,15 +122,16 @@ const proxyOpts = (name, target, options = {}) => ({
   },
 
   onError(err, req, res) {
+    const id = req.id || 'unknown';
     const ms = req._gwUpStart
       ? `${(Number(process.hrtime.bigint() - req._gwUpStart) / 1e6).toFixed(
           1,
         )}ms`
       : 'n/a';
     console.error(
-      `[ERR ] ${req.id || 'unknown'} ${req.method} ${
-        req.originalUrl
-      } → ${target} :: ${err.code || err.message} after ${ms}`,
+      `[ERR ] ${id} ${req.method} ${req.originalUrl} → ${target} :: ${
+        err.code || err.message
+      } after ${ms}`,
     );
     if (!res.headersSent)
       res
@@ -120,7 +142,6 @@ const proxyOpts = (name, target, options = {}) => ({
 
 // ---------- envs ----------
 const {
-  // allow either internal HOST/PORT or PUBLIC_URL per service
   AUTH_HOST,
   AUTH_PORT,
   AUTH_PUBLIC_URL,
@@ -133,7 +154,6 @@ const {
   BARCODE_HOST,
   BARCODE_PORT,
   BARCODE_PUBLIC_URL,
-  // cors origin for browser app
   ALLOW_ORIGIN,
 } = process.env;
 
@@ -203,7 +223,7 @@ app.use(
 app.get('/healthz', (_, res) => res.status(200).send('ok'));
 
 // version/debug
-app.get('/_version', (req, res) => {
+app.get('/__version', (req, res) => {
   res.json({
     tag: BUILD_TAG,
     commit: process.env.RENDER_GIT_COMMIT || null,
@@ -248,7 +268,6 @@ app.post('/_diag/auth/login', async (req, res) => {
 });
 
 // ---------- proxies ----------
-// Pre-proxy tracer proves we hit the proxy chain and shows base/url/originalUrl
 const trace = (label) => (req, _res, next) => {
   console.log(
     `[HIT ${label}] id=${req.id} baseUrl=${req.baseUrl} url=${req.url} originalUrl=${req.originalUrl}`,
@@ -256,9 +275,8 @@ const trace = (label) => (req, _res, next) => {
   next();
 };
 
-// Preserve the FULL original path so upstreams receive /api/... unchanged.
-// If any upstream expects paths *without* /api/*, change that service's pathRewrite accordingly.
-if (AUTH_URL)
+// Preserve the FULL original path so upstreams receive /api/... unchanged
+if (AUTH_URL) {
   app.use(
     '/api/auth',
     trace('AUTH'),
@@ -268,8 +286,8 @@ if (AUTH_URL)
       }),
     ),
   );
-
-if (INVENTORY_URL)
+}
+if (INVENTORY_URL) {
   app.use(
     '/api/items',
     trace('ITEMS'),
@@ -279,8 +297,8 @@ if (INVENTORY_URL)
       }),
     ),
   );
-
-if (CLIENT_URL)
+}
+if (CLIENT_URL) {
   app.use(
     '/api/clients',
     trace('CLIENTS'),
@@ -290,8 +308,8 @@ if (CLIENT_URL)
       }),
     ),
   );
-
-if (BARCODE_URL)
+}
+if (BARCODE_URL) {
   app.use(
     '/api/barcodes',
     trace('BARCODES'),
@@ -301,6 +319,7 @@ if (BARCODE_URL)
       }),
     ),
   );
+}
 
 // ---------- start ----------
 const PORT = process.env.PORT || 10_000;
