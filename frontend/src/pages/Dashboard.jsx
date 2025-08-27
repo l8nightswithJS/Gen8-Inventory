@@ -1,41 +1,30 @@
 import { useState, useEffect, useCallback } from 'react';
-import axios from '../utils/axiosConfig'; // Keep original for creating new instances
-import ClientCarousel from '../components/ClientCarousel';
-import AddClientModal from '../components/AddClientModal';
-import Button from '../components/ui/Button';
-
-// Create a new, separate axios instance specifically for the client service
-const clientApi = axios.create({
-  baseURL: `${process.env.REACT_APP_CLIENT_API_URL}`,
-});
-
-// Add the auth token interceptor to every request for the new instance
-clientApi.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  },
-);
+import api from '../utils/axiosConfig'; // ✅ correct path from /pages
+import ClientCarousel from '../components/ClientCarousel'; // ✅ correct path from /pages
+import AddClientModal from '../components/AddClientModal'; // ✅ correct path from /pages
+import Button from '../components/ui/Button'; // ✅ correct path from /pages
 
 export default function Dashboard() {
   const [clients, setClients] = useState([]);
   const [error, setError] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
 
+  const normalizeToArray = (payload) => {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.data)) return payload.data;
+    if (Array.isArray(payload?.clients)) return payload.clients;
+    return []; // safest fallback
+  };
+
   const fetchClients = useCallback(async () => {
     try {
-      // Use the new clientApi instance to make the request
-      const res = await clientApi.get('/api/clients');
-      setClients(res.data);
+      // call through the API Gateway; axiosConfig already sets the baseURL + token
+      const res = await api.get('/api/clients', { meta: { silent: true } });
+      setClients(normalizeToArray(res.data));
       setError('');
     } catch {
       setError('Could not load clients.');
+      setClients([]); // ensure array to keep UI stable
     }
   }, []);
 
@@ -46,8 +35,7 @@ export default function Dashboard() {
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this client?')) return;
     try {
-      // Use the new clientApi instance for the delete request
-      await clientApi.delete(`/api/clients/${id}`);
+      await api.delete(`/api/clients/${id}`);
       fetchClients();
     } catch {
       setError('Failed to delete client.');
