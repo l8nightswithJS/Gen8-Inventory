@@ -1,4 +1,4 @@
-// api-gateway/server.js  — v2.6 (preserve paths; proxies before body parser)
+// api-gateway/server.js — v2.7 (preserve originalUrl to upstream)
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -8,10 +8,10 @@ import https from 'node:https';
 import crypto from 'node:crypto';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 
-const BUILD_TAG = `[BOOT] GW v2.6 @ ${new Date().toISOString()}`;
+const BUILD_TAG = `[BOOT] GW v2.7 @ ${new Date().toISOString()}`;
 console.log(BUILD_TAG);
 
-// ---- env + targets ----
+// ---------- env ----------
 const {
   AUTH_HOST,
   AUTH_PORT,
@@ -28,19 +28,21 @@ const {
   ALLOW_ORIGIN,
 } = process.env;
 
+// ---------- helpers ----------
 const buildInternal = (h, p) => (h && p ? `http://${h}:${p}` : undefined);
 const choose = (name, h, p, pub, required = true) => {
   const t = buildInternal(h, p) || pub;
   if (!t && required) {
     console.error(
       `[BOOT] Missing target for ${name} (set ${name}_HOST+_PORT or ${name}_PUBLIC_URL)`,
-    );
+    ); // fatal
     process.exit(1);
   }
   console.log(`[BOOT] ${name} → ${t || '(disabled)'}`);
   return t;
 };
 
+// ---------- targets ----------
 const AUTH_URL = choose('AUTH', AUTH_HOST, AUTH_PORT, AUTH_PUBLIC_URL, true);
 const INVENTORY_URL = choose(
   'INVENTORY',
@@ -64,20 +66,15 @@ const BARCODE_URL = choose(
   false,
 );
 
-// ---- proxy setup (before body parser!) ----
+// ---------- proxy config ----------
 const PROXY_TIMEOUT_MS = Number(process.env.PROXY_TIMEOUT_MS || 45000);
 const CLIENT_TIMEOUT_MS = Number(process.env.CLIENT_TIMEOUT_MS || 50000);
 const httpAgent = new http.Agent({ keepAlive: true });
 const httpsAgent = new https.Agent({ keepAlive: true });
-
 const reqId = (req) =>
   req.headers['x-request-id']?.toString() || crypto.randomUUID();
-const trace = (label) => (req, _res, next) => {
-  console.log(`[HIT ${label}] id=${req.id} ${req.method} ${req.originalUrl}`);
-  next();
-};
 
-const mkProxy = (label, target) =>
+const mkProxy = (label, target, { preserveFullPath = false } = {}) =>
   createProxyMiddleware({
     target,
     changeOrigin: true,
@@ -86,10 +83,20 @@ const mkProxy = (label, target) =>
     proxyTimeout: PROXY_TIMEOUT_MS,
     timeout: CLIENT_TIMEOUT_MS,
     logLevel: 'warn',
+
+    // Force upstream to see the full original URL when requested
+    ...(preserveFullPath && {
+      pathRewrite: (_path, req) => req.originalUrl, // e.g. '/api/auth/login' stays '/api/auth/login'
+    }),
+
     onProxyReq(proxyReq, req) {
-      const path = proxyReq.path || req.url;
+      const id = req.id || 'unknown';
+      // Resolve what path the upstream will actually get
+      const upstreamPath = preserveFullPath
+        ? req.originalUrl
+        : proxyReq.path || req.url;
       console.log(
-        `[GW→UP] ${req.id} ${req.method} ${req.originalUrl} → ${target}${path}`,
+        `[GW→UP] ${id} ${req.method} ${req.originalUrl} → ${target}${upstreamPath}`,
       );
       req._upStart = process.hrtime.bigint();
       proxyReq.setTimeout(PROXY_TIMEOUT_MS, () => {
@@ -97,10 +104,11 @@ const mkProxy = (label, target) =>
           ? (Number(process.hrtime.bigint() - req._upStart) / 1e6).toFixed(1)
           : 'n/a';
         console.error(
-          `[TIMEOUT] ${req.id} ${req.method} ${req.originalUrl} → ${target}${path} after ${ms}`,
+          `[TIMEOUT] ${id} ${req.method} ${req.originalUrl} → ${target}${upstreamPath} after ${ms}`,
         );
       });
     },
+
     onProxyRes(proxyRes, req) {
       const ms = req._upStart
         ? (Number(process.hrtime.bigint() - req._upStart) / 1e6).toFixed(1)
@@ -109,6 +117,7 @@ const mkProxy = (label, target) =>
         `[UP→GW] ${req.id} ${req.method} ${req.originalUrl} ← ${target} :: status=${proxyRes.statusCode} upstream=${ms}ms`,
       );
     },
+
     onError(err, req, res) {
       const ms = req._upStart
         ? (Number(process.hrtime.bigint() - req._upStart) / 1e6).toFixed(1)
@@ -126,14 +135,13 @@ const mkProxy = (label, target) =>
             code: err.code || 'EUPSTREAM',
           });
     },
-    // IMPORTANT: do NOT set pathRewrite here for AUTH; we want to preserve /api/auth/*
   });
 
-// ---- app ----
+// ---------- app ----------
 const app = express();
 app.set('trust proxy', true);
 
-// lightweight request log + total timing
+// light request log + total timing
 app.use((req, res, next) => {
   req.id = reqId(req);
   const start = process.hrtime.bigint();
@@ -156,31 +164,30 @@ app.use(
   morgan(':method :url :status :res[content-length] - :response-time ms'),
 );
 
-// PROXIES FIRST (preserve full original path)
-if (AUTH_URL) app.use('/api/auth', trace('AUTH'), mkProxy('AUTH', AUTH_URL));
-if (INVENTORY_URL)
-  app.use('/api/items', trace('ITEMS'), mkProxy('INVENTORY', INVENTORY_URL));
-if (CLIENT_URL)
-  app.use('/api/clients', trace('CLIENTS'), mkProxy('CLIENT', CLIENT_URL));
-if (BARCODE_URL)
-  app.use('/api/barcodes', trace('BARCODES'), mkProxy('BARCODE', BARCODE_URL));
+// IMPORTANT: mount proxies BEFORE any body parser
+// AUTH — preserve full original path so upstream sees /api/auth/login
+app.use('/api/auth', mkProxy('AUTH', AUTH_URL, { preserveFullPath: true }));
 
-// AFTER proxies: JSON body parser for our own handlers
+// Others — keep default behavior (adjust if your services expect a prefix)
+app.use('/api/items', mkProxy('INVENTORY', INVENTORY_URL));
+app.use('/api/clients', mkProxy('CLIENT', CLIENT_URL));
+app.use('/api/barcodes', mkProxy('BARCODE', BARCODE_URL));
+
+// Only after proxies: JSON parser for our own handlers (if any)
 app.use(express.json({ limit: '1mb' }));
 
 // health + version
 app.get('/healthz', (_, res) => res.status(200).send('ok'));
-app.get('/__version', (req, res) => {
+app.get('/__version', (_req, res) =>
   res.json({
     tag: BUILD_TAG,
     commit: process.env.RENDER_GIT_COMMIT || null,
     targets: { AUTH_URL, INVENTORY_URL, CLIENT_URL, BARCODE_URL },
     timeouts: { PROXY_TIMEOUT_MS, CLIENT_TIMEOUT_MS },
-  });
-});
+  }),
+);
 
-// start
-const PORT = process.env.PORT || 10_000;
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`✅ API Gateway listening on :${PORT}`);
   console.log(`   → Auth:      ${AUTH_URL}`);
