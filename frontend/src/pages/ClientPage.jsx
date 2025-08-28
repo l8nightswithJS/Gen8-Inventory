@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from '../utils/axiosConfig'; // We'll use this to create other instances
+import api from '../utils/axiosConfig'; // ✅ correct path from /pages
 
 // --- Main Components ---
 import InventoryTable from '../components/InventoryTable';
@@ -27,29 +27,6 @@ import {
   FiCamera,
   FiChevronLeft,
 } from 'react-icons/fi';
-
-// --- Create dedicated API clients for our new services ---
-const inventoryApi = axios.create({
-  baseURL: process.env.REACT_APP_INVENTORY_API_URL,
-});
-const clientApi = axios.create({
-  baseURL: process.env.REACT_APP_CLIENT_API_URL,
-});
-
-// Add the auth token to every request for these new instances
-[inventoryApi, clientApi].forEach((apiInstance) => {
-  apiInstance.interceptors.request.use(
-    (config) => {
-      const token = localStorage.getItem('token');
-      if (token) {
-        config.headers['Authorization'] = `Bearer ${token}`;
-      }
-      return config;
-    },
-    (error) => Promise.reject(error),
-  );
-});
-// -----------------------------------------------------------
 
 const QTY_KEYS = ['quantity', 'on_hand', 'qty_in_stock', 'stock'];
 
@@ -89,20 +66,26 @@ export default function ClientPage() {
 
   const fetchItems = useCallback(async () => {
     try {
-      // UPDATED: Use inventoryApi
-      const { data } = await inventoryApi.get(`/api/items`, {
+      const { data } = await api.get('/api/items', {
         params: { client_id: clientId },
+        meta: { silent: true },
       });
       setItems(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError('Failed to load items.');
+      // surface auth vs other errors a bit nicer
+      const status = err?.response?.status;
+      if (status === 401 || status === 403) {
+        setError('You’re not authorized to view items for this client.');
+      } else {
+        setError('Failed to load items.');
+      }
     }
   }, [clientId]);
 
   const fetchClientDetails = useCallback(async () => {
     try {
       // UPDATED: Use clientApi
-      const res = await clientApi.get(`/api/clients/${clientId}`);
+      const res = await api.get(`/api/clients/${clientId}`);
       setClient(res.data);
     } catch (err) {
       console.error('Failed to fetch client details:', err);
@@ -132,7 +115,7 @@ export default function ClientPage() {
     if (!modalState.deleteItem) return;
     try {
       // UPDATED: Use inventoryApi
-      await inventoryApi.delete(`/api/items/${modalState.deleteItem.id}`);
+      await api.delete(`/api/items/${modalState.deleteItem.id}`);
       handleModal('deleteItem', null);
       fetchItems();
     } catch (err) {
@@ -293,7 +276,7 @@ export default function ClientPage() {
           onClose={() => handleModal('import', false)}
           refresh={fetchItems}
           // UPDATED: Pass the correct API instance to the modal
-          api={inventoryApi}
+          api={api}
         />
       )}
       {modalState.addItem && (
@@ -303,7 +286,7 @@ export default function ClientPage() {
           onClose={() => handleModal('addItem', false)}
           onCreated={fetchItems}
           // UPDATED: Pass the correct API instance to the modal
-          api={inventoryApi}
+          api={api}
         />
       )}
       {modalState.editItem && (
@@ -313,7 +296,7 @@ export default function ClientPage() {
           onClose={() => handleModal('editItem', null)}
           onUpdated={fetchItems}
           // UPDATED: Pass the correct API instance to the modal
-          api={inventoryApi}
+          api={api}
         />
       )}
       {modalState.deleteItem && (

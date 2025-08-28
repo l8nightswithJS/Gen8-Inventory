@@ -11,7 +11,7 @@ module.exports = async function authenticate(req, res, next) {
   try {
     // Call the auth service to verify the token
     const response = await axios.post(
-      `${process.env.AUTH_SERVICE_URL}/api/auth/verify`,
+      `${process.env.AUTH_PUBLIC_URL}/api/auth/verify`,
       { token },
     );
 
