@@ -165,7 +165,7 @@ app.use(
 // IMPORTANT: mount proxies BEFORE any body parser
 // AUTH — preserve full original path so upstream sees /api/auth/login
 app.use('/api/auth', mkProxy('AUTH', AUTH_URL, { preserveFullPath: true }));
-app.use('/api/users', mkProxy('AUTH', AUTH_URL));
+app.use('/api/users', mkProxy('AUTH', AUTH_URL, { preserveFullPath: true }));
 
 // Others — keep default behavior (adjust if your services expect a prefix)
 app.use(

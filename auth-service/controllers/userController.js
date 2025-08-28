@@ -9,10 +9,8 @@ const handleSupabaseError = (res, error, context) => {
 };
 
 exports.getAllUsers = async (req, res) => {
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('approved', true);
+  const { data, error } = await supabase;
+  console.log(data).from('users').select('*').eq('approved', true);
   if (error) return handleSupabaseError(res, error, 'getAllUsers');
   res.json(data || []);
 };

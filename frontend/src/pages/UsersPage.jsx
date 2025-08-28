@@ -1,14 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import api from '../utils/axiosConfig'; // Used to create the new instance
+import api from '../utils/axiosConfig';
 import ConfirmModal from '../components/ConfirmModal';
 import UserFormModal from '../components/UserFormModal';
 import Button from '../components/ui/Button';
 import { FiEdit2, FiTrash2, FiCheck, FiX } from 'react-icons/fi';
-
-// --- Create a dedicated API client for our auth service ---
-
-// Add the auth token to every request for this new instance
-// -----------------------------------------------------------
 
 const UserCard = ({ user, onApprove, onDeny, onEdit, onDelete, isPending }) => (
   <div
@@ -84,10 +79,10 @@ export default function UsersPage() {
 
   const fetchAllUsers = useCallback(async () => {
     try {
-      // UPDATED: Use the new authApi instance
+      // ✅ Correct endpoints through the gateway
       const [usersRes, pendingRes] = await Promise.all([
-        api.get('/api/users'),
-        api.get('/api/users/pending'),
+        api.get('/api/users', { meta: { silent: true } }),
+        api.get('/api/users/pending', { meta: { silent: true } }),
       ]);
       setUsers(usersRes.data);
       setPendingUsers(pendingRes.data);
@@ -127,10 +122,8 @@ export default function UsersPage() {
     setConfirm((c) => ({ ...c, loading: true }));
     try {
       if (confirm.type === 'approve') {
-        // UPDATED: Use the new authApi instance
         await api.post(`/api/users/${confirm.id}/approve`);
       } else {
-        // UPDATED: Use the new authApi instance
         await api.delete(`/api/users/${confirm.id}`);
       }
       await fetchAllUsers();
@@ -263,7 +256,6 @@ export default function UsersPage() {
           setShowForm(false);
         }}
         onClose={() => setShowForm(false)}
-        // UPDATED: Pass the new authApi instance as a prop
         api={api}
       />
 
