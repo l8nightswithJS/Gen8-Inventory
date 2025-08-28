@@ -128,12 +128,10 @@ const mkProxy = (label, target, { preserveFullPath = false } = {}) =>
         } after ${ms}ms`,
       );
       if (!res.headersSent)
-        res
-          .status(502)
-          .json({
-            error: 'Upstream unavailable',
-            code: err.code || 'EUPSTREAM',
-          });
+        res.status(502).json({
+          error: 'Upstream unavailable',
+          code: err.code || 'EUPSTREAM',
+        });
     },
   });
 
@@ -169,9 +167,18 @@ app.use(
 app.use('/api/auth', mkProxy('AUTH', AUTH_URL, { preserveFullPath: true }));
 
 // Others — keep default behavior (adjust if your services expect a prefix)
-app.use('/api/items', mkProxy('INVENTORY', INVENTORY_URL));
-app.use('/api/clients', mkProxy('CLIENT', CLIENT_URL));
-app.use('/api/barcodes', mkProxy('BARCODE', BARCODE_URL));
+app.use(
+  '/api/items',
+  mkProxy('INVENTORY', INVENTORY_URL, { preserveFullPath: true }),
+);
+app.use(
+  '/api/clients',
+  mkProxy('CLIENT', CLIENT_URL, { preserveFullPath: true }),
+);
+app.use(
+  '/api/barcodes',
+  mkProxy('BARCODE', BARCODE_URL, { preserveFullPath: true }),
+);
 
 // Only after proxies: JSON parser for our own handlers (if any)
 app.use(express.json({ limit: '1mb' }));
