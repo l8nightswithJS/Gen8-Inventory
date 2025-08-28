@@ -1,4 +1,4 @@
-const supabase = require('../lib/supabaseClient');
+const { sbAuth } = require('../lib/supabaseClient');
 
 const handleSupabaseError = (res, error, context) => {
   console.error(`Error in ${context}:`, error);
@@ -9,24 +9,27 @@ const handleSupabaseError = (res, error, context) => {
 };
 
 exports.getAllUsers = async (req, res) => {
-  const { data, error } = await supabase;
-  console.log(data).from('users').select('*').eq('approved', true);
-  if (error) return handleSupabaseError(res, error, 'getAllUsers');
+  const { data, error } = await sbAuth
+    .from('users')
+    .select('id, username, role, approved')
+    .order('username', { ascending: true });
+  if (error) throw error;
   res.json(data || []);
 };
 
 exports.getPendingUsers = async (req, res) => {
-  const { data, error } = await supabase
+  const { data, error } = await sbAuth
     .from('users')
-    .select('*')
-    .eq('approved', false);
-  if (error) return handleSupabaseError(res, error, 'getPendingUsers');
+    .select('id, username, role, approved')
+    .eq('approved', false)
+    .order('username', { ascending: true });
+  if (error) throw error;
   res.json(data || []);
 };
 
 exports.getUserById = async (req, res) => {
   const { id } = req.params;
-  const { data, error } = await supabase
+  const { data, error } = await sbAuth
     .from('users')
     .select('*')
     .eq('id', id)
