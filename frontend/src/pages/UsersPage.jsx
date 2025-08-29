@@ -105,7 +105,7 @@ export default function UsersPage() {
   const openConfirm = (type, user) => {
     setConfirm({
       type,
-      id: user.uid,
+      id: user.id,
       username: user.username,
       open: true,
       loading: false,
