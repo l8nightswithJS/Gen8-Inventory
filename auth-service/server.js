@@ -6,6 +6,13 @@ const usersRouter = require('./routes/users');
 const authMiddleware = require('./middleware/authMiddleware');
 
 const app = express();
+app.set('etag', false);
+// and make responses uncacheable by browsers/proxies
+app.use((_req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.set('Pragma', 'no-cache');
+  next();
+});
 
 app.use(cors());
 app.use(express.json());

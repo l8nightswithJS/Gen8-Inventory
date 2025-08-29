@@ -81,11 +81,33 @@ export default function UsersPage() {
     try {
       // ✅ Correct endpoints through the gateway
       const [usersRes, pendingRes] = await Promise.all([
-        api.get('/api/users', { meta: { silent: true } }),
-        api.get('/api/users/pending', { meta: { silent: true } }),
+        api.get('/api/users'),
+        {
+          params: { _t: Date.now() }, // cache-bust
+          headers: { 'Cache-Control': 'no-store' },
+          meta: { silent: true },
+        },
+        api.get('/api/users/pending'),
+        {
+          params: { _t: Date.now() },
+          headers: { 'Cache-Control': 'no-store' },
+          meta: { silent: true },
+        },
       ]);
-      setUsers(usersRes.data);
-      setPendingUsers(pendingRes.data);
+      setUsers(
+        Array.isArray(usersRes.data)
+          ? usersRes.data
+          : Array.isArray(usersRes.data?.users)
+          ? usersRes.data.users
+          : [],
+      );
+      setPendingUsers(
+        Array.isArray(pendingRes.data)
+          ? pendingRes.data
+          : Array.isArray(pendingRes.data?.users)
+          ? pendingRes.data.users
+          : [],
+      );
     } catch (err) {
       console.error('Error fetching users:', err);
     }
