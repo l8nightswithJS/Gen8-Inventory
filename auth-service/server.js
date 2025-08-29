@@ -1,9 +1,9 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-import authRouter from './routes/authRoutes.js';
-import usersRouter from './routes/users.js';
-import authMiddleware from './middleware/authMiddleware'; // Import the main auth middleware
+const authRouter = require('./routes/authRoutes');
+const usersRouter = require('./routes/users');
+const authMiddleware = require('./middleware/authMiddleware');
 
 const app = express();
 
