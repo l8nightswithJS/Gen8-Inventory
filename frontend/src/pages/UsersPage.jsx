@@ -59,13 +59,16 @@ export default function UsersPage() {
   const [pendingUsers, setPendingUsers] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
-  const [confirm, setConfirm] = useState({
-    type: '',
-    id: null,
-    username: '',
-    open: false,
-    loading: false,
-  });
+  const [confirm, setConfirm] = useState(
+    {
+      type: '',
+      id: null,
+      username: '',
+      open: false,
+      loading: false,
+    },
+    [],
+  );
   const [viewMode, setViewMode] = useState('desktop');
 
   useEffect(() => {
@@ -79,35 +82,12 @@ export default function UsersPage() {
 
   const fetchAllUsers = useCallback(async () => {
     try {
-      // ✅ Correct endpoints through the gateway
       const [usersRes, pendingRes] = await Promise.all([
         api.get('/api/users'),
-        {
-          params: { _t: Date.now() }, // cache-bust
-          headers: { 'Cache-Control': 'no-store' },
-          meta: { silent: true },
-        },
         api.get('/api/users/pending'),
-        {
-          params: { _t: Date.now() },
-          headers: { 'Cache-Control': 'no-store' },
-          meta: { silent: true },
-        },
       ]);
-      setUsers(
-        Array.isArray(usersRes.data)
-          ? usersRes.data
-          : Array.isArray(usersRes.data?.users)
-          ? usersRes.data.users
-          : [],
-      );
-      setPendingUsers(
-        Array.isArray(pendingRes.data)
-          ? pendingRes.data
-          : Array.isArray(pendingRes.data?.users)
-          ? pendingRes.data.users
-          : [],
-      );
+      setUsers(usersRes.data);
+      setPendingUsers(pendingRes.data);
     } catch (err) {
       console.error('Error fetching users:', err);
     }
@@ -125,7 +105,7 @@ export default function UsersPage() {
   const openConfirm = (type, user) => {
     setConfirm({
       type,
-      id: user.id,
+      id: user.uid,
       username: user.username,
       open: true,
       loading: false,
@@ -156,6 +136,7 @@ export default function UsersPage() {
       closeConfirm();
     }
   };
+  console.log('render', { users, pendingUsers, viewMode });
 
   const UserTable = () => (
     <div className="overflow-x-auto bg-white shadow-md rounded-lg">
