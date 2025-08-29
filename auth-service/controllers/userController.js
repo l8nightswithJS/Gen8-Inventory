@@ -41,7 +41,7 @@ exports.getUserById = async (req, res) => {
 
 exports.approveUser = async (req, res) => {
   const { id } = req.params;
-  const { data, error } = await supabase
+  const { data, error } = await sbAuth
     .from('users')
     .update({ approved: true })
     .eq('id', id)
@@ -54,7 +54,7 @@ exports.approveUser = async (req, res) => {
 exports.updateUserRole = async (req, res) => {
   const { id } = req.params;
   const { role } = req.body; // Only handles role updates
-  const { data, error } = await supabase
+  const { data, error } = await sbAuth
     .from('users')
     .update({ role })
     .eq('id', id)
@@ -66,7 +66,7 @@ exports.updateUserRole = async (req, res) => {
 exports.deleteUser = async (req, res) => {
   const { id } = req.params;
   // This will delete the user from auth.users and cascade to public.users
-  const { error } = await supabase.auth.admin.deleteUser(id);
+  const { error } = await sbAuth.auth.admin.deleteUser(id);
   if (error) {
     return handleSupabaseError(res, error, 'deleteUser');
   }
