@@ -1,43 +1,37 @@
 // auth-service/controllers/authController.js
 const jwt = require('jsonwebtoken');
-const { createClient } = require('@supabase/supabase-js');
+
+// ⬇️ Use YOUR shared clients: anon for sign-in, service role for admin/DB
+// NOTE: adjust the relative path if your supabaseClient.js lives elsewhere.
+// e.g. require('../../backend/lib/supabaseClient')
+const { sbAuth, sbAdmin } = require('../lib/supabaseClient');
 
 const {
-  SUPABASE_URL,
-  SUPABASE_SERVICE_ROLE_KEY,
   JWT_SECRET,
   JWT_ISSUER = 'gen8-inventory-auth',
   JWT_TTL = '12h',
 
-  // Hotfix toggles:
-  // If true, we will insert a profile row in public.users on first successful Auth sign-in.
-  // Leave false/undefined in prod if you don't want auto-provision.
+  // Optional bootstrapping toggles
   AUTO_PROVISION = 'false',
-  // If true, bypass "approved" gate (useful while bootstrapping).
   AUTH_ALLOW_UNAPPROVED = 'false',
 } = process.env;
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  console.error('[AUTH] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
-}
 if (!JWT_SECRET) {
   console.error('[AUTH] Missing JWT_SECRET');
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
-
 function getBearer(req) {
-  const auth = req.headers.authorization || '';
-  const [scheme, token] = auth.split(' ');
+  const h = req.headers.authorization || '';
+  const [scheme, token] = h.split(' ');
   return scheme === 'Bearer' && token ? token : null;
 }
 
 /**
  * POST /api/auth/login
- * Body can be: { email, password }  OR  { username, password }
- * - If identifier contains "@", treat as email; otherwise treat as username and map to email.
+ * Accepts { email, password } OR { username, password }.
+ * - If "username" (no "@"), we resolve it to an email via admin lookups.
+ * - Sign-in is always done with sbAuth (anon key).
+ * - Profile/role lookups use sbAdmin (service role).
  */
 async function login(req, res) {
   try {
@@ -49,21 +43,19 @@ async function login(req, res) {
         .json({ message: 'username/email and password are required' });
     }
 
-    // Resolve to an email address for Supabase Auth
+    // 1) Resolve to email for Supabase Auth
     let email = null;
-
     if (identifier.includes('@')) {
       email = identifier;
     } else {
-      // Lookup by app username -> get auth user to read its email
-      const { data: profileByUsername, error: profileErr } = await supabase
+      // Lookup by app username -> read auth user to get email
+      const { data: profileByUsername, error: profileErr } = await sbAdmin
         .from('users')
         .select('id, username, role, approved')
         .eq('username', identifier)
         .single();
 
       if (profileErr || !profileByUsername) {
-        // Hide detail from client, log for server
         console.error(
           '[AUTH][login] no profile for username:',
           identifier,
@@ -73,7 +65,7 @@ async function login(req, res) {
       }
 
       const { data: adminUser, error: adminErr } =
-        await supabase.auth.admin.getUserById(profileByUsername.id);
+        await sbAdmin.auth.admin.getUserById(profileByUsername.id);
       if (adminErr || !adminUser?.user?.email) {
         console.error(
           '[AUTH][login] admin lookup failed for id:',
@@ -85,9 +77,9 @@ async function login(req, res) {
       email = adminUser.user.email;
     }
 
-    // 1) Verify credentials against Supabase Auth (email/password)
+    // 2) Sign in against Supabase Auth with anon client
     const { data: signInData, error: signInError } =
-      await supabase.auth.signInWithPassword({ email, password });
+      await sbAuth.auth.signInWithPassword({ email, password });
     if (signInError || !signInData?.user) {
       console.error(
         '[AUTH][login] signIn error for email:',
@@ -98,20 +90,20 @@ async function login(req, res) {
     }
     const authUser = signInData.user;
 
-    // 2) Fetch app profile from public.users (FK id === auth.users.id)
-    let { data: profile, error: profileErr2 } = await supabase
+    // 3) Load app profile with service role (bypasses RLS)
+    let { data: profile, error: profileErr2 } = await sbAdmin
       .from('users')
-      .select('id, username, role, approved') // add client_id if/when you have it
+      .select('id, username, role, approved')
       .eq('id', authUser.id)
       .single();
 
-    // 2a) Optional: auto-provision a profile row if missing (bootstrap convenience)
+    // 3a) Optional: auto-provision if missing during bootstrap
     const shouldProvision = String(AUTO_PROVISION).toLowerCase() === 'true';
     if ((profileErr2 || !profile) && shouldProvision) {
       const usernameForRow = identifier.includes('@')
         ? authUser.email || identifier
         : identifier;
-      const { data: ins, error: insErr } = await supabase
+      const { data: ins, error: insErr } = await sbAdmin
         .from('users')
         .insert([
           {
@@ -120,7 +112,7 @@ async function login(req, res) {
             role: 'admin',
             approved: true,
           },
-        ]) // sensible bootstrap defaults
+        ])
         .select('id, username, role, approved')
         .single();
       if (insErr) {
@@ -148,19 +140,19 @@ async function login(req, res) {
         });
     }
 
-    // 3) Approval gate (can bypass with env during bootstrap)
+    // 4) Approval gate (can bypass with env during bootstrap)
     const allowUnapproved =
       String(AUTH_ALLOW_UNAPPROVED).toLowerCase() === 'true';
     if (!allowUnapproved && !profile.approved) {
       return res.status(403).json({ message: 'User is not approved' });
     }
 
-    // 4) Issue your own JWT for microservices
+    // 5) Issue your **service** JWT (no token required on input)
     const payload = {
       sub: profile.id,
       username: profile.username || authUser.email || email,
       role: profile.role || 'staff',
-      // client_id: profile.client_id || null, // add when you add the column
+      // client_id: profile.client_id || null, // add when you add this column
     };
 
     const token = jwt.sign(payload, JWT_SECRET, {

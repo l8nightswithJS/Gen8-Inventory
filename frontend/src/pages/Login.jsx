@@ -36,16 +36,18 @@ export default function Login() {
     e.preventDefault();
     setError('');
     try {
-      // Use the new AUTH_API_URL and send 'email'
+      const identifier = email.trim().toLowerCase();
+      // Send BOTH fields so the server can treat it as email or username
       const { data } = await api.post('/api/auth/login', {
-        email: email.trim().toLowerCase(),
+        email: identifier,
+        username: identifier,
         password,
       });
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('role', data.role);
+      +localStorage.setItem('token', data.token); // backend typically returns { token, user: { role, ... } }
+      localStorage.setItem('role', data.user?.role || '');
       navigate('/dashboard');
-    } catch {
-      setError('Invalid email or password.');
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Invalid email or password.');
     }
   };
 
