@@ -28,88 +28,101 @@ function getBearer(req) {
 }
 
 async function login(req, res) {
-  try {
-    const { username, password } = req.body || {};
-    if (!username || !password) {
-      return res
-        .status(400)
-        .json({ message: 'username and password are required' });
-    }
+  async function login(req, res) {
+    try {
+      const { username, password } = req.body || {};
+      if (!username || !password) {
+        return res
+          .status(400)
+          .json({ message: 'username and password are required' });
+      }
 
-    // Determine email to use for Supabase Auth
-    let email = null;
+      let email = null;
 
-    if (username.includes('@')) {
-      // Looks like an email
-      email = username;
-    } else {
-      // Treat as app username -> find profile -> look up auth user email
-      const { data: profile, error: profileErr } = await supabase
+      if (username.includes('@')) {
+        email = username.trim();
+      } else {
+        const { data: profile, error: profileErr } = await supabase
+          .from('users')
+          .select('id, username, role, approved')
+          .eq('username', username)
+          .single();
+
+        if (profileErr || !profile) {
+          console.error(
+            '[AUTH][login] no profile for username:',
+            username,
+            profileErr,
+          );
+          return res.status(401).json({ message: 'Invalid credentials' });
+        }
+
+        const { data: adminUser, error: adminErr } =
+          await supabase.auth.admin.getUserById(profile.id);
+        if (adminErr || !adminUser?.user?.email) {
+          console.error(
+            '[AUTH][login] admin lookup failed for id:',
+            profile.id,
+            adminErr,
+          );
+          return res.status(401).json({ message: 'Invalid credentials' });
+        }
+        email = adminUser.user.email;
+      }
+
+      const { data: signInData, error: signInError } =
+        await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+      if (signInError || !signInData?.user) {
+        console.error(
+          '[AUTH][login] signIn error for email:',
+          email,
+          signInError,
+        );
+        return res.status(401).json({ message: 'Invalid credentials' });
+      }
+
+      const { data: profile2, error: profileErr2 } = await supabase
         .from('users')
-        .select('id, username, role, approved') // add client_id if you have it
-        .eq('username', username)
+        .select('id, username, role, approved')
+        .eq('id', signInData.user.id)
         .single();
 
-      if (profileErr || !profile) {
-        return res.status(401).json({ message: 'Invalid credentials' });
+      if (profileErr2 || !profile2) {
+        console.error(
+          '[AUTH][login] no app profile for auth user id:',
+          signInData.user.id,
+          profileErr2,
+        );
+        return res
+          .status(403)
+          .json({
+            message: 'User is not provisioned in application users table',
+          });
+      }
+      if (!profile2.approved) {
+        console.warn('[AUTH][login] user not approved:', profile2.id);
+        return res.status(403).json({ message: 'User is not approved' });
       }
 
-      // Get auth user to retrieve email
-      const { data: adminUser, error: adminErr } =
-        await supabase.auth.admin.getUserById(profile.id);
-      if (adminErr || !adminUser?.user?.email) {
-        return res.status(401).json({ message: 'Invalid credentials' });
-      }
-      email = adminUser.user.email;
-    }
-
-    // 1) Verify credentials against Supabase Auth (email/password)
-    const { data: signInData, error: signInError } =
-      await supabase.auth.signInWithPassword({
-        email,
-        password,
+      const payload = {
+        sub: profile2.id,
+        username: profile2.username || email,
+        role: profile2.role || 'staff',
+      };
+      const token = jwt.sign(payload, JWT_SECRET, {
+        algorithm: 'HS256',
+        expiresIn: JWT_TTL,
+        issuer: JWT_ISSUER,
       });
-    if (signInError || !signInData?.user) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+
+      return res.json({ token, user: payload });
+    } catch (err) {
+      console.error('[AUTH] login error:', err);
+      return res.status(500).json({ message: 'Login failed' });
     }
-    const authUser = signInData.user;
-
-    // 2) Fetch app profile from public.users (FK id === auth.users.id)
-    const { data: profile, error: profileErr2 } = await supabase
-      .from('users')
-      .select('id, username, role, approved') // add client_id if present
-      .eq('id', authUser.id)
-      .single();
-
-    if (profileErr2 || !profile) {
-      return res
-        .status(403)
-        .json({
-          message: 'User is not provisioned in application users table',
-        });
-    }
-    if (!profile.approved) {
-      return res.status(403).json({ message: 'User is not approved' });
-    }
-
-    // 3) Issue your own JWT for microservices
-    const payload = {
-      sub: profile.id,
-      username: profile.username || authUser.email || email,
-      role: profile.role || 'staff',
-      // client_id: profile.client_id || null, // uncomment if you add this column
-    };
-
-    const token = jwt.sign(payload, JWT_SECRET, {
-      algorithm: 'HS256',
-      expiresIn: JWT_TTL,
-      issuer: JWT_ISSUER,
-    });
-
-    return res.json({ token, user: payload });
-  } catch (err) {
-    console.error('[AUTH] login error:', err);
-    return res.status(500).json({ message: 'Login failed' });
   }
 }
 
