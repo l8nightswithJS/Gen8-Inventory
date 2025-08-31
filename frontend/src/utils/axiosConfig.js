@@ -1,8 +1,8 @@
 import axios from 'axios';
 
-// 1. DYNAMIC BASE URL: This is the key change.
-// It will use your Render URL in production and localhost for development.
-const baseURL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8001';
+// 1. DYNAMIC BASE URL: point to the GATEWAY (not the auth service).
+// Uses env in prod; falls back to localhost gateway in dev.
+const baseURL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080';
 
 // All your original settings are preserved.
 const api = axios.create({

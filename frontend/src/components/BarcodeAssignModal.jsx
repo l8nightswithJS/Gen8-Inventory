@@ -1,10 +1,7 @@
 // src/components/BarcodeAssignModal.jsx
 import { useEffect, useId, useState } from 'react';
-import {
-  assignBarcode,
-  listItemBarcodes,
-  deleteBarcode,
-} from '../utils/barcodesApi';
+import { assignBarcodeToItem } from '../api/barcodesApi'; // ⬅️ use unified API helper
+import api from '../api/axiosConfig'; // ⬅️ for list & delete via gateway
 import BarcodeScannerComponent from './BarcodeScannerComponent';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
@@ -28,8 +25,9 @@ export default function BarcodeAssignModal({
     let isMounted = true;
     (async () => {
       try {
-        const rows = await listItemBarcodes(item.id);
-        if (isMounted) setList(rows || []);
+        // ⬅️ fetch from gateway: /api/barcodes/items/:itemId
+        const { data } = await api.get(`/api/barcodes/items/${item.id}`);
+        if (isMounted) setList(data || []);
       } catch (e) {
         console.error('Failed to load item barcodes', e);
         if (isMounted) setMsg('Failed to load existing barcodes.');
@@ -47,16 +45,17 @@ export default function BarcodeAssignModal({
     setBusy(true);
     setMsg('');
     try {
-      await assignBarcode({
-        clientId: item.client_id,
-        itemId: item.id,
-        barcode: scanned.code,
-        symbology: scanned.symbology,
-      });
+      // ⬅️ align to helper signature: (code, itemId, clientId, sym)
+      await assignBarcodeToItem(
+        scanned.code,
+        item.id,
+        item.client_id,
+        scanned.symbology || '',
+      );
       setMsg('Barcode assigned ✓');
       setScanned({ code: '', symbology: '' });
-      const rows = await listItemBarcodes(item.id);
-      setList(rows || []);
+      const { data } = await api.get(`/api/barcodes/items/${item.id}`);
+      setList(data || []);
       onAssigned?.();
     } catch (e) {
       setMsg(e?.response?.data?.message || e.message || 'Failed to assign');
@@ -73,7 +72,8 @@ export default function BarcodeAssignModal({
     )
       return;
     try {
-      await deleteBarcode(id);
+      // ⬅️ delete via gateway: /api/barcodes/:id
+      await api.delete(`/api/barcodes/${id}`);
       setList((prev) => prev.filter((b) => b.id !== id));
       setMsg('Barcode removed ✓');
     } catch (e) {

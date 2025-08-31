@@ -1,47 +1,28 @@
-import axios from './axiosConfig'; // This is the main axios instance
-
-// Create a new, separate axios instance specifically for the barcode service
-const barcodeAxios = axios.create({
-  baseURL: `${process.env.REACT_APP_BARCODE_API_URL}/api`,
-});
-
-// We need to add the auth token to every request for this new instance
-barcodeAxios.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  },
-);
+import api from './axiosConfig'; // unified gateway-backed axios instance
 
 // --- Barcode Endpoints ---
+// NOTE: All paths are now under /api/* (gateway proxies to the barcode service)
 
 export const getBarcodeByCode = async (code) => {
-  const response = await barcodeAxios.get(`/barcodes/${code}`);
-  return response.data;
+  const { data } = await api.get(`/api/barcodes/${encodeURIComponent(code)}`);
+  return data;
 };
 
 export const assignBarcodeToItem = async (code, itemId, clientId, sym) => {
-  const response = await barcodeAxios.post('/barcodes/assign', {
+  const { data } = await api.post('/api/barcodes/assign', {
     code,
     item_id: itemId,
     client_id: clientId,
-    symbology: sym,
+    symbology: sym ?? '',
   });
-  return response.data;
+  return data;
 };
 
 // --- Scan Endpoint ---
-
 export const postScan = async (code, clientId) => {
-  const response = await barcodeAxios.post('/scan', {
+  const { data } = await api.post('/api/scan', {
     code,
     client_id: clientId,
   });
-  return response.data;
+  return data;
 };
