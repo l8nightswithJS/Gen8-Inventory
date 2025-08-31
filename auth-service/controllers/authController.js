@@ -1,169 +1,156 @@
-// auth-service/controllers/authController.js (CommonJS)
-const { sbAuth, sbAdmin } = require('../lib/supabaseClient');
+// auth-service/controllers/authController.js
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const { createClient } = require('@supabase/supabase-js');
 
-const log = (...a) => console.log('[AUTH]', ...a);
+const {
+  SUPABASE_URL,
+  SUPABASE_SERVICE_ROLE_KEY,
+  JWT_SECRET,
+  JWT_ISSUER = 'gen8-inventory-auth',
+  JWT_TTL = '12h', // adjust as needed
+} = process.env;
 
-async function ensureUserProfile(authUser, defaults = {}) {
-  const id = authUser?.id;
-  if (!id) throw new Error('ensureUserProfile: missing authUser.id');
-
-  const meta = authUser.user_metadata || authUser.raw_user_meta_data || {};
-  const email = authUser.email || meta.email || '';
-  const username =
-    meta.username ||
-    (email.includes('@') ? email.split('@')[0] : `user_${id.slice(0, 8)}`);
-
-  const role = meta.role || defaults.role || 'staff';
-  const approved =
-    typeof defaults.approved === 'boolean' ? defaults.approved : true;
-
-  // IMPORTANT: use the ADMIN client so RLS cannot block us
-  const { data, error } = await sbAdmin
-    .from('users')
-    .upsert({ id, username, role, approved }, { onConflict: 'id' })
-    .select('id, username, role, approved')
-    .single();
-
-  if (error) throw error;
-  return data;
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  // eslint-disable-next-line no-console
+  console.error('[AUTH] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+}
+if (!JWT_SECRET) {
+  // eslint-disable-next-line no-console
+  console.error('[AUTH] Missing JWT_SECRET (required to sign tokens)');
 }
 
-async function register(req, res, next) {
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
+
+// Helper to extract Bearer token
+function getBearer(req) {
+  const auth = req.headers.authorization || '';
+  const [scheme, token] = auth.split(' ');
+  if (scheme === 'Bearer' && token) return token;
+  return null;
+}
+
+/**
+ * POST /api/auth/login
+ * Body: { username: string, password: string }
+ * - "username" may be either username or email (we'll match either)
+ */
+async function login(req, res) {
   try {
-    const { email, password, role = 'staff' } = req.body || {};
-    if (!email || !password)
+    const { username, password } = req.body || {};
+    if (!username || !password) {
       return res
         .status(400)
-        .json({ message: 'Email and password are required' });
+        .json({ message: 'username and password are required' });
+    }
 
-    const normalizedEmail = String(email).trim().toLowerCase();
-
-    // Use ANON client for auth
-    const { data, error } = await sbAuth.auth.signUp({
-      email: normalizedEmail,
-      password,
-      options: {
-        data: {
-          email: normalizedEmail,
-          username: normalizedEmail.split('@')[0],
-          role,
-        },
-      },
-    });
-    if (error) return res.status(400).json({ message: error.message });
-    if (!data?.user) return res.status(500).json({ message: 'Sign up failed' });
-
-    const profile = await ensureUserProfile(data.user, {
-      role,
-      approved: true,
-    });
-    log('register: profile', profile);
-    res.status(201).json({ message: 'Registered', userId: data.user.id });
-  } catch (err) {
-    next(err);
-  }
-}
-
-async function login(req, res, next) {
-  try {
-    const { email, password } = req.body || {};
-    if (!email || !password)
-      return res.status(400).json({ message: 'Missing email or password.' });
-
-    const normalizedEmail = String(email).trim().toLowerCase();
-
-    // Use ANON client for sign-in
-    const { data, error: signInError } = await sbAuth.auth.signInWithPassword({
-      email: normalizedEmail,
-      password,
-    });
-    if (signInError)
-      return res.status(401).json({ message: 'Invalid email or password' });
-
-    const user = data?.user;
-    if (!user)
-      return res.status(500).json({ message: 'No user returned from sign in' });
-
-    // Ensure profile using ADMIN client
-    let { data: profile, error: selErr } = await sbAdmin
+    // Try matching by username OR email
+    const { data: user, error } = await supabase
       .from('users')
-      .select('id, username, role, approved')
-      .eq('id', user.id)
+      .select('id, username, email, role, client_id, password_hash, password')
+      .or(`username.eq.${username},email.eq.${username}`)
       .single();
 
-    if (selErr || !profile) {
-      log('login: profile missing, auto-creating', {
-        userId: user.id,
-        email: user.email,
-        profileError: selErr?.message,
-      });
-      profile = await ensureUserProfile(user, {
-        role: 'staff',
-        approved: true,
-      });
+    if (error || !user) {
+      return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    if (profile.approved === false) {
-      await sbAuth.auth.signOut();
-      return res.status(403).json({ message: 'Account pending approval' });
+    const hash = user.password_hash || user.password || '';
+    const ok = hash && (await bcrypt.compare(password, hash));
+    if (!ok) {
+      return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    if (!process.env.JWT_SECRET) {
-      log('WARN: JWT_SECRET not set – refusing to issue token');
-      return res.status(500).json({ message: 'Server misconfigured (JWT)' });
-    }
+    const payload = {
+      sub: user.id,
+      username: user.username || user.email || username,
+      role: user.role || 'staff',
+      client_id: user.client_id || null,
+    };
 
-    const token = jwt.sign(
-      { id: user.id, role: profile.role, email: user.email },
-      process.env.JWT_SECRET,
-      { expiresIn: '8h' },
-    );
-
-    log('login: success', {
-      id: user.id,
-      role: profile.role,
-      username: profile.username,
+    const token = jwt.sign(payload, JWT_SECRET, {
+      algorithm: 'HS256',
+      expiresIn: JWT_TTL,
+      issuer: JWT_ISSUER,
     });
-    return res.json({ token, role: profile.role, username: profile.username });
+
+    return res.json({
+      token,
+      user: {
+        id: user.id,
+        username: user.username || user.email,
+        role: payload.role,
+        client_id: payload.client_id,
+      },
+    });
   } catch (err) {
-    log(
-      'login error',
-      JSON.stringify({ message: err.message, stack: err.stack }, null, 2),
-    );
-    next(err);
+    // eslint-disable-next-line no-console
+    console.error('[AUTH] login error:', err);
+    return res.status(500).json({ message: 'Login failed' });
   }
 }
 
-async function verify(req, res) {
-  const { token } = req.body || {};
-  if (!token) return res.status(400).json({ message: 'Token is required' });
+/**
+ * POST /api/auth/verify
+ * Header: Authorization: Bearer <token>
+ * Used by other services (if they still call auth to verify)
+ */
+async function verifyToken(req, res) {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    return res.json({ user: decoded });
-  } catch {
-    return res.status(401).json({ message: 'Invalid or expired token' });
+    const token = getBearer(req);
+    if (!token) return res.status(401).json({ message: 'Missing token' });
+
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    return res.json({ ok: true, user: decoded });
+  } catch (err) {
+    return res.status(401).json({ message: 'Invalid token' });
   }
 }
-const verifyToken = verify;
 
+/**
+ * GET /api/auth/me
+ * Must be protected by authMiddleware (which decodes and sets req.user),
+ * but we also tolerate Bearer here in case middleware isn’t applied.
+ */
 async function me(req, res) {
-  const auth = req.headers['authorization'] || '';
-  const t = auth.startsWith('Bearer ') ? auth.slice(7) : null;
-  if (!t) return res.status(401).json({ message: 'Missing token' });
   try {
-    const decoded = jwt.verify(t, process.env.JWT_SECRET);
+    const user = req.user;
+    if (user) return res.json({ user });
+
+    const token = getBearer(req);
+    if (!token) return res.status(401).json({ message: 'Missing token' });
+
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     return res.json({ user: decoded });
-  } catch {
-    return res.status(401).json({ message: 'Invalid or expired token' });
+  } catch (err) {
+    return res.status(401).json({ message: 'Invalid token' });
   }
 }
 
+/**
+ * POST /api/auth/logout
+ * Stateless JWTs can’t be invalidated server-side without a revocation list.
+ * We simply acknowledge the request; client should delete its token.
+ */
 async function logout(_req, res) {
-  try {
-    await sbAuth.auth.signOut();
-  } catch {}
   return res.json({ ok: true });
 }
 
-module.exports = { register, login, verify, verifyToken, me, logout };
+/**
+ * POST /api/auth/register (optional)
+ * If you do not support public registration, respond accordingly.
+ * You can implement user creation + hashing here when you’re ready.
+ */
+async function register(_req, res) {
+  return res.status(405).json({ message: 'Registration is disabled' });
+}
+
+module.exports = {
+  login,
+  verifyToken,
+  me,
+  logout,
+  register,
+};
