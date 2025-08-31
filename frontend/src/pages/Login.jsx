@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from '../utils/axiosConfig'; // Using axios directly for a specific URL
+import api from '../utils/axiosConfig'; // Using axios directly for a specific URL
 import logoSvg from '../assets/logo.svg';
 import SignupModal from '../components/SignupModal';
 import { FiMail, FiLock } from 'react-icons/fi';
@@ -37,7 +37,7 @@ export default function Login() {
     setError('');
     try {
       // Use the new AUTH_API_URL and send 'email'
-      const { data } = await axios.post('/api/auth/login', {
+      const { data } = await api.post('/api/auth/login', {
         email: email.trim().toLowerCase(),
         password,
       });

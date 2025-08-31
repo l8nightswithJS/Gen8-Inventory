@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // 1. DYNAMIC BASE URL: point to the GATEWAY (not the auth service).
 // Uses env in prod; falls back to localhost gateway in dev.
-const baseURL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080';
+const baseURL = process.env.REACT_APP_API_BASE_URL;
 
 // All your original settings are preserved.
 const api = axios.create({

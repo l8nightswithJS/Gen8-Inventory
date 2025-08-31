@@ -1,7 +1,7 @@
 // src/pages/AlertsPage.jsx
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from '../utils/axiosConfig';
+import api from '../utils/axiosConfig';
 import Button from '../components/ui/Button';
 
 const THRESHOLD_LABELS = {
@@ -86,7 +86,7 @@ export default function AlertsPage() {
       return;
     }
     try {
-      const { data } = await axios.get('/api/items/alerts', {
+      const { data } = await api.get('/api/items/alerts', {
         params: { client_id: Number(clientId) },
       });
       setAlerts(Array.isArray(data) ? data : []);
@@ -106,7 +106,7 @@ export default function AlertsPage() {
   const acknowledge = async (itemId) => {
     setAlerts((prev) => prev.filter((a) => a.id !== itemId));
     try {
-      await axios.post(`/api/items/alerts/${itemId}/acknowledge`);
+      await api.post(`/api/items/alerts/${itemId}/acknowledge`);
     } catch (err) {
       console.error('Failed to acknowledge alert', err);
       await loadAlerts();
