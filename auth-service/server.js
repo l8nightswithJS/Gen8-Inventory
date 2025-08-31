@@ -17,7 +17,16 @@ app.use((_req, res, next) => {
 app.use(cors());
 app.use(express.json());
 
-// Public routes for login and registration
+/**
+ * Protect only the sensitive auth endpoints.
+ * NOTE: These MUST be registered BEFORE the /api/auth router
+ * so they run for those paths and do NOT affect /login or /register.
+ */
+app.use('/api/auth/verify', authMiddleware);
+app.use('/api/auth/me', authMiddleware);
+app.use('/api/auth/logout', authMiddleware);
+
+// Public routes for login and registration + protected ones handled above
 app.use('/api/auth', authRouter);
 
 // Apply authentication middleware to all routes below this point
