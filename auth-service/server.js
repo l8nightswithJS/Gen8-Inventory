@@ -35,7 +35,7 @@ app.use(authMiddleware);
 // Protected routes for user management
 app.use('/api/users', usersRouter);
 
-const PORT = process.env.PORT || 8001;
-app.listen(PORT, () => {
+const PORT = Number(process.env.PORT) || 8001;
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Auth service listening on :${PORT}`);
 });

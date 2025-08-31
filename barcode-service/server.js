@@ -17,7 +17,7 @@ app.use(authMiddleware);
 app.use('/api/barcodes', barcodeRoutes);
 app.use('/api/scan', scanRouter);
 
-const PORT = process.env.PORT || 8002;
-app.listen(PORT, () => {
+const PORT = Number(process.env.PORT) || 8002;
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Barcode service listening on :${PORT}`);
 });

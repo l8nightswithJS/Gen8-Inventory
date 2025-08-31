@@ -15,7 +15,7 @@ app.use(authMiddleware);
 
 app.use('/api/clients', clientsRouter);
 
-const PORT = process.env.PORT || 8003;
-app.listen(PORT, () => {
+const PORT = Number(process.env.PORT) || 8003;
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Client service listening on :${PORT}`);
 });

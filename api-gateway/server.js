@@ -5,13 +5,14 @@ import cors from 'cors';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 
 const {
-  PORT = 8080,
+  PORT: RENDER_PORT,
   CORS_ORIGIN = '',
   AUTH_URL,
   INVENTORY_URL,
   CLIENT_URL,
   BARCODE_URL,
 } = process.env;
+const PORT = Number(RENDER_PORT) || 8080; // numeric, falls back locally
 
 if (!AUTH_URL || !INVENTORY_URL || !CLIENT_URL || !BARCODE_URL) {
   // Fail fast if any upstream is missing
@@ -57,12 +58,10 @@ const prox = (target) =>
         err?.code || err?.message,
       );
       if (!res.headersSent) {
-        res
-          .status(502)
-          .json({
-            error: 'EUPSTREAM',
-            detail: err?.code || 'Upstream unavailable',
-          });
+        res.status(502).json({
+          error: 'EUPSTREAM',
+          detail: err?.code || 'Upstream unavailable',
+        });
       }
     },
   });
@@ -80,7 +79,6 @@ app.use('/api/scan', prox(BARCODE_URL));
 
 app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 
-app.listen(PORT, () => {
-  // eslint-disable-next-line no-console
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`[GW] listening on ${PORT}`);
 });
