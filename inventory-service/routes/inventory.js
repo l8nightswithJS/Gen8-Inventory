@@ -5,7 +5,9 @@ const { body, param, query } = require('express-validator');
 // Import all controller functions under the name 'inventoryController'
 const inventoryController = require('../controllers/inventoryController');
 // Import the single exported function from authMiddleware
-const { handleValidation } = require('../middleware/validationMiddleware');
+const {
+  handleValidation,
+} = require('../../packages/shared-auth/validationMiddleware');
 
 const router = express.Router();
 
