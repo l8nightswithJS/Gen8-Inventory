@@ -1,4 +1,9 @@
-const { authMiddleware, requireRole, requireClientMatch } = require('shared-auth');
+const {
+  authMiddleware,
+  requireRole,
+  requireClientMatch,
+  handleValidation,
+} = require('shared-auth');
 // barcode-service/server.js
 require('dotenv').config();
 const express = require('express');

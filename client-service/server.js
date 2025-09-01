@@ -3,6 +3,7 @@ const {
   authMiddleware,
   requireRole,
   requireClientMatch,
+  handleValidation,
 } = require('shared-auth');
 require('dotenv').config();
 const express = require('express');

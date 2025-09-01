@@ -10,6 +10,7 @@ const {
   authMiddleware,
   requireRole,
   requireClientMatch,
+  handleValidation,
 } = require('shared-auth');
 
 // Remaining core routes
