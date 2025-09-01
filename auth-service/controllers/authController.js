@@ -238,13 +238,11 @@ async function register(req, res) {
   // 4. Send a success response
   // Your "handle_new_user" trigger will automatically create the public.users row.
   // By default, that user will be unapproved.
-  return res
-    .status(201)
-    .json({
-      message:
-        'User created successfully. An administrator must approve the account.',
-      user: data.user,
-    });
+  return res.status(201).json({
+    message:
+      'User created successfully. An administrator must approve the account.',
+    user: data.user,
+  });
 }
 
 module.exports = { login, verifyToken, me, logout, register };
