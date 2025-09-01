@@ -77,9 +77,16 @@ async function login(req, res) {
       email = adminUser.user.email;
     }
 
+    // --- ⬇️ START: Log payload to Supabase for debugging ⬇️ ---
+    const payloadToSupabase = { email, password };
+    console.log('--- PAYLOAD BEING SENT TO SUPABASE ---');
+    console.log(JSON.stringify(payloadToSupabase, null, 2));
+    console.log('--- END PAYLOAD ---');
+    // --- ⬆️ END: Log payload to Supabase for debugging ⬆️ ---
+
     // 2) Sign in against Supabase Auth with anon client
     const { data: signInData, error: signInError } =
-      await sbAuth.auth.signInWithPassword({ email, password });
+      await sbAuth.auth.signInWithPassword(payloadToSupabase);
     if (signInError || !signInData?.user) {
       // ⬇️ MODIFICATION START: Add detailed JSON logging for the Supabase error
       console.error('--- SUPABASE SIGN-IN ERROR ---');
@@ -152,7 +159,7 @@ async function login(req, res) {
     };
 
     const token = jwt.sign(payload, JWT_SECRET, {
-      algorithm: 'HS256',
+      algorithm: 'HS26',
       expiresIn: JWT_TTL,
       issuer: JWT_ISSUER,
     });
