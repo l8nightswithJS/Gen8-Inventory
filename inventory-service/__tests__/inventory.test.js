@@ -5,7 +5,7 @@ const inventoryRoutes = require('../routes/inventory');
 
 // THIS IS THE CORRECTED MOCK
 // It now returns a function directly, perfectly mimicking the real authMiddleware.js file.
-jest.mock('../middleware/authMiddleware', () =>
+jest.mock('../../packages/shared-auth/validationMiddleware.js', () =>
   jest.fn((req, res, next) => {
     // Simulate a logged-in user for the test environment
     req.user = { id: 'mock-user-id-123', role: 'admin' };
