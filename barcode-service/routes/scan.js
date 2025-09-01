@@ -2,7 +2,7 @@
 const express = require('express');
 const { body } = require('express-validator');
 const ctrl = require('../controllers/scanController');
-const { handleValidation } = require('../middleware/validationMiddleware');
+const { handleValidation } = require('shared-auth');
 
 const router = express.Router();
 

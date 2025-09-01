@@ -1,7 +1,7 @@
 // barcode-service/routes/barcodes.js
 const express = require('express');
 const { query, body, param } = require('express-validator');
-const { handleValidation } = require('../middleware/validationMiddleware');
+const { handleValidation } = require('shared-auth');
 const ctrl = require('../controllers/barcodesController');
 
 const router = express.Router();

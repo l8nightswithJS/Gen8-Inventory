@@ -1,4 +1,9 @@
 // client-service/server.js
+const {
+  authMiddleware,
+  requireRole,
+  requireClientMatch,
+} = require('shared-auth');
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');

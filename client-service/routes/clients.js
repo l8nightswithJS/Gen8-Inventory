@@ -3,7 +3,7 @@ const express = require('express');
 const multer = require('multer');
 const { body, param } = require('express-validator');
 const controller = require('../controllers/clientsController');
-const { handleValidation } = require('../middleware/validationMiddleware');
+const { handleValidation } = require('shared-auth');
 
 const router = express.Router();
 const upload = multer({ dest: 'uploads/' });
