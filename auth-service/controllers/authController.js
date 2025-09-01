@@ -202,8 +202,49 @@ async function logout(_req, res) {
   return res.json({ ok: true });
 }
 
-async function register(_req, res) {
-  return res.status(405).json({ message: 'Registration is disabled' });
+// A functional register endpoint for auth-service/controllers/authController.js
+
+async function register(req, res) {
+  const { email, password, username } = req.body;
+
+  // 1. Validate input
+  if (!email || !password || !username) {
+    return res
+      .status(400)
+      .json({ message: 'Email, password, and username are required.' });
+  }
+
+  // 2. Call Supabase to sign up the new user
+  const { data, error } = await sbAuth.auth.signUp({
+    email,
+    password,
+    options: {
+      // This passes metadata that your database trigger "handle_new_user" needs
+      data: {
+        username: username,
+        role: 'staff', // Default role for all new signups
+      },
+    },
+  });
+
+  // 3. Handle any errors from Supabase
+  if (error) {
+    // Log the detailed error on the server
+    console.error('Supabase registration error:', error);
+    // Return a generic error to the client
+    return res.status(error.status || 500).json({ message: error.message });
+  }
+
+  // 4. Send a success response
+  // Your "handle_new_user" trigger will automatically create the public.users row.
+  // By default, that user will be unapproved.
+  return res
+    .status(201)
+    .json({
+      message:
+        'User created successfully. An administrator must approve the account.',
+      user: data.user,
+    });
 }
 
 module.exports = { login, verifyToken, me, logout, register };

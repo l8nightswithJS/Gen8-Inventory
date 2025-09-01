@@ -1,6 +1,6 @@
 // frontend/src/components/SignupModal.jsx
 import { useState } from 'react';
-import axios from '../utils/axiosConfig';
+import api from '../utils/axiosConfig';
 import Button from './ui/Button';
 
 export default function SignupModal({ onClose }) {
@@ -23,10 +23,7 @@ export default function SignupModal({ onClose }) {
     setLoading(true);
     try {
       // Use the new AUTH_API_URL and send 'email'
-      const { data } = await axios.post(
-        `${process.env.REACT_APP_AUTH_API_URL}/api/auth/register`,
-        form,
-      );
+      const { data } = await api.post(`/api/auth/register`, form);
       setMsg(data.message);
       setTimeout(onClose, 2500); // Give user time to read success message
     } catch (err) {
