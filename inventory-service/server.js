@@ -5,9 +5,6 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 
-// Shared auth middleware
-const { authMiddleware, requireRole, requireClientMatch } = require('shared-auth');
-
 // Shared auth middlewares (from packages/shared-auth)
 const {
   authMiddleware,
