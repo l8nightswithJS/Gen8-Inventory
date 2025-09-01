@@ -81,11 +81,11 @@ async function login(req, res) {
     const { data: signInData, error: signInError } =
       await sbAuth.auth.signInWithPassword({ email, password });
     if (signInError || !signInData?.user) {
-      console.error(
-        '[AUTH][login] signIn error for email:',
-        email,
-        signInError,
-      );
+      // ⬇️ MODIFICATION START: Add detailed JSON logging for the Supabase error
+      console.error('--- SUPABASE SIGN-IN ERROR ---');
+      console.error(JSON.stringify(signInError, null, 2));
+      console.error('--- END SUPABASE SIGN-IN ERROR ---');
+      // ⬆️ MODIFICATION END
       return res.status(401).json({ message: 'Invalid credentials' });
     }
     const authUser = signInData.user;
@@ -117,11 +117,9 @@ async function login(req, res) {
         .single();
       if (insErr) {
         console.error('[AUTH][login] auto-provision failed:', insErr);
-        return res
-          .status(403)
-          .json({
-            message: 'User is not provisioned in application users table',
-          });
+        return res.status(403).json({
+          message: 'User is not provisioned in application users table',
+        });
       }
       profile = ins;
       profileErr2 = null;
@@ -133,11 +131,9 @@ async function login(req, res) {
     }
 
     if (profileErr2 || !profile) {
-      return res
-        .status(403)
-        .json({
-          message: 'User is not provisioned in application users table',
-        });
+      return res.status(403).json({
+        message: 'User is not provisioned in application users table',
+      });
     }
 
     // 4) Approval gate (can bypass with env during bootstrap)
@@ -163,7 +159,11 @@ async function login(req, res) {
 
     return res.json({ token, user: payload });
   } catch (err) {
-    console.error('[AUTH] login error:', err);
+    // ⬇️ MODIFICATION START: Improve generic error logging
+    console.error('--- [AUTH] GENERIC LOGIN ERROR ---');
+    console.error(JSON.stringify(err, null, 2));
+    console.error('--- END GENERIC LOGIN ERROR ---');
+    // ⬆️ MODIFICATION END
     return res.status(500).json({ message: 'Login failed' });
   }
 }
