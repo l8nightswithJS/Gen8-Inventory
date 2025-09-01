@@ -1,14 +1,12 @@
-// backend/controllers/locationsController.js
+// inventory-service/controllers/locationsController.js
 const supabase = require('../lib/supabaseClient');
 
 const handleSupabaseError = (res, error, context) => {
   console.error(`Error in ${context}:`, error);
-  return res
-    .status(500)
-    .json({
-      message: `Internal server error during ${context}`,
-      details: error.message,
-    });
+  return res.status(500).json({
+    message: `Internal server error during ${context}`,
+    details: error.message,
+  });
 };
 
 // @desc    Get all locations for a specific client

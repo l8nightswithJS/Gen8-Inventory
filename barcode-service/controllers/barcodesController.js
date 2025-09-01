@@ -1,4 +1,4 @@
-// backend/controllers/barcodesController.js
+// barcode-service/controllers/barcodesController.js
 const supabase = require('../lib/supabaseClient');
 
 function toRow(r) {

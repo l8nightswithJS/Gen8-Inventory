@@ -1,4 +1,4 @@
-// src/components/PrivateRoute.jsx
+// frontend/src/components/PrivateRoute.jsx
 
 import { Navigate } from 'react-router-dom';
 

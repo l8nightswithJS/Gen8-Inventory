@@ -1,4 +1,4 @@
-// src/components/ItemActionModal.jsx
+// frontend/src/components/ItemActionModal.jsx
 import BaseModal from './ui/BaseModal';
 import { FiPackage, FiClipboard, FiEdit3 } from 'react-icons/fi';
 import Button from './ui/Button';

@@ -1,3 +1,4 @@
+//  inventory-service/middleware/authMiddleware.js
 const axios = require('axios');
 
 module.exports = async function authenticate(req, res, next) {

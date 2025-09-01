@@ -1,3 +1,4 @@
+// inventory-service/__tests__/inventory.test.js
 const request = require('supertest');
 const express = require('express');
 const inventoryRoutes = require('../routes/inventory');

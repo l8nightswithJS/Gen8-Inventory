@@ -1,3 +1,4 @@
+// frontend/src/components/ScanModal.jsx
 import { useState } from 'react';
 import axios from '../utils/axiosConfig';
 import BarcodeScannerComponent from './BarcodeScannerComponent';

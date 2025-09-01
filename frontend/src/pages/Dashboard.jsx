@@ -1,3 +1,4 @@
+// frontend/src/pages/Dashboard.jsx
 import { useState, useEffect, useCallback } from 'react';
 import api from '../utils/axiosConfig'; // ✅ correct path from /pages
 import ClientCarousel from '../components/ClientCarousel'; // ✅ correct path from /pages

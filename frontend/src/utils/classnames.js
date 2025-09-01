@@ -1,4 +1,4 @@
-// src/utils/classnames.js
+// frontend/src/utils/classnames.js
 export function cn(...args) {
   return args
     .flatMap((a) => {

@@ -1,3 +1,4 @@
+// frontend/src/components/SignupModal.jsx
 import { useState } from 'react';
 import axios from '../utils/axiosConfig';
 import Button from './ui/Button';

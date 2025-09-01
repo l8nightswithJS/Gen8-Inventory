@@ -1,4 +1,4 @@
-// backend/middleware/requireRole.js
+// inventory-service/middleware/requireRole.js
 const supabase = require('../lib/supabaseClient');
 
 const requireRole =

@@ -1,4 +1,4 @@
-// middleware/validationMiddleware.js
+// inventory-service/middleware/validationMiddleware.js
 const { validationResult } = require('express-validator');
 
 exports.handleValidation = (req, res, next) => {

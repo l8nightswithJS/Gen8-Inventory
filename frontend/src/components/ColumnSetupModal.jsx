@@ -1,4 +1,4 @@
-// src/components/ColumnSetupModal.jsx
+// frontend/src/components/ColumnSetupModal.jsx
 import { useState } from 'react';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';

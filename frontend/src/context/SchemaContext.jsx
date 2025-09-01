@@ -1,4 +1,4 @@
-// src/context/SchemaContext.jsx
+// frontend/src/context/SchemaContext.jsx
 import { createContext, useContext, useMemo, useCallback } from 'react';
 
 const SchemaCtx = createContext(null);

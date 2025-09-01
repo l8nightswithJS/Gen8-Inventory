@@ -1,3 +1,4 @@
+// frontend/src/utils/axiosConfig.js
 import axios from 'axios';
 
 // 1. DYNAMIC BASE URL: point to the GATEWAY (not the auth service).

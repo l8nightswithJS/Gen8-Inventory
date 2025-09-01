@@ -1,4 +1,4 @@
-// backend/controllers/inventoryController.js
+// inventory-service/controllers/inventoryController.js
 const supabase = require('../lib/supabaseClient');
 const {
   computeLowState,

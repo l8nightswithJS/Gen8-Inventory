@@ -1,4 +1,4 @@
-// src/components/Navbar.jsx
+// frontend/src/components/Navbar.jsx
 import { useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { FiMenu, FiX } from 'react-icons/fi';

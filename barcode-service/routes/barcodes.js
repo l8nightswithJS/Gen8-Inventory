@@ -1,4 +1,4 @@
-// backend/routes/barcodes.js
+// barcode-service/routes/barcodes.js
 const express = require('express');
 const { query, body, param } = require('express-validator');
 const authenticate = require('../middleware/authMiddleware');

@@ -1,3 +1,4 @@
+// frontend/src/pages/ClientPage.jsx
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/axiosConfig'; // ✅ correct path from /pages

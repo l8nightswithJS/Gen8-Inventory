@@ -1,4 +1,4 @@
-// src/pages/LandingPage.jsx
+// frontend/src/pages/LandingPage.jsx
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import SignupModal from '../components/SignupModal';

@@ -1,4 +1,4 @@
-// src/pages/StandaloneScanPage.jsx
+// frontend/src/pages/StandaloneScanPage.jsx
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Scanner } from '@yudiel/react-qr-scanner';

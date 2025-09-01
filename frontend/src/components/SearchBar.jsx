@@ -1,4 +1,4 @@
-// src/components/SearchBar.jsx
+// frontend/src/components/SearchBar.jsx
 import { useState } from 'react';
 import Button from './ui/Button'; // Import our standard Button component
 

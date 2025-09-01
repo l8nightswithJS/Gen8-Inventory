@@ -1,3 +1,4 @@
+// auth-service/routes/users.js
 const express = require('express');
 const { body, param } = require('express-validator');
 const userController = require('../controllers/userController');

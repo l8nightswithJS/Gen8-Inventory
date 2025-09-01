@@ -1,4 +1,4 @@
-// backend/middleware/requireRole.js
+// barcode-service/middleware/requireRole.js
 const supabase = require('../lib/supabaseClient');
 
 const requireRole =

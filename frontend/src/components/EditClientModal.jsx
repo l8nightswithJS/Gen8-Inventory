@@ -1,3 +1,4 @@
+// frontend/src/components/EditClientModal.jsx
 import { useId, useState } from 'react';
 import axios from '../utils/axiosConfig';
 import BaseModal from './ui/BaseModal';

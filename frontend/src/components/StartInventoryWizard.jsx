@@ -1,3 +1,4 @@
+// frontend/src/components/StartInventoryWizard.jsx
 import { useState } from 'react';
 import InventoryForm from './InventoryForm';
 import BulkImport from './BulkImport';

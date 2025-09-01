@@ -1,4 +1,4 @@
-// backend/lib/supabaseClient.js
+// barcode-service/lib/supabaseClient.js
 const { createClient } = require('@supabase/supabase-js');
 
 // these env‑vars must be set in Render (or your env):

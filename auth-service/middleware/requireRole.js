@@ -1,5 +1,4 @@
-// This middleware assumes that a previous middleware (like authMiddleware)
-// has already verified a JWT and attached the user payload to req.user.
+// auth-service/middleware/requireRole.js
 
 const requireRole =
   (...allowedRoles) =>

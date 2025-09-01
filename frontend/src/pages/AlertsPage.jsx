@@ -1,4 +1,4 @@
-// src/pages/AlertsPage.jsx
+// frontend/src/pages/AlertsPage.jsx
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/axiosConfig';

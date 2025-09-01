@@ -1,3 +1,4 @@
+// frontend/src/pages/UsersPage.jsx
 import { useState, useEffect, useCallback } from 'react';
 import api from '../utils/axiosConfig';
 import ConfirmModal from '../components/ConfirmModal';

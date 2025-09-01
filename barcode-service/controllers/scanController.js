@@ -1,14 +1,12 @@
-// backend/controllers/scanController.js
+// barcode-service/controllers/scanController.js
 const supabase = require('../lib/supabaseClient');
 
 const handleSupabaseError = (res, error, context) => {
   console.error(`Error in ${context}:`, error);
-  return res
-    .status(500)
-    .json({
-      message: `Internal server error during ${context}`,
-      details: error.message,
-    });
+  return res.status(500).json({
+    message: `Internal server error during ${context}`,
+    details: error.message,
+  });
 };
 
 // @desc    Process a scanned barcode to identify its type (item or location)

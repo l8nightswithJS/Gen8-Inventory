@@ -1,3 +1,4 @@
+// auth-service/middleware/authMiddleware.js
 const axios = require('axios');
 
 const AUTH_URL = process.env.AUTH_SERVICE_URL || process.env.AUTH_PUBLIC_URL;

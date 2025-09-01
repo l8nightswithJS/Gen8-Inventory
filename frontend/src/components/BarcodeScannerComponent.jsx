@@ -1,3 +1,4 @@
+// frontend/src/components/BarcodeScannerComponent.jsx
 import { useCallback, useMemo } from 'react';
 import { Scanner } from '@yudiel/react-qr-scanner';
 

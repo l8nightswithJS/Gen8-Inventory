@@ -1,5 +1,4 @@
-// src/components/ScanButton.jsx
-
+// frontend/src/components/ScanButton.jsx
 export default function ScanButton({ onClick, className = '', children }) {
   return (
     <button

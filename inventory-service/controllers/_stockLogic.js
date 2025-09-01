@@ -1,5 +1,4 @@
-// backend/controllers/_stockLogic.js
-// Utilities shared across controllers for low-stock logic & attributes handling
+// inventory-service/controllers/_stockLogic.js
 
 const BAD_STRINGS = new Set(['undefined', 'null', 'nan']);
 

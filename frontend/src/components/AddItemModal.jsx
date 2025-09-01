@@ -1,3 +1,4 @@
+// frontend/src/components/AddItemModal.jsx
 import { useState } from 'react';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';

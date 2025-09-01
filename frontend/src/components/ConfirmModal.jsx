@@ -1,4 +1,4 @@
-// src/components/ConfirmModal.jsx
+//frontend/src/components/ConfirmModal.jsx
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
 import PropTypes from 'prop-types';

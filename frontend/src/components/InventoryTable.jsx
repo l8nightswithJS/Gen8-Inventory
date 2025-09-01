@@ -1,4 +1,4 @@
-// src/components/InventoryTable.jsx
+// frontend/src/components/InventoryTable.jsx
 import { useEffect, useMemo, useState } from 'react';
 import { FiEdit2, FiTrash2, FiChevronUp, FiChevronDown } from 'react-icons/fi';
 import Button from './ui/Button';

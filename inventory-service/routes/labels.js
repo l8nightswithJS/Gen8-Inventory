@@ -1,4 +1,4 @@
-// backend/routes/labels.js
+// inventory-service/routes/labels.js
 const express = require('express');
 const router = express.Router();
 const ctrl = require('../controllers/labelsController');

@@ -1,4 +1,4 @@
-// src/components/LocationViewModal.jsx
+// frontend/src/components/LocationViewModal.jsx
 import { FiBox, FiPackage } from 'react-icons/fi';
 import Button from './ui/Button';
 import BaseModal from './ui/BaseModal';

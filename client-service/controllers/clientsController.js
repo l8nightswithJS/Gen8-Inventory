@@ -1,3 +1,4 @@
+// client-service/controllers/clientsController.js
 const fs = require('fs');
 const path = require('path');
 const supabase = require('../lib/supabaseClient');

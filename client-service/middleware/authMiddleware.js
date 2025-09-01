@@ -1,4 +1,4 @@
-// authMiddleware.js (client-service) — complete replacement
+// client-service/middleware/authMiddleware.js
 const axios = require('axios');
 
 const AUTH_URL = process.env.AUTH_SERVICE_URL || process.env.AUTH_PUBLIC_URL;
@@ -42,11 +42,9 @@ module.exports = async function authenticate(req, res, next) {
     }
     // Network/DNS/timeout to auth-service
     console.error('[AUTH MW] verify call failed:', err.code || err.message);
-    return res
-      .status(502)
-      .json({
-        message: 'Auth service unreachable',
-        code: err.code || 'EUPSTREAM',
-      });
+    return res.status(502).json({
+      message: 'Auth service unreachable',
+      code: err.code || 'EUPSTREAM',
+    });
   }
 };

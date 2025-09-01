@@ -1,4 +1,4 @@
-// backend/controllers/labelsController.js
+// inventory-service/controllers/labelsController.js
 const net = require('net');
 const supabase = require('../lib/supabaseClient');
 

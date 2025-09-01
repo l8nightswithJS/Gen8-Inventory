@@ -1,4 +1,4 @@
-// src/utils/stockLogic.js
+// frontend/src/utils/stockLogic.js
 /**
  * Decide "low" / "out" from common inventory fields safely.
  */

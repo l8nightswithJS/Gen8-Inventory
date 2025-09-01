@@ -1,3 +1,4 @@
+// auth-service/controllers/userController.js
 const { sbAuth } = require('../lib/supabaseClient');
 
 const handleSupabaseError = (res, error, context) => {

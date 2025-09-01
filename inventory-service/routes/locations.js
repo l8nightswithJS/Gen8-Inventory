@@ -1,4 +1,4 @@
-// backend/routes/locations.js
+// inventory-service/routes/locations.js
 const express = require('express');
 const { query, body } = require('express-validator');
 const ctrl = require('../controllers/locationsController');

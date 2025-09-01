@@ -1,4 +1,4 @@
-// backend/routes/scan.js
+// barcode-service/routes/scan.js
 const express = require('express');
 const { body } = require('express-validator');
 const ctrl = require('../controllers/scanController');

@@ -1,3 +1,4 @@
+// frontend/src/utils/barcodesApi.js
 import api from './axiosConfig'; // unified gateway-backed axios instance
 
 // --- Barcode Endpoints ---

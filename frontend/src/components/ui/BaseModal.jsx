@@ -1,4 +1,4 @@
-// src/components/ui/BaseModal.jsx
+//frontend/src/components/ui/BaseModal.jsx
 import { useEffect, useId, useRef } from 'react';
 import { FocusOn } from 'react-focus-on';
 import { FiX } from 'react-icons/fi';

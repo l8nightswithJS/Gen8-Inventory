@@ -1,4 +1,4 @@
-// src/components/BarcodeAssignModal.jsx
+// frontend/src/components/BarcodeAssignModal.jsx
 import { useEffect, useId, useState } from 'react';
 import { assignBarcodeToItem } from '../api/barcodesApi'; // ⬅️ use unified API helper
 import api from '../api/axiosConfig'; // ⬅️ for list & delete via gateway

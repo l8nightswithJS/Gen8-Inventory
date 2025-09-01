@@ -1,3 +1,4 @@
+// frontend/src/components/BulkImport.jsx
 import { useRef, useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import Button from './ui/Button';

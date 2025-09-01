@@ -1,4 +1,4 @@
-// src/components/ui/Button.jsx
+// frontend/src/components/ui/Button.jsx
 import clsx from 'clsx';
 
 const baseClasses =

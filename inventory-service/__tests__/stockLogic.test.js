@@ -1,3 +1,4 @@
+// inventory-service/__tests__/stockLogic.test.js
 // We are destructuring the imported object to get the specific functions we need.
 const { computeLowState } = require('../controllers/_stockLogic');
 

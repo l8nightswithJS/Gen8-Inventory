@@ -1,4 +1,4 @@
-// src/components/ClientCarousel.jsx
+// frontend/src/components/ClientCarousel.jsx
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import EditClientModal from './EditClientModal';

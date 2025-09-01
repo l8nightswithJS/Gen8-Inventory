@@ -1,3 +1,4 @@
+// frontend/src/components/EditItemModal.jsx
 import { useEffect, useState } from 'react';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
