@@ -1,3 +1,4 @@
+const { authMiddleware, requireRole, requireClientMatch } = require('shared-auth');
 // barcode-service/server.js
 require('dotenv').config();
 const express = require('express');
@@ -5,12 +6,14 @@ const cors = require('cors');
 
 const barcodeRoutes = require('./routes/barcodes');
 const scanRouter = require('./routes/scan');
-const authMiddleware = require('./middleware/authMiddleware'); // We will create this next
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+// 🔐 Protect API routes (except health)
+app.use('/api', authMiddleware);
 
 // Secure all routes in this service
 app.use(authMiddleware);

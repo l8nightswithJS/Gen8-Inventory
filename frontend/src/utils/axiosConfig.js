@@ -14,32 +14,11 @@ const api = axios.create({
 
 // 2. YOUR ROBUST TOKEN HANDLER: No changes needed here.
 // Read token from storage (covers a few common keys)
-function getAuthToken() {
-  return (
-    localStorage.getItem('token') ||
-    sessionStorage.getItem('token') ||
-    localStorage.getItem('jwt') ||
-    sessionStorage.getItem('jwt') ||
-    localStorage.getItem('access_token') ||
-    sessionStorage.getItem('access_token') ||
-    ''
-  );
-}
+
 
 // 3. YOUR REQUEST INTERCEPTOR: No changes needed here.
 // It correctly attaches the Authorization header on every request.
-api.interceptors.request.use((config) => {
-  const token = getAuthToken();
-  if (token) {
-    config.headers = config.headers || {};
-    config.headers.Authorization = token.startsWith('Bearer ')
-      ? token
-      : `Bearer ${token}`;
-  } else if (config.headers && 'Authorization' in config.headers) {
-    delete config.headers.Authorization;
-  }
-  return config;
-});
+
 
 // 4. YOUR RESPONSE INTERCEPTOR: No changes needed here.
 // This provides excellent, detailed error logging.
@@ -70,3 +49,20 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+
+// Unified token handler
+import { getToken } from './auth';
+
+api.interceptors.request.use((config) => {
+  const token = getToken();
+  if (token) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = token.startsWith('Bearer ')
+      ? token
+      : `Bearer ${token}`;
+  } else if (config.headers && 'Authorization' in config.headers) {
+    delete config.headers.Authorization;
+  }
+  return config;
+});

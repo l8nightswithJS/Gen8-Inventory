@@ -1,17 +1,15 @@
 // auth-service/controllers/authController.js
 const jwt = require('jsonwebtoken');
-
-// ⬇️ Use YOUR shared clients: anon for sign-in, service role for admin/DB
-// NOTE: adjust the relative path if your supabaseClient.js lives elsewhere.
-// e.g. require('../../backend/lib/supabaseClient')
 const { sbAuth, sbAdmin } = require('../lib/supabaseClient');
+
+// ⬇️ Shared package for JWT handling
+const { verifyJwt } = require('shared-auth');
 
 const {
   JWT_SECRET,
   JWT_ISSUER = 'gen8-inventory-auth',
   JWT_TTL = '12h',
 
-  // Optional bootstrapping toggles
   AUTO_PROVISION = 'false',
   AUTH_ALLOW_UNAPPROVED = 'false',
 } = process.env;
@@ -29,9 +27,6 @@ function getBearer(req) {
 /**
  * POST /api/auth/login
  * Accepts { email, password } OR { username, password }.
- * - If "username" (no "@"), we resolve it to an email via admin lookups.
- * - Sign-in is always done with sbAuth (anon key).
- * - Profile/role lookups use sbAdmin (service role).
  */
 async function login(req, res) {
   try {
@@ -43,12 +38,11 @@ async function login(req, res) {
         .json({ message: 'username/email and password are required' });
     }
 
-    // 1) Resolve to email for Supabase Auth
+    // 1) Resolve to email
     let email = null;
     if (identifier.includes('@')) {
       email = identifier;
     } else {
-      // Lookup by app username -> read auth user to get email
       const { data: profileByUsername, error: profileErr } = await sbAdmin
         .from('users')
         .select('id, username, role, approved')
@@ -56,55 +50,33 @@ async function login(req, res) {
         .single();
 
       if (profileErr || !profileByUsername) {
-        console.error(
-          '[AUTH][login] no profile for username:',
-          identifier,
-          profileErr,
-        );
         return res.status(401).json({ message: 'Invalid credentials' });
       }
 
       const { data: adminUser, error: adminErr } =
         await sbAdmin.auth.admin.getUserById(profileByUsername.id);
       if (adminErr || !adminUser?.user?.email) {
-        console.error(
-          '[AUTH][login] admin lookup failed for id:',
-          profileByUsername.id,
-          adminErr,
-        );
         return res.status(401).json({ message: 'Invalid credentials' });
       }
       email = adminUser.user.email;
     }
 
-    // --- ⬇️ START: Log payload to Supabase for debugging ⬇️ ---
-    const payloadToSupabase = { email, password };
-    console.log('--- PAYLOAD BEING SENT TO SUPABASE ---');
-    console.log(JSON.stringify(payloadToSupabase, null, 2));
-    console.log('--- END PAYLOAD ---');
-    // --- ⬆️ END: Log payload to Supabase for debugging ⬆️ ---
-
-    // 2) Sign in against Supabase Auth with anon client
+    // 2) Sign in with Supabase Auth
     const { data: signInData, error: signInError } =
-      await sbAuth.auth.signInWithPassword(payloadToSupabase);
+      await sbAuth.auth.signInWithPassword({ email, password });
     if (signInError || !signInData?.user) {
-      // ⬇️ MODIFICATION START: Add detailed JSON logging for the Supabase error
-      console.error('--- SUPABASE SIGN-IN ERROR ---');
-      console.error(JSON.stringify(signInError, null, 2));
-      console.error('--- END SUPABASE SIGN-IN ERROR ---');
-      // ⬆️ MODIFICATION END
       return res.status(401).json({ message: 'Invalid credentials' });
     }
     const authUser = signInData.user;
 
-    // 3) Load app profile with service role (bypasses RLS)
+    // 3) Load app profile
     let { data: profile, error: profileErr2 } = await sbAdmin
       .from('users')
-      .select('id, username, role, approved')
+      .select('id, username, role, approved, client_id')
       .eq('id', authUser.id)
       .single();
 
-    // 3a) Optional: auto-provision if missing during bootstrap
+    // 3a) Auto-provision if enabled
     const shouldProvision = String(AUTO_PROVISION).toLowerCase() === 'true';
     if ((profileErr2 || !profile) && shouldProvision) {
       const usernameForRow = identifier.includes('@')
@@ -120,21 +92,15 @@ async function login(req, res) {
             approved: true,
           },
         ])
-        .select('id, username, role, approved')
+        .select('id, username, role, approved, client_id')
         .single();
       if (insErr) {
-        console.error('[AUTH][login] auto-provision failed:', insErr);
         return res.status(403).json({
           message: 'User is not provisioned in application users table',
         });
       }
       profile = ins;
       profileErr2 = null;
-      console.warn(
-        '[AUTH][login] auto-provisioned user profile for',
-        authUser.id,
-        usernameForRow,
-      );
     }
 
     if (profileErr2 || !profile) {
@@ -143,45 +109,43 @@ async function login(req, res) {
       });
     }
 
-    // 4) Approval gate (can bypass with env during bootstrap)
+    // 4) Approval gate
     const allowUnapproved =
       String(AUTH_ALLOW_UNAPPROVED).toLowerCase() === 'true';
     if (!allowUnapproved && !profile.approved) {
       return res.status(403).json({ message: 'User is not approved' });
     }
 
-    // 5) Issue your **service** JWT (no token required on input)
+    // 5) Issue JWT using shared-auth
     const payload = {
-      sub: profile.id,
+      id: profile.id,
       username: profile.username || authUser.email || email,
       role: profile.role || 'staff',
-      // client_id: profile.client_id || null, // add when you add this column
+      approved: profile.approved,
+      email: authUser.email || email,
+      client_id: profile.client_id || null,
     };
 
     const token = jwt.sign(payload, JWT_SECRET, {
-      algorithm: 'HS26',
+      algorithm: 'HS256', // ✅ fixed
       expiresIn: JWT_TTL,
       issuer: JWT_ISSUER,
     });
 
     return res.json({ token, user: payload });
   } catch (err) {
-    // ⬇️ MODIFICATION START: Improve generic error logging
-    console.error('--- [AUTH] GENERIC LOGIN ERROR ---');
-    console.error(JSON.stringify(err, null, 2));
-    console.error('--- END GENERIC LOGIN ERROR ---');
-    // ⬆️ MODIFICATION END
+    console.error('[AUTH][login] error:', err);
     return res.status(500).json({ message: 'Login failed' });
   }
 }
 
 async function verifyToken(req, res) {
   try {
-    const token = getBearer(req);
+    const token = req.body?.token || getBearer(req);
     if (!token) return res.status(401).json({ message: 'Missing token' });
-    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    const decoded = verifyJwt(token); // ✅ use shared-auth
     return res.json({ ok: true, user: decoded });
-  } catch {
+  } catch (err) {
     return res.status(401).json({ message: 'Invalid token' });
   }
 }
@@ -191,7 +155,7 @@ async function me(req, res) {
     if (req.user) return res.json({ user: req.user });
     const token = getBearer(req);
     if (!token) return res.status(401).json({ message: 'Missing token' });
-    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    const decoded = verifyJwt(token); // ✅ use shared-auth
     return res.json({ user: decoded });
   } catch {
     return res.status(401).json({ message: 'Invalid token' });
@@ -202,42 +166,27 @@ async function logout(_req, res) {
   return res.json({ ok: true });
 }
 
-// A functional register endpoint for auth-service/controllers/authController.js
-
 async function register(req, res) {
   const { email, password, username } = req.body;
-
-  // 1. Validate input
   if (!email || !password || !username) {
     return res
       .status(400)
       .json({ message: 'Email, password, and username are required.' });
   }
 
-  // 2. Call Supabase to sign up the new user
   const { data, error } = await sbAuth.auth.signUp({
     email,
     password,
     options: {
-      // This passes metadata that your database trigger "handle_new_user" needs
-      data: {
-        username: username,
-        role: 'staff', // Default role for all new signups
-      },
+      data: { username, role: 'staff' },
     },
   });
 
-  // 3. Handle any errors from Supabase
   if (error) {
-    // Log the detailed error on the server
     console.error('Supabase registration error:', error);
-    // Return a generic error to the client
     return res.status(error.status || 500).json({ message: error.message });
   }
 
-  // 4. Send a success response
-  // Your "handle_new_user" trigger will automatically create the public.users row.
-  // By default, that user will be unapproved.
   return res.status(201).json({
     message:
       'User created successfully. An administrator must approve the account.',

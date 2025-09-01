@@ -1,4 +1,4 @@
-// auth-service/routes/authRoutes.js  (CommonJS)
+// auth-service/routes/authRoutes.js
 const express = require('express');
 const router = express.Router();
 
@@ -7,7 +7,6 @@ ctrl = ctrl && ctrl.default ? ctrl.default : ctrl;
 
 const { login, register, verify, verifyToken, me, logout } = ctrl || {};
 
-// Minimal sanity checks (unchanged)
 function mustBeFn(fn, name) {
   if (typeof fn !== 'function') {
     throw new TypeError(
@@ -21,17 +20,17 @@ mustBeFn(verifyToken || verify, 'verifyToken');
 mustBeFn(me, 'me');
 mustBeFn(logout, 'logout');
 
-// ⬇️ Add per-route protection here (keeps /login public no matter how server mounts router)
-const authMiddleware = require('../middleware/authMiddleware');
+// ✅ Use shared-auth middleware instead of local one
+const { authMiddleware } = require('shared-auth');
 
 // Public routes
 router.post('/login', login);
 router.post('/register', register);
 
-// Used by other services (middleware hits /api/auth/verify)
+// Used by other services (legacy flow)
 router.post('/verify', authMiddleware, verifyToken || verify);
 
-// Convenience identity route
+// Identity route
 router.get('/me', authMiddleware, me);
 
 // Session end

@@ -1,15 +1,12 @@
 // barcode-service/routes/barcodes.js
 const express = require('express');
 const { query, body, param } = require('express-validator');
-const authenticate = require('../middleware/authMiddleware');
-const requireRole = require('../middleware/requireRole');
 const { handleValidation } = require('../middleware/validationMiddleware');
 const ctrl = require('../controllers/barcodesController');
 
 const router = express.Router();
 
 // All barcode routes require auth
-router.use(authenticate);
 
 // Lookup by barcode
 router.get(

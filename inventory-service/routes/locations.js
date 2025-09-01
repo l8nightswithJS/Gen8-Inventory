@@ -2,7 +2,6 @@
 const express = require('express');
 const { query, body } = require('express-validator');
 const ctrl = require('../controllers/locationsController');
-const authenticate = require('../middleware/authMiddleware');
 const { handleValidation } = require('../middleware/validationMiddleware');
 
 const router = express.Router();

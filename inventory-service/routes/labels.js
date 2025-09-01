@@ -3,12 +3,9 @@ const express = require('express');
 const router = express.Router();
 const ctrl = require('../controllers/labelsController');
 
-const authenticate = require('../middleware/authMiddleware');
-const requireRole = require('../middleware/requireRole');
 
 // === SECURE ALL LABEL ROUTES ===
 // 1. User must be logged in.
-router.use(authenticate);
 // 2. User must be an 'admin' or 'staff'.
 router.use(requireRole('admin', 'staff'));
 

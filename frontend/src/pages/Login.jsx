@@ -1,3 +1,4 @@
+import { setToken, clearToken, isTokenValid } from '../utils/auth';
 // frontend/src/pages/Login.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -6,10 +7,7 @@ import logoSvg from '../assets/logo.svg';
 import SignupModal from '../components/SignupModal';
 import { FiMail, FiLock } from 'react-icons/fi';
 
-function isTokenValid(token) {
-  if (!token) return false;
-  try {
-    const { exp } = JSON.parse(atob(token.split('.')[1]));
+ = JSON.parse(atob(token.split('.')[1]));
     return typeof exp === 'number' && Date.now() < exp * 1000;
   } catch {
     return false;
@@ -24,12 +22,12 @@ export default function Login() {
   const [showSignup, setShowSignup] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = setToken(token) || '';
     if (isTokenValid(token)) {
       navigate('/dashboard', { replace: true });
     } else {
-      localStorage.removeItem('token');
-      localStorage.removeItem('role');
+      clearToken();
+      
     }
   }, [navigate]);
 

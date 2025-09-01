@@ -5,14 +5,11 @@ const { body, param, query } = require('express-validator');
 // Import all controller functions under the name 'inventoryController'
 const inventoryController = require('../controllers/inventoryController');
 // Import the single exported function from authMiddleware
-const authenticate = require('../middleware/authMiddleware');
-const requireRole = require('../middleware/requireRole');
 const { handleValidation } = require('../middleware/validationMiddleware');
 
 const router = express.Router();
 
 // This line will now work correctly because 'authenticate' is the function itself.
-router.use(authenticate);
 
 // ---------- Alerts ----------
 router.get(

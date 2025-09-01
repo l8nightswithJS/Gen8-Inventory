@@ -1,3 +1,4 @@
+import { clearToken } from '../utils/auth';
 // frontend/src/components/IdleLogout.jsx
 import { useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -10,8 +11,8 @@ export default function IdleLogout({ timeout = 15 * 60 * 1000 }) {
   const resetTimer = useCallback(() => {
     if (timerId.current) clearTimeout(timerId.current);
     timerId.current = setTimeout(() => {
-      localStorage.removeItem('token');
-      localStorage.removeItem('role');
+      clearToken();
+      
       navigate('/login', { replace: true });
     }, timeout);
   }, [navigate, timeout]);

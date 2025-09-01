@@ -5,6 +5,16 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 
+// Shared auth middleware
+const { authMiddleware, requireRole, requireClientMatch } = require('shared-auth');
+
+// Shared auth middlewares (from packages/shared-auth)
+const {
+  authMiddleware,
+  requireRole,
+  requireClientMatch,
+} = require('shared-auth');
+
 // Remaining core routes
 const inventoryRouter = require('./routes/inventory');
 const labelsRouter = require('./routes/labels');
@@ -34,10 +44,25 @@ const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 app.use('/uploads', express.static(uploadDir));
 
-// Routes are now cleaned up
-app.use('/api/items', inventoryRouter);
-app.use('/api/labels', labelsRouter);
-app.use('/api/locations', locationsRouter);
+// 🔐 Protect API routes (except /health)
+app.use('/api', authMiddleware);
+
+/**
+ * 🔐 Apply authentication globally to API routes
+ * - All routes under /api/* require a valid JWT
+ * - Use requireClientMatch + requireRole selectively inside routers
+ */
+app.use('/api', authMiddleware);
+
+// Routes are now protected
+app.use('/api/items', requireClientMatch, inventoryRouter);
+app.use('/api/labels', labelsRouter); // example: labels may not need tenant scoping
+app.use(
+  '/api/locations',
+  requireClientMatch,
+  requireRole('admin', 'manager'),
+  locationsRouter,
+);
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
@@ -46,5 +71,5 @@ app.use(errorHandler);
 
 const PORT = Number(process.env.PORT) || 8000;
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✅ Client service listening on :${PORT}`);
+  console.log(`✅ Inventory service listening on :${PORT}`);
 });

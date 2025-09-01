@@ -4,12 +4,14 @@ const express = require('express');
 const cors = require('cors');
 
 const clientsRouter = require('./routes/clients');
-const authMiddleware = require('./middleware/authMiddleware');
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+// 🔐 Protect API routes (except health)
+app.use('/api', authMiddleware);
 
 // Secure all routes in this service by checking for a valid token
 app.use(authMiddleware);

@@ -1,19 +1,14 @@
 // frontend/src/components/EditClientModal.jsx
 import { useId, useState } from 'react';
-import axios from '../utils/axiosConfig';
+import api from '../utils/axiosConfig';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
 
-// Create a new, separate axios instance specifically for the client service
-const clientApi = axios.create({
-  baseURL: process.env.REACT_APP_CLIENT_API_URL,
-});
+// Using unified api instance from axiosConfig
 
 // Add the auth token interceptor to every request
-clientApi.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
+// Using centralized interceptor from axiosConfig.js
+if (token) {
       config.headers['Authorization'] = `Bearer ${token}`;
     }
     return config;
@@ -44,7 +39,7 @@ export default function EditClientModal({ client, onClose, onUpdated }) {
       if (logoFile) formData.append('logo', logoFile);
 
       // UPDATED: Use the new clientApi instance
-      const { data } = await clientApi.put(
+      const { data } = await api.put(
         `/api/clients/${client.id}`,
         formData,
         {
