@@ -3,6 +3,7 @@ const authMiddleware = require('./authMiddleware');
 const requireRole = require('./requireRole');
 const requireClientMatch = require('./requireClientMatch');
 const { handleValidation } = require('./validationMiddleware');
+const { errorHandler } = require('./errorHandler');
 
 module.exports = {
   verifyJwt,
@@ -10,4 +11,5 @@ module.exports = {
   requireRole,
   requireClientMatch,
   handleValidation,
+  errorHandler,
 };
