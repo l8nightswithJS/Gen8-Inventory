@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const ctrl = require('../controllers/labelsController');
-
+const { requireRole } = require('shared-auth');
 
 // === SECURE ALL LABEL ROUTES ===
 // 1. User must be logged in.
