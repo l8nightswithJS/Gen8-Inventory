@@ -1,3 +1,4 @@
+// auth-service/controllers/authController.js (Hybrid)
 const jwt = require('jsonwebtoken');
 const { sbAuth, sbAdmin } = require('../lib/supabaseClient');
 const { verifyJwt } = require('shared-auth');
@@ -6,9 +7,6 @@ const {
   JWT_SECRET,
   JWT_ISSUER = 'gen8-inventory-auth',
   JWT_TTL = '12h',
-
-  AUTO_PROVISION = 'false',
-  AUTH_ALLOW_UNAPPROVED = 'false',
 } = process.env;
 
 if (!JWT_SECRET) {
@@ -21,77 +19,116 @@ function getBearer(req) {
   return scheme === 'Bearer' && token ? token : null;
 }
 
+// Ensure there's always a profile row in public.users
+async function ensureUserProfile(authUser, defaults = {}) {
+  const id = authUser?.id;
+  if (!id) throw new Error('ensureUserProfile: missing authUser.id');
+
+  const meta = authUser.user_metadata || authUser.raw_user_meta_data || {};
+  const email = authUser.email || meta.email || '';
+  const role = meta.role || defaults.role || 'staff';
+  const approved =
+    typeof defaults.approved === 'boolean' ? defaults.approved : true;
+
+  const { data, error } = await sbAdmin
+    .from('users')
+    .upsert({ id, role, approved }, { onConflict: 'id' })
+    .select('id, role, approved')
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * POST /api/auth/register
+ */
+async function register(req, res) {
+  try {
+    const { email, password, role = 'staff' } = req.body || {};
+    if (!email || !password)
+      return res
+        .status(400)
+        .json({ message: 'Email and password are required' });
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    const { data, error } = await sbAuth.auth.signUp({
+      email: normalizedEmail,
+      password,
+      options: {
+        data: {
+          email: normalizedEmail,
+          role,
+        },
+      },
+    });
+
+    if (error) {
+      console.error('[AUTH][register] Supabase error:', error);
+      return res.status(error.status || 500).json({ message: error.message });
+    }
+    if (!data?.user) return res.status(500).json({ message: 'Sign up failed' });
+
+    // Always create a profile, default approved
+    await ensureUserProfile(data.user, { role, approved: true });
+
+    return res.status(201).json({
+      message: 'Registered successfully',
+      userId: data.user.id,
+    });
+  } catch (err) {
+    console.error('[AUTH][register] error:', err);
+    return res.status(500).json({ message: 'Registration failed' });
+  }
+}
+
 /**
  * POST /api/auth/login
- * Accepts { email, password }
  */
 async function login(req, res) {
   try {
     const { email, password } = req.body || {};
-    if (!email || !password) {
-      return res
-        .status(400)
-        .json({ message: 'Email and password are required' });
-    }
+    if (!email || !password)
+      return res.status(400).json({ message: 'Missing email or password' });
 
-    // 1) Sign in with Supabase Auth
-    const { data: signInData, error: signInError } =
-      await sbAuth.auth.signInWithPassword({ email, password });
-    if (signInError || !signInData?.user) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-    const authUser = signInData.user;
+    const normalizedEmail = String(email).trim().toLowerCase();
 
-    // 2) Load app profile
-    let { data: profile, error: profileErr } = await sbAdmin
+    // Sign in with Supabase Auth
+    const { data, error: signInError } = await sbAuth.auth.signInWithPassword({
+      email: normalizedEmail,
+      password,
+    });
+
+    if (signInError || !data?.user) {
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
+    const authUser = data.user;
+
+    // Ensure profile
+    let { data: profile, error: selErr } = await sbAdmin
       .from('users')
-      .select('id, role, approved, client_id')
+      .select('id, role, approved')
       .eq('id', authUser.id)
       .single();
 
-    // 2a) Auto-provision if enabled
-    const shouldProvision = String(AUTO_PROVISION).toLowerCase() === 'true';
-    if ((profileErr || !profile) && shouldProvision) {
-      const { data: ins, error: insErr } = await sbAdmin
-        .from('users')
-        .insert([
-          {
-            id: authUser.id,
-            role: 'staff',
-            approved: false,
-          },
-        ])
-        .select('id, role, approved, client_id')
-        .single();
-      if (insErr) {
-        return res.status(403).json({
-          message: 'User is not provisioned in application users table',
-        });
-      }
-      profile = ins;
-      profileErr = null;
-    }
-
-    if (profileErr || !profile) {
-      return res.status(403).json({
-        message: 'User is not provisioned in application users table',
+    if (selErr || !profile) {
+      profile = await ensureUserProfile(authUser, {
+        role: 'staff',
+        approved: true,
       });
     }
 
-    // 3) Approval gate
-    const allowUnapproved =
-      String(AUTH_ALLOW_UNAPPROVED).toLowerCase() === 'true';
-    if (!allowUnapproved && !profile.approved) {
-      return res.status(403).json({ message: 'User is not approved' });
+    if (profile.approved === false) {
+      return res.status(403).json({ message: 'Account pending approval' });
     }
 
-    // 4) Issue JWT
+    // JWT payload
     const payload = {
       id: profile.id,
-      role: profile.role || 'staff',
+      role: profile.role,
+      email: authUser.email || normalizedEmail,
       approved: profile.approved,
-      email: authUser.email,
-      client_id: profile.client_id || null,
     };
 
     const token = jwt.sign(payload, JWT_SECRET, {
@@ -107,17 +144,23 @@ async function login(req, res) {
   }
 }
 
+/**
+ * POST /api/auth/verify
+ */
 async function verifyToken(req, res) {
   try {
     const token = req.body?.token || getBearer(req);
     if (!token) return res.status(401).json({ message: 'Missing token' });
     const decoded = verifyJwt(token);
     return res.json({ ok: true, user: decoded });
-  } catch (err) {
+  } catch {
     return res.status(401).json({ message: 'Invalid token' });
   }
 }
 
+/**
+ * GET /api/auth/me
+ */
 async function me(req, res) {
   try {
     if (req.user) return res.json({ user: req.user });
@@ -130,36 +173,14 @@ async function me(req, res) {
   }
 }
 
+/**
+ * POST /api/auth/logout
+ */
 async function logout(_req, res) {
+  try {
+    await sbAuth.auth.signOut();
+  } catch {}
   return res.json({ ok: true });
 }
 
-async function register(req, res) {
-  const { email, password } = req.body;
-  if (!email || !password) {
-    return res
-      .status(400)
-      .json({ message: 'Email and password are required.' });
-  }
-
-  const { data, error } = await sbAuth.auth.signUp({
-    email,
-    password,
-    options: {
-      data: { role: 'staff' },
-    },
-  });
-
-  if (error) {
-    console.error('Supabase registration error:', error);
-    return res.status(error.status || 500).json({ message: error.message });
-  }
-
-  return res.status(201).json({
-    message:
-      'User created successfully. An administrator must approve the account.',
-    user: data.user,
-  });
-}
-
-module.exports = { login, verifyToken, me, logout, register };
+module.exports = { register, login, verifyToken, me, logout };
