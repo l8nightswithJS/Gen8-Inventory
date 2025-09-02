@@ -1,16 +1,23 @@
 // frontend/src/components/ScanModal.jsx
 import { useState } from 'react';
-import api from '../utils/axiosConfig';
+import axios from '../utils/axiosConfig';
 import BarcodeScannerComponent from './BarcodeScannerComponent';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
 
-// Using unified api instance from axiosConfig
+// ✅ Create a dedicated axios instance for barcode-service
+const barcodeApi = axios.create({
+  baseURL: process.env.REACT_APP_BARCODE_API_URL,
+});
 
-// Add the auth token interceptor to every request
-// Using centralized interceptor from axiosConfig.js
-if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`;
+// ✅ Add the auth token interceptor safely
+barcodeApi.interceptors.request.use(
+  (config) => {
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('token');
+      if (token) {
+        config.headers['Authorization'] = `Bearer ${token}`;
+      }
     }
     return config;
   },
@@ -28,8 +35,7 @@ export default function ScanModal({ client, onClose, onScanSuccess }) {
     setError('');
 
     try {
-      // UPDATED: Use the new barcodeApi instance
-      const { data: result } = await api.post('/api/scan', {
+      const { data: result } = await barcodeApi.post('/api/scan', {
         barcode: barcode,
         client_id: client.id,
       });

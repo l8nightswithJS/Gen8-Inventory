@@ -1,15 +1,22 @@
 // frontend/src/components/EditClientModal.jsx
 import { useId, useState } from 'react';
-import api from '../utils/axiosConfig';
+import axios from '../utils/axiosConfig';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
 
-// Using unified api instance from axiosConfig
+// ✅ Dedicated axios instance for client-service
+const clientApi = axios.create({
+  baseURL: process.env.REACT_APP_CLIENT_API_URL,
+});
 
-// Add the auth token interceptor to every request
-// Using centralized interceptor from axiosConfig.js
-if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`;
+// ✅ Add auth token interceptor safely
+clientApi.interceptors.request.use(
+  (config) => {
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('token');
+      if (token) {
+        config.headers['Authorization'] = `Bearer ${token}`;
+      }
     }
     return config;
   },
@@ -38,8 +45,7 @@ export default function EditClientModal({ client, onClose, onUpdated }) {
       formData.append('barcode', barcode);
       if (logoFile) formData.append('logo', logoFile);
 
-      // UPDATED: Use the new clientApi instance
-      const { data } = await api.put(
+      const { data } = await clientApi.put(
         `/api/clients/${client.id}`,
         formData,
         {
@@ -85,6 +91,7 @@ export default function EditClientModal({ client, onClose, onUpdated }) {
         className="p-4 space-y-4"
       >
         {error && <p className="text-red-600 text-sm">{error}</p>}
+
         <div>
           <label
             htmlFor={nameId}
@@ -101,6 +108,7 @@ export default function EditClientModal({ client, onClose, onUpdated }) {
             required
           />
         </div>
+
         <div>
           <label
             htmlFor={barcodeId}
@@ -119,6 +127,7 @@ export default function EditClientModal({ client, onClose, onUpdated }) {
             Used by the scanner to jump directly to this client.
           </p>
         </div>
+
         <div>
           <label
             htmlFor={logoId}

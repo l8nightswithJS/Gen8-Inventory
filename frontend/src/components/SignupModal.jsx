@@ -5,7 +5,7 @@ import Button from './ui/Button';
 
 export default function SignupModal({ onClose }) {
   const [form, setForm] = useState({
-    email: '', // Changed from username to email
+    email: '',
     password: '',
     role: 'staff',
   });
@@ -22,10 +22,16 @@ export default function SignupModal({ onClose }) {
     setMsg('');
     setLoading(true);
     try {
-      // Use the new AUTH_API_URL and send 'email'
-      const { data } = await api.post(`/api/auth/register`, form);
+      // Auto-generate username from email
+      const username = form.email.split('@')[0];
+
+      const { data } = await api.post(`/api/auth/register`, {
+        ...form,
+        username,
+      });
+
       setMsg(data.message);
-      setTimeout(onClose, 2500); // Give user time to read success message
+      setTimeout(onClose, 2500);
     } catch (err) {
       setMsg(err.response?.data?.message || 'Signup failed');
     } finally {

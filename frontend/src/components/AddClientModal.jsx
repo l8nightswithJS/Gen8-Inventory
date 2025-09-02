@@ -1,15 +1,22 @@
 // frontend/src/components/AddClientModal.jsx
 import { useState } from 'react';
-import api from '../utils/axiosConfig';
+import axios from '../utils/axiosConfig';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
 
-// Using unified api instance from axiosConfig
+// ✅ Create a dedicated axios instance for client-service
+const clientApi = axios.create({
+  baseURL: process.env.REACT_APP_CLIENT_API_URL,
+});
 
-// Add the auth token interceptor to every request
-// Using centralized interceptor from axiosConfig.js
-if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`;
+// ✅ Add auth token interceptor safely
+clientApi.interceptors.request.use(
+  (config) => {
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('token');
+      if (token) {
+        config.headers['Authorization'] = `Bearer ${token}`;
+      }
     }
     return config;
   },
@@ -25,10 +32,12 @@ function AddClientForm({ onSuccess, onCancel }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
     if (!name.trim()) {
       setError('Client name is required.');
       return;
     }
+
     setLoading(true);
     try {
       const formData = new FormData();
@@ -36,10 +45,11 @@ function AddClientForm({ onSuccess, onCancel }) {
       if (logoFile) {
         formData.append('logo', logoFile);
       }
-      // UPDATED: Use the new clientApi instance
-      const res = await api.post('/api/clients', formData, {
+
+      const res = await clientApi.post('/api/clients', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
+
       onSuccess?.(res.data);
     } catch (err) {
       setError(err?.response?.data?.message || 'Error adding client');
@@ -72,6 +82,7 @@ function AddClientForm({ onSuccess, onCancel }) {
           disabled={loading}
         />
       </div>
+
       <div>
         <label
           htmlFor="logoFile"
@@ -84,10 +95,13 @@ function AddClientForm({ onSuccess, onCancel }) {
           type="file"
           accept="image/*"
           onChange={(e) => setLogoFile(e.target.files?.[0] || null)}
-          className="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+          className="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-full 
+            file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 
+            hover:file:bg-blue-100"
           disabled={loading}
         />
       </div>
+
       <div className="flex justify-end gap-3 pt-2">
         <Button
           type="button"

@@ -1,4 +1,3 @@
-import { setToken, clearToken, isTokenValid } from '../utils/auth';
 // frontend/src/pages/Login.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -7,7 +6,10 @@ import logoSvg from '../assets/logo.svg';
 import SignupModal from '../components/SignupModal';
 import { FiMail, FiLock } from 'react-icons/fi';
 
- = JSON.parse(atob(token.split('.')[1]));
+function isTokenValid(token) {
+  if (!token) return false;
+  try {
+    const { exp } = JSON.parse(atob(token.split('.')[1]));
     return typeof exp === 'number' && Date.now() < exp * 1000;
   } catch {
     return false;
@@ -16,18 +18,18 @@ import { FiMail, FiLock } from 'react-icons/fi';
 
 export default function Login() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState(''); // Changed from username to email
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [showSignup, setShowSignup] = useState(false);
 
   useEffect(() => {
-    const token = setToken(token) || '';
+    const token = localStorage.getItem('token');
     if (isTokenValid(token)) {
       navigate('/dashboard', { replace: true });
     } else {
-      clearToken();
-      
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
     }
   }, [navigate]);
 
@@ -36,13 +38,14 @@ export default function Login() {
     setError('');
     try {
       const identifier = email.trim().toLowerCase();
-      // Send BOTH fields so the server can treat it as email or username
       const { data } = await api.post('/api/auth/login', {
         email: identifier,
         username: identifier,
         password,
       });
-      +localStorage.setItem('token', data.token); // backend typically returns { token, user: { role, ... } }
+
+      // ✅ Removed the rogue "+" that was breaking things
+      localStorage.setItem('token', data.token);
       localStorage.setItem('role', data.user?.role || '');
       navigate('/dashboard');
     } catch (err) {
@@ -53,7 +56,7 @@ export default function Login() {
   return (
     <>
       <div className="min-h-screen flex flex-col md:flex-row">
-        {/* Left Panel: Branded side, hidden on mobile */}
+        {/* Left Panel: Branded side */}
         <div className="hidden md:flex md:w-1/2 lg:w-2/5 bg-slate-900 text-white p-12 flex-col justify-between">
           <div>
             <div className="flex items-center gap-3">
@@ -134,6 +137,7 @@ export default function Login() {
                 Sign In
               </button>
             </form>
+
             <p className="mt-6 text-center text-sm text-slate-600">
               Don&apos;t have an account?{' '}
               <button

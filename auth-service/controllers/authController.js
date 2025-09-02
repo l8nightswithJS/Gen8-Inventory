@@ -174,24 +174,51 @@ async function register(req, res) {
       .json({ message: 'Email, password, and username are required.' });
   }
 
-  const { data, error } = await sbAuth.auth.signUp({
-    email,
-    password,
-    options: {
-      data: { username, role: 'staff' },
-    },
-  });
+  try {
+    // 1. Create user in Supabase Auth
+    const { data, error } = await sbAuth.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { username, role: 'staff' },
+      },
+    });
 
-  if (error) {
-    console.error('Supabase registration error:', error);
-    return res.status(error.status || 500).json({ message: error.message });
+    if (error) {
+      console.error('Supabase registration error:', error);
+      return res.status(error.status || 500).json({ message: error.message });
+    }
+
+    const user = data.user;
+
+    // 2. Provision into your public.users table
+    const { error: insertErr } = await sbAdmin.from('users').insert([
+      {
+        id: user.id,
+        username,
+        role: 'staff',
+        approved: false,
+      },
+    ]);
+
+    if (insertErr) {
+      console.error(
+        '[AUTH][register] Failed to insert into public.users:',
+        insertErr,
+      );
+      return res.status(500).json({ message: 'Failed to provision user' });
+    }
+
+    // 3. Respond back
+    return res.status(201).json({
+      message:
+        'User created successfully. An administrator must approve the account.',
+      user,
+    });
+  } catch (err) {
+    console.error('[AUTH][register] Unexpected error:', err);
+    return res.status(500).json({ message: 'Registration failed' });
   }
-
-  return res.status(201).json({
-    message:
-      'User created successfully. An administrator must approve the account.',
-    user: data.user,
-  });
 }
 
 module.exports = { login, verifyToken, me, logout, register };
