@@ -1,4 +1,3 @@
-// frontend/src/components/SignupModal.jsx
 import { useState } from 'react';
 import api from '../utils/axiosConfig';
 import Button from './ui/Button';
@@ -22,14 +21,7 @@ export default function SignupModal({ onClose }) {
     setMsg('');
     setLoading(true);
     try {
-      // Auto-generate username from email
-      const username = form.email.split('@')[0];
-
-      const { data } = await api.post(`/api/auth/register`, {
-        ...form,
-        username,
-      });
-
+      const { data } = await api.post(`/api/auth/register`, form);
       setMsg(data.message);
       setTimeout(onClose, 2500);
     } catch (err) {

@@ -1,7 +1,6 @@
-// frontend/src/pages/Login.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../utils/axiosConfig'; // Using axios directly for a specific URL
+import api from '../utils/axiosConfig';
 import logoSvg from '../assets/logo.svg';
 import SignupModal from '../components/SignupModal';
 import { FiMail, FiLock } from 'react-icons/fi';
@@ -37,14 +36,10 @@ export default function Login() {
     e.preventDefault();
     setError('');
     try {
-      const identifier = email.trim().toLowerCase();
       const { data } = await api.post('/api/auth/login', {
-        email: identifier,
-        username: identifier,
+        email: email.trim().toLowerCase(),
         password,
       });
-
-      // ✅ Removed the rogue "+" that was breaking things
       localStorage.setItem('token', data.token);
       localStorage.setItem('role', data.user?.role || '');
       navigate('/dashboard');
@@ -56,7 +51,7 @@ export default function Login() {
   return (
     <>
       <div className="min-h-screen flex flex-col md:flex-row">
-        {/* Left Panel: Branded side */}
+        {/* Left Panel */}
         <div className="hidden md:flex md:w-1/2 lg:w-2/5 bg-slate-900 text-white p-12 flex-col justify-between">
           <div>
             <div className="flex items-center gap-3">
@@ -74,7 +69,7 @@ export default function Login() {
           </p>
         </div>
 
-        {/* Right Panel: Login Form */}
+        {/* Right Panel */}
         <div className="w-full md:w-1/2 lg:w-3/5 bg-slate-50 flex flex-col items-center justify-center p-4">
           <div className="w-full max-w-sm">
             <h2 className="text-3xl font-extrabold text-slate-900 text-center">
@@ -137,7 +132,6 @@ export default function Login() {
                 Sign In
               </button>
             </form>
-
             <p className="mt-6 text-center text-sm text-slate-600">
               Don&apos;t have an account?{' '}
               <button
