@@ -2,14 +2,14 @@
 const express = require('express');
 const { query, body } = require('express-validator');
 const ctrl = require('../controllers/locationsController');
-const { handleValidation } = require('shared-auth');
+const { handleValidation, authMiddleware } = require('shared-auth');
 
 const router = express.Router();
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
-router.use(asyncHandler(authenticate));
+router.use(asyncHandler(authMiddleware));
 
 router.get(
   '/',
