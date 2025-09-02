@@ -66,7 +66,6 @@ app.use(
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
-const errorHandler = require(errorHandler);
 app.use(errorHandler);
 
 const PORT = Number(process.env.PORT) || 8000;
