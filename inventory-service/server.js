@@ -18,6 +18,7 @@ const {
 const inventoryRouter = require('./routes/inventory');
 const labelsRouter = require('./routes/labels');
 const locationsRouter = require('./routes/locations');
+const { error } = require('console');
 
 const app = express();
 
@@ -65,7 +66,7 @@ app.use(
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
-const errorHandler = require('./middleware/errorHandler');
+const errorHandler = require(errorHandler);
 app.use(errorHandler);
 
 const PORT = Number(process.env.PORT) || 8000;
