@@ -2,8 +2,7 @@
 const express = require('express');
 const { body, param } = require('express-validator');
 const userController = require('../controllers/userController');
-const requireRole = require('../middleware/requireRole'); // Import the middleware
-const { handleValidation } = require('../middleware/validationMiddleware');
+const { requireRole, handleValidation } = require('shared-auth'); // Import the middleware
 
 const router = express.Router();
 

@@ -8,6 +8,7 @@ const {
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 
 const clientsRouter = require('./routes/clients');
 
@@ -19,9 +20,10 @@ app.use(express.json());
 // 🔐 Protect API routes (except health)
 app.use('/api', authMiddleware);
 
-// Secure all routes in this service by checking for a valid token
-app.use(authMiddleware);
+// Serve uploaded logos
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Routes
 app.use('/api/clients', clientsRouter);
 
 const PORT = Number(process.env.PORT) || 8003;

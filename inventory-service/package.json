@@ -27,8 +27,8 @@
     "multer": "^2.0.2",
     "pg": "^8.16.3",
     "postgres": "^3.4.7",
-    "xlsx": "^0.18.5",
-    "shared-auth": "file:../packages/shared-auth"
+    "shared-auth": "file:../packages/shared-auth",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "cross-env": "^10.0.0",

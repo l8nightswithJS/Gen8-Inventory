@@ -1,5 +1,5 @@
 // inventory-service/controllers/inventoryController.js
-const supabase = require('../lib/supabaseClient');
+const pool = require('../db/pool');
 const {
   computeLowState,
   cleanAttributes,
@@ -13,7 +13,6 @@ function rowToItem(row) {
     client_id: row.client_id,
     attributes: row.attributes || {},
     created_at: row.created_at || null,
-    // our table has last_updated; some environments may also have updated_at
     updated_at: row.last_updated || row.updated_at || null,
   };
 }
@@ -31,7 +30,6 @@ function autoResetAcknowledge(attrs = {}) {
 // ---------- Alerts ----------
 
 // GET /api/items/alerts?client_id=123
-// Return ONLY items that are low AND not acknowledged
 exports.getActiveAlerts = async (req, res, next) => {
   try {
     const clientId = Number(req.query.client_id);
@@ -39,14 +37,12 @@ exports.getActiveAlerts = async (req, res, next) => {
       return res.status(400).json({ message: 'client_id is required' });
     }
 
-    const { data: items, error } = await supabase
-      .from('items')
-      .select('id, client_id, attributes, last_updated')
-      .eq('client_id', clientId);
+    const result = await pool.query(
+      'SELECT id, client_id, attributes, last_updated FROM items WHERE client_id = $1',
+      [clientId],
+    );
 
-    if (error) throw error;
-
-    const alerts = (items || []).flatMap((row) => {
+    const alerts = result.rows.flatMap((row) => {
       const attrs = row.attributes || {};
       if (attrs.alert_acknowledged_at) return [];
 
@@ -55,7 +51,7 @@ exports.getActiveAlerts = async (req, res, next) => {
 
       return [
         {
-          id: row.id, // keep id simple for the acknowledge endpoint
+          id: row.id,
           triggered_at: row.last_updated || new Date().toISOString(),
           item: { id: row.id, client_id: row.client_id, attributes: attrs },
           reason,
@@ -79,14 +75,16 @@ exports.acknowledgeAlert = async (req, res, next) => {
       return res.status(400).json({ message: 'Invalid id' });
     }
 
-    const { data: existing, error: exErr } = await supabase
-      .from('items')
-      .select('attributes')
-      .eq('id', id)
-      .single();
-    if (exErr) throw exErr;
+    const existing = await pool.query(
+      'SELECT attributes FROM items WHERE id = $1',
+      [id],
+    );
 
-    const attrs = (existing && existing.attributes) || {};
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ message: 'Not found' });
+    }
+
+    const attrs = existing.rows[0].attributes || {};
     if (attrs.alert_acknowledged_at) {
       return res.json({ message: 'Already acknowledged' });
     }
@@ -96,11 +94,10 @@ exports.acknowledgeAlert = async (req, res, next) => {
       alert_acknowledged_at: new Date().toISOString(),
     };
 
-    const { error: upErr } = await supabase
-      .from('items')
-      .update({ attributes: updated })
-      .eq('id', id);
-    if (upErr) throw upErr;
+    await pool.query('UPDATE items SET attributes = $1 WHERE id = $2', [
+      updated,
+      id,
+    ]);
 
     res.json({ message: 'Acknowledged' });
   } catch (err) {
@@ -118,14 +115,11 @@ exports.listItems = async (req, res, next) => {
       return res.status(400).json({ message: 'client_id is required' });
     }
 
-    const { data, error } = await supabase
-      .from('items')
-      .select('*')
-      .eq('client_id', clientId)
-      .order('id', { ascending: true });
-
-    if (error) throw error;
-    res.json((data || []).map(rowToItem));
+    const result = await pool.query(
+      'SELECT * FROM items WHERE client_id = $1 ORDER BY id ASC',
+      [clientId],
+    );
+    res.json(result.rows.map(rowToItem));
   } catch (err) {
     next(err);
   }
@@ -139,22 +133,18 @@ exports.getItemById = async (req, res, next) => {
       return res.status(400).json({ message: 'Invalid id' });
     }
 
-    const { data, error } = await supabase
-      .from('items')
-      .select('*')
-      .eq('id', id)
-      .single();
+    const result = await pool.query('SELECT * FROM items WHERE id = $1', [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Not found' });
+    }
 
-    if (error) throw error;
-    if (!data) return res.status(404).json({ message: 'Not found' });
-
-    res.json(rowToItem(data));
+    res.json(rowToItem(result.rows[0]));
   } catch (err) {
     next(err);
   }
 };
 
-// POST /api/items { client_id, attributes }
+// POST /api/items
 exports.createItem = async (req, res, next) => {
   try {
     const { client_id, attributes } = req.body || {};
@@ -168,20 +158,18 @@ exports.createItem = async (req, res, next) => {
 
     const cleaned = autoResetAcknowledge(cleanAttributes(attributes));
 
-    const { data, error } = await supabase
-      .from('items')
-      .insert([{ client_id: clientId, attributes: cleaned }])
-      .select('*')
-      .single();
+    const result = await pool.query(
+      'INSERT INTO items (client_id, attributes) VALUES ($1, $2) RETURNING *',
+      [clientId, cleaned],
+    );
 
-    if (error) throw error;
-    res.status(201).json(rowToItem(data));
+    res.status(201).json(rowToItem(result.rows[0]));
   } catch (err) {
     next(err);
   }
 };
 
-// PUT /api/items/:id?merge=true { attributes }
+// PUT /api/items/:id?merge=true
 exports.updateItem = async (req, res, next) => {
   try {
     const id = Number(req.params.id);
@@ -195,22 +183,22 @@ exports.updateItem = async (req, res, next) => {
       return res.status(400).json({ message: 'attributes object is required' });
     }
 
-    // Clean the values, but keep the raw payload so we can detect explicit clears.
     const cleaned = cleanAttributes(attributes);
     let newAttributes = cleaned;
 
     if (merge) {
-      const { data: existing, error: exErr } = await supabase
-        .from('items')
-        .select('attributes')
-        .eq('id', id)
-        .single();
-      if (exErr) throw exErr;
+      const existing = await pool.query(
+        'SELECT attributes FROM items WHERE id = $1',
+        [id],
+      );
 
-      const prior = (existing && existing.attributes) || {};
+      if (existing.rows.length === 0) {
+        return res.status(404).json({ message: 'Not found' });
+      }
+
+      const prior = existing.rows[0].attributes || {};
       newAttributes = { ...prior, ...cleaned };
 
-      // explicit clears: if payload sent "" or null for a key, drop it
       for (const [rawKey, rawVal] of Object.entries(attributes)) {
         const key = normalizeKey(rawKey);
         if (!key) continue;
@@ -225,15 +213,16 @@ exports.updateItem = async (req, res, next) => {
 
     newAttributes = autoResetAcknowledge(newAttributes);
 
-    const { data, error } = await supabase
-      .from('items')
-      .update({ attributes: newAttributes })
-      .eq('id', id)
-      .select('*')
-      .single();
+    const result = await pool.query(
+      'UPDATE items SET attributes = $1, last_updated = NOW() WHERE id = $2 RETURNING *',
+      [newAttributes, id],
+    );
 
-    if (error) throw error;
-    res.json(rowToItem(data));
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Not found' });
+    }
+
+    res.json(rowToItem(result.rows[0]));
   } catch (err) {
     next(err);
   }
@@ -247,20 +236,22 @@ exports.deleteItem = async (req, res, next) => {
       return res.status(400).json({ message: 'Invalid id' });
     }
 
-    const { error, count } = await supabase
-      .from('items')
-      .delete({ count: 'exact' })
-      .eq('id', id);
+    const result = await pool.query(
+      'DELETE FROM items WHERE id = $1 RETURNING *',
+      [id],
+    );
 
-    if (error) throw error;
-    if (count === 0) return res.status(404).json({ message: 'Not found' });
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Not found' });
+    }
+
     res.json({ message: 'Item deleted' });
   } catch (err) {
     next(err);
   }
 };
 
-// POST /api/items/bulk  (alias: /api/items/import)
+// POST /api/items/bulk
 exports.bulkImportItems = async (req, res, next) => {
   try {
     const clientId = Number(req.body.client_id);
@@ -286,43 +277,44 @@ exports.bulkImportItems = async (req, res, next) => {
       return res.status(400).json({ message: 'No valid item rows' });
     }
 
-    const { data: inserted, error } = await supabase
-      .from('items')
-      .insert(rows)
-      .select('*');
-
-    if (error) throw error;
+    const inserted = await pool.query(
+      'INSERT INTO items (client_id, attributes) VALUES ' +
+        rows.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(', ') +
+        ' RETURNING *',
+      rows.flatMap((r) => [r.client_id, r.attributes]),
+    );
 
     res.status(201).json({
       message: 'Bulk import successful',
-      successCount: inserted?.length || 0,
-      failCount: rows.length - (inserted?.length || 0),
+      successCount: inserted.rows.length,
+      failCount: rows.length - inserted.rows.length,
     });
   } catch (err) {
     next(err);
   }
 };
 
-// Optional: CSV export used by the “Export” button
+// GET /api/items/export?client_id=123
 exports.exportItems = async (req, res, next) => {
   try {
     const clientId = Number(req.query.client_id);
     if (!Number.isInteger(clientId)) {
       return res.status(400).json({ message: 'client_id is required' });
     }
-    const { data, error } = await supabase
-      .from('items')
-      .select('id, client_id, attributes, last_updated')
-      .eq('client_id', clientId)
-      .order('id', { ascending: true });
-    if (error) throw error;
 
-    const rows = data || [];
+    const result = await pool.query(
+      'SELECT id, client_id, attributes, last_updated FROM items WHERE client_id = $1 ORDER BY id ASC',
+      [clientId],
+    );
+
+    const rows = result.rows || [];
     const keys = Array.from(
       new Set(rows.flatMap((r) => Object.keys(r.attributes || {}))),
     );
+
     const header = ['id', 'client_id', 'last_updated', ...keys];
     const csvLines = [header.join(',')];
+
     for (const r of rows) {
       const base = [r.id, r.client_id, r.last_updated || ''];
       const attrs = r.attributes || {};
@@ -330,7 +322,6 @@ exports.exportItems = async (req, res, next) => {
         const v = attrs[k];
         if (v == null) return '';
         const s = String(v);
-        // naive CSV escape
         return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
       });
       csvLines.push([...base, ...vals].join(','));

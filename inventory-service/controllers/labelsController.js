@@ -1,6 +1,6 @@
 // inventory-service/controllers/labelsController.js
 const net = require('net');
-const supabase = require('../lib/supabaseClient');
+const pool = require('../db/pool');
 
 // ====== ENV CONFIG (with safe defaults) ======
 const PRINTER_HOST = process.env.ZEBRA_HOST || process.env.PRINTER_HOST;
@@ -10,7 +10,7 @@ const PRINTER_PORT = Number(
 const LABEL_WIDTH = Number(process.env.ZPL_LABEL_WIDTH || 812);
 const LABEL_HEIGHT = Number(process.env.ZPL_LABEL_HEIGHT || 406);
 const COPIES = Math.max(1, Number(process.env.ZPL_COPIES || 1));
-const BATCH_SIZE = Number(process.env.PRINT_BATCH_SIZE || 100); // Batch size for printing
+const BATCH_SIZE = Number(process.env.PRINT_BATCH_SIZE || 100);
 
 // ====== SMALL HELPERS (Unchanged) ======
 const QTY_KEYS = ['quantity', 'on_hand', 'qty_in_stock', 'stock'];
@@ -119,40 +119,36 @@ async function printRowsAsZpl(rows) {
 }
 
 // ====== REFACTORED CONTROLLERS ======
+
+// @desc Print all labels for a given client
+// @route POST /api/labels/print/all
 exports.printAllForClient = async (req, res, next) => {
   try {
     const clientId = parseInt(req.body.client_id ?? req.query.client_id, 10);
     if (isNaN(clientId)) {
-      const e = new Error('client_id is required');
-      e.status = 400;
-      throw e;
+      return res.status(400).json({ message: 'client_id is required' });
     }
 
-    const { data: client, error: cErr } = await supabase
-      .from('clients')
-      .select('id,name')
-      .eq('id', clientId)
-      .single();
-    if (cErr) throw cErr;
-    if (!client) {
-      const e = new Error('Client not found');
-      e.status = 404;
-      throw e;
+    const clientResult = await pool.query(
+      'SELECT id, name FROM clients WHERE id = $1',
+      [clientId],
+    );
+    if (clientResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Client not found' });
     }
+    const client = clientResult.rows[0];
 
     let page = 0;
     let totalPrinted = 0;
 
     while (true) {
-      const { data: items, error } = await supabase
-        .from('items')
-        .select('id, client_id, attributes')
-        .eq('client_id', clientId)
-        .order('id', { ascending: true })
-        .range(page * BATCH_SIZE, (page + 1) * BATCH_SIZE - 1);
+      const result = await pool.query(
+        'SELECT id, client_id, attributes FROM items WHERE client_id = $1 ORDER BY id ASC OFFSET $2 LIMIT $3',
+        [clientId, page * BATCH_SIZE, BATCH_SIZE],
+      );
 
-      if (error) throw error;
-      if (!items || items.length === 0) break;
+      const items = result.rows;
+      if (items.length === 0) break;
 
       const rows = items.map((it) => ({ clientName: client.name, item: it }));
       await printRowsAsZpl(rows);
@@ -173,6 +169,8 @@ exports.printAllForClient = async (req, res, next) => {
   }
 };
 
+// @desc Print labels for selected items
+// @route POST /api/labels/print/selected
 exports.printSelected = async (req, res, next) => {
   try {
     const ids = Array.isArray(req.body.item_ids)
@@ -181,9 +179,7 @@ exports.printSelected = async (req, res, next) => {
           .filter((id) => !isNaN(id))
       : [];
     if (!ids.length) {
-      const e = new Error('item_ids array is required');
-      e.status = 400;
-      throw e;
+      return res.status(400).json({ message: 'item_ids array is required' });
     }
 
     const idBatches = [];
@@ -195,20 +191,23 @@ exports.printSelected = async (req, res, next) => {
     let clientName = '';
 
     for (const batch of idBatches) {
-      const { data: items, error } = await supabase
-        .from('items')
-        .select('id, client_id, attributes, clients(name)')
-        .in('id', batch);
+      const result = await pool.query(
+        `SELECT i.id, i.client_id, i.attributes, c.name AS client_name
+         FROM items i
+         JOIN clients c ON c.id = i.client_id
+         WHERE i.id = ANY($1::int[])`,
+        [batch],
+      );
 
-      if (error) throw error;
-      if (!items || items.length === 0) continue;
+      const items = result.rows;
+      if (!items.length) continue;
 
-      if (!clientName && items[0].clients) {
-        clientName = items[0].clients.name || '';
+      if (!clientName && items[0].client_name) {
+        clientName = items[0].client_name;
       }
 
       const rows = items.map((it) => ({
-        clientName: it.clients?.name || clientName,
+        clientName: it.client_name || clientName,
         item: it,
       }));
       await printRowsAsZpl(rows);

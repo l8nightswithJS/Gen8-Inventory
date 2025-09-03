@@ -1,17 +1,35 @@
 // client-service/controllers/clientsController.js
 const fs = require('fs');
 const path = require('path');
-const supabase = require('../lib/supabaseClient');
+const pool = require('../db/pool'); // <-- PostgreSQL connection (pg Pool)
+
+// Helper: Upload logos to local /uploads (removed Supabase storage dependency)
+async function uploadLogo(localPath, fileName) {
+  try {
+    const uploadDir = path.join(__dirname, '..', 'uploads');
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+    const destPath = path.join(uploadDir, fileName);
+    fs.copyFileSync(localPath, destPath);
+
+    // Clean up temp file
+    try {
+      fs.unlinkSync(localPath);
+    } catch {}
+
+    // Return a relative URL (static server must expose /uploads)
+    return `/uploads/${fileName}`;
+  } catch (e) {
+    console.warn('⚠️ Upload failed, using local file path', e.message);
+    return `/uploads/${path.basename(localPath)}`;
+  }
+}
 
 // GET /api/clients
 exports.getAllClients = async (req, res, next) => {
   try {
-    const { data, error } = await supabase
-      .from('clients')
-      .select('*')
-      .order('id', { ascending: true });
-    if (error) throw error;
-    res.json(data || []);
+    const result = await pool.query('SELECT * FROM clients ORDER BY id ASC');
+    res.json(result.rows || []);
   } catch (err) {
     next(err);
   }
@@ -22,39 +40,18 @@ exports.getClientById = async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ message: 'Invalid id' });
-    const { data, error } = await supabase
-      .from('clients')
-      .select('*')
-      .eq('id', id)
-      .single();
-    if (error) throw error;
-    if (!data) return res.status(404).json({ message: 'Not found' });
-    res.json(data);
+
+    const result = await pool.query('SELECT * FROM clients WHERE id = $1', [
+      id,
+    ]);
+    if (result.rows.length === 0)
+      return res.status(404).json({ message: 'Not found' });
+
+    res.json(result.rows[0]);
   } catch (err) {
     next(err);
   }
 };
-
-// Upload helper to Supabase bucket 'client-logos'
-async function uploadToBucket(localPath, fileName) {
-  try {
-    const fileBuffer = fs.readFileSync(localPath);
-    const { error: upErr } = await supabase.storage
-      .from('client-logos')
-      .upload(fileName, fileBuffer, { upsert: true, contentType: 'image/png' });
-    if (upErr) throw upErr;
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from('client-logos').getPublicUrl(fileName);
-    return publicUrl;
-  } catch (e) {
-    console.warn(
-      '⚠️ Upload to bucket failed, will use local file URL',
-      e.message,
-    );
-    return null;
-  }
-}
 
 // POST /api/clients
 exports.createClient = async (req, res, next) => {
@@ -67,38 +64,30 @@ exports.createClient = async (req, res, next) => {
     if (barcode === '') barcode = null;
 
     let logoUrl = req.body.logo_url || null;
-
     if (req.file) {
       const fileName = `${Date.now()}_${req.file.originalname}`;
       const localPath = req.file.path;
-      const publicUrl = await uploadToBucket(localPath, fileName);
-      logoUrl = publicUrl || `/uploads/${path.basename(localPath)}`;
-      try {
-        fs.unlinkSync(localPath);
-      } catch {}
+      logoUrl = await uploadLogo(localPath, fileName);
     }
 
-    const insertObj = { name, logo_url: logoUrl };
-    if (barcode != null) insertObj.barcode = barcode;
+    const insertObj = { name, logo_url: logoUrl, barcode };
 
-    const { data, error } = await supabase
-      .from('clients')
-      .insert([insertObj])
-      .select('*')
-      .single();
+    const result = await pool.query(
+      `INSERT INTO clients (name, logo_url, barcode)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [insertObj.name, insertObj.logo_url, insertObj.barcode],
+    );
 
-    if (error) {
-      if (
-        error.code === '23505' ||
-        /duplicate key value/i.test(error.message || '')
-      ) {
-        return res.status(409).json({ message: 'Barcode already in use' });
-      }
-      throw error;
-    }
-
-    res.status(201).json(data);
+    res.status(201).json(result.rows[0]);
   } catch (err) {
+    // Handle unique constraint violation (duplicate barcode)
+    if (
+      err.code === '23505' ||
+      /duplicate key value/i.test(err.message || '')
+    ) {
+      return res.status(409).json({ message: 'Barcode already in use' });
+    }
     next(err);
   }
 };
@@ -124,34 +113,38 @@ exports.updateClient = async (req, res, next) => {
     if (req.file) {
       const fileName = `${Date.now()}_${req.file.originalname}`;
       const localPath = req.file.path;
-      const publicUrl = await uploadToBucket(localPath, fileName);
-      fields.logo_url = publicUrl || `/uploads/${path.basename(localPath)}`;
-      try {
-        fs.unlinkSync(localPath);
-      } catch {}
+      fields.logo_url = await uploadLogo(localPath, fileName);
     } else if (typeof req.body.logo_url === 'string') {
       fields.logo_url = req.body.logo_url;
     }
 
-    const { data, error } = await supabase
-      .from('clients')
-      .update(fields)
-      .eq('id', id)
-      .select('*')
-      .single();
+    const setClauses = Object.keys(fields)
+      .map((key, idx) => `${key} = $${idx + 1}`)
+      .join(', ');
+    const values = Object.values(fields);
 
-    if (error) {
-      if (
-        error.code === '23505' ||
-        /duplicate key value/i.test(error.message || '')
-      ) {
-        return res.status(409).json({ message: 'Barcode already in use' });
-      }
-      throw error;
+    if (setClauses.length === 0) {
+      return res.status(400).json({ message: 'No fields to update' });
     }
 
-    res.json(data);
+    const result = await pool.query(
+      `UPDATE clients SET ${setClauses} WHERE id = $${
+        values.length + 1
+      } RETURNING *`,
+      [...values, id],
+    );
+
+    if (result.rows.length === 0)
+      return res.status(404).json({ message: 'Not found' });
+
+    res.json(result.rows[0]);
   } catch (err) {
+    if (
+      err.code === '23505' ||
+      /duplicate key value/i.test(err.message || '')
+    ) {
+      return res.status(409).json({ message: 'Barcode already in use' });
+    }
     next(err);
   }
 };
@@ -162,13 +155,14 @@ exports.deleteClient = async (req, res, next) => {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ message: 'Invalid id' });
 
-    const { error, count } = await supabase
-      .from('clients')
-      .delete({ count: 'exact' })
-      .eq('id', id);
+    const result = await pool.query(
+      'DELETE FROM clients WHERE id = $1 RETURNING *',
+      [id],
+    );
 
-    if (error) throw error;
-    if (count === 0) return res.status(404).json({ message: 'Not found' });
+    if (result.rows.length === 0)
+      return res.status(404).json({ message: 'Not found' });
+
     res.json({ message: 'Client deleted' });
   } catch (err) {
     next(err);

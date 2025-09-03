@@ -1,13 +1,8 @@
-const {
-  authMiddleware,
-  requireRole,
-  requireClientMatch,
-  handleValidation,
-} = require('shared-auth');
 // barcode-service/server.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const { authMiddleware } = require('shared-auth');
 
 const barcodeRoutes = require('./routes/barcodes');
 const scanRouter = require('./routes/scan');
@@ -20,11 +15,12 @@ app.use(express.json());
 // 🔐 Protect API routes (except health)
 app.use('/api', authMiddleware);
 
-// Secure all routes in this service
-app.use(authMiddleware);
-
+// Routes
 app.use('/api/barcodes', barcodeRoutes);
 app.use('/api/scan', scanRouter);
+
+// Health endpoint
+app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
 const PORT = Number(process.env.PORT) || 8002;
 app.listen(PORT, '0.0.0.0', () => {

@@ -1,5 +1,5 @@
 // barcode-service/controllers/barcodesController.js
-const supabase = require('../lib/supabaseClient');
+const pool = require('../db/pool');
 
 function toRow(r) {
   return {
@@ -14,8 +14,7 @@ function toRow(r) {
 
 /**
  * GET /api/barcodes/lookup?code=XXX&client_id=123
- * Finds the item for a scanned barcode. Client scoping is optional;
- * if provided, we require it to match.
+ * Finds the item for a scanned barcode.
  */
 exports.lookup = async (req, res, next) => {
   try {
@@ -26,39 +25,39 @@ exports.lookup = async (req, res, next) => {
       ? parseInt(req.query.client_id, 10)
       : null;
 
-    let q = supabase
-      .from('item_barcodes')
-      .select('id, client_id, item_id, barcode, symbology, created_at')
-      .eq('barcode', code)
-      .limit(1);
+    let query =
+      'SELECT id, client_id, item_id, barcode, symbology, created_at FROM item_barcodes WHERE barcode = $1';
+    const params = [code];
+    if (!isNaN(clientId)) {
+      query += ' AND client_id = $2';
+      params.push(clientId);
+    }
+    query += ' LIMIT 1';
 
-    if (!isNaN(clientId)) q = q.eq('client_id', clientId);
+    const rows = await pool.query(query, params);
 
-    const { data: rows, error } = await q;
-    if (error) throw error;
-
-    if (!rows || rows.length === 0) {
+    if (rows.rowCount === 0) {
       return res.status(404).json({ message: 'Not found' });
     }
 
-    // Optionally include the item’s attributes for convenience
-    const { data: item, error: itemErr } = await supabase
-      .from('items')
-      .select('id, client_id, attributes')
-      .eq('id', rows[0].item_id)
-      .single();
-    if (itemErr) throw itemErr;
+    const mapping = toRow(rows.rows[0]);
 
-    return res.json({
-      mapping: toRow(rows[0]),
-      item: item
+    // Fetch item details
+    const itemRes = await pool.query(
+      'SELECT id, client_id, attributes FROM items WHERE id = $1',
+      [mapping.item_id],
+    );
+
+    const item =
+      itemRes.rowCount > 0
         ? {
-            id: item.id,
-            client_id: item.client_id,
-            attributes: item.attributes || {},
+            id: itemRes.rows[0].id,
+            client_id: itemRes.rows[0].client_id,
+            attributes: itemRes.rows[0].attributes || {},
           }
-        : null,
-    });
+        : null;
+
+    return res.json({ mapping, item });
   } catch (err) {
     next(err);
   }
@@ -73,14 +72,12 @@ exports.listForItem = async (req, res, next) => {
     if (isNaN(itemId))
       return res.status(400).json({ message: 'Invalid item id' });
 
-    const { data, error } = await supabase
-      .from('item_barcodes')
-      .select('id, client_id, item_id, barcode, symbology, created_at')
-      .eq('item_id', itemId)
-      .order('created_at', { ascending: true });
+    const result = await pool.query(
+      'SELECT id, client_id, item_id, barcode, symbology, created_at FROM item_barcodes WHERE item_id = $1 ORDER BY created_at ASC',
+      [itemId],
+    );
 
-    if (error) throw error;
-    res.json((data || []).map(toRow));
+    res.json(result.rows.map(toRow));
   } catch (err) {
     next(err);
   }
@@ -88,8 +85,7 @@ exports.listForItem = async (req, res, next) => {
 
 /**
  * POST /api/barcodes
- * Body: { client_id, item_id, barcode, symbology? }
- * - Ensures barcode is globally unique.
+ * Ensures barcode is globally unique.
  */
 exports.assign = async (req, res, next) => {
   try {
@@ -106,32 +102,28 @@ exports.assign = async (req, res, next) => {
         .json({ message: 'client_id, item_id and barcode are required' });
     }
 
-    // Reject duplicates (global uniqueness)
-    const { data: exists, error: exErr } = await supabase
-      .from('item_barcodes')
-      .select('id, item_id, client_id')
-      .eq('barcode', barcode)
-      .maybeSingle();
-    if (exErr) throw exErr;
-    if (exists) {
+    // Check uniqueness
+    const exists = await pool.query(
+      'SELECT id, item_id, client_id FROM item_barcodes WHERE barcode = $1 LIMIT 1',
+      [barcode],
+    );
+    if (exists.rowCount > 0) {
       return res.status(409).json({
         message: 'Barcode already assigned',
         existing: {
-          id: exists.id,
-          item_id: exists.item_id,
-          client_id: exists.client_id,
+          id: exists.rows[0].id,
+          item_id: exists.rows[0].item_id,
+          client_id: exists.rows[0].client_id,
         },
       });
     }
 
-    const { data, error } = await supabase
-      .from('item_barcodes')
-      .insert([{ client_id: clientId, item_id: itemId, barcode, symbology }])
-      .select('id, client_id, item_id, barcode, symbology, created_at')
-      .single();
-    if (error) throw error;
+    const result = await pool.query(
+      'INSERT INTO item_barcodes (client_id, item_id, barcode, symbology) VALUES ($1, $2, $3, $4) RETURNING id, client_id, item_id, barcode, symbology, created_at',
+      [clientId, itemId, barcode, symbology],
+    );
 
-    res.status(201).json(toRow(data));
+    res.status(201).json(toRow(result.rows[0]));
   } catch (err) {
     next(err);
   }
@@ -145,13 +137,14 @@ exports.remove = async (req, res, next) => {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ message: 'Invalid id' });
 
-    const { error, count } = await supabase
-      .from('item_barcodes')
-      .delete({ count: 'exact' })
-      .eq('id', id);
+    const result = await pool.query(
+      'DELETE FROM item_barcodes WHERE id = $1 RETURNING id',
+      [id],
+    );
 
-    if (error) throw error;
-    if (!count) return res.status(404).json({ message: 'Not found' });
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: 'Not found' });
+    }
 
     res.json({ message: 'Deleted' });
   } catch (err) {

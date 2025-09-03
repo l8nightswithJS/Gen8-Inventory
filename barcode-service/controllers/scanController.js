@@ -1,7 +1,7 @@
 // barcode-service/controllers/scanController.js
-const supabase = require('../lib/supabaseClient');
+const pool = require('../db/pool');
 
-const handleSupabaseError = (res, error, context) => {
+const handleDbError = (res, error, context) => {
   console.error(`Error in ${context}:`, error);
   return res.status(500).json({
     message: `Internal server error during ${context}`,
@@ -21,57 +21,44 @@ exports.processScan = async (req, res) => {
       .json({ message: 'barcode and client_id are required' });
   }
 
-  // 1. Check if it's a Location barcode
-  const { data: location, error: locationError } = await supabase
-    .from('locations')
-    .select('*')
-    .eq('client_id', client_id)
-    .eq('code', barcode)
-    .single();
+  try {
+    // 1. Check if it's a Location barcode
+    const locationResult = await pool.query(
+      'SELECT * FROM locations WHERE client_id = $1 AND code = $2 LIMIT 1',
+      [client_id, barcode],
+    );
 
-  if (locationError && locationError.code !== 'PGRST116') {
-    // Ignore "no rows found" error
-    return handleSupabaseError(res, locationError, 'processScan (location)');
-  }
+    if (locationResult.rowCount > 0) {
+      const location = locationResult.rows[0];
 
-  if (location) {
-    // If location is found, fetch its inventory
-    const { data: inventory, error: inventoryError } = await supabase
-      .from('inventory')
-      .select('quantity, items(*)')
-      .eq('location_id', location.id);
-
-    if (inventoryError) {
-      return handleSupabaseError(
-        res,
-        inventoryError,
-        'processScan (inventory)',
+      // Fetch inventory at this location
+      const inventoryResult = await pool.query(
+        `SELECT i.*, inv.quantity
+         FROM inventory inv
+         JOIN items i ON i.id = inv.item_id
+         WHERE inv.location_id = $1`,
+        [location.id],
       );
+
+      const response = { ...location, items: inventoryResult.rows || [] };
+      return res.json({ type: 'location', data: response });
     }
 
-    const response = { ...location, items: inventory || [] };
-    return res.json({ type: 'location', data: response });
+    // 2. If not a location, check if it's an Item barcode
+    const itemResult = await pool.query(
+      'SELECT * FROM items WHERE client_id = $1 AND barcode = $2 LIMIT 1',
+      [client_id, barcode],
+    );
+
+    if (itemResult.rowCount > 0) {
+      return res.json({ type: 'item', data: itemResult.rows[0] });
+    }
+
+    // 3. If no match is found
+    return res
+      .status(404)
+      .json({ message: `Barcode "${barcode}" not found for this client.` });
+  } catch (error) {
+    return handleDbError(res, error, 'processScan');
   }
-
-  // 2. If not a location, check if it's an Item barcode
-  const { data: item, error: itemError } = await supabase
-    .from('items')
-    .select('*')
-    .eq('client_id', client_id)
-    .eq('barcode', barcode)
-    .single();
-
-  if (itemError && itemError.code !== 'PGRST116') {
-    // Ignore "no rows found" error
-    return handleSupabaseError(res, itemError, 'processScan (item)');
-  }
-
-  if (item) {
-    return res.json({ type: 'item', data: item });
-  }
-
-  // 3. If no match is found
-  return res
-    .status(404)
-    .json({ message: `Barcode "${barcode}" not found for this client.` });
 };
