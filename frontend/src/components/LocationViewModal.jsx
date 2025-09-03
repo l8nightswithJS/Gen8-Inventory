@@ -4,7 +4,7 @@ import Button from './ui/Button';
 import BaseModal from './ui/BaseModal';
 
 export default function LocationViewModal({ location, isOpen, onClose }) {
-  const inventoryItems = location?.items || [];
+  const inventoryItems = Array.isArray(location?.items) ? location.items : [];
   const descId = 'location-modal-desc';
 
   return (
@@ -25,7 +25,7 @@ export default function LocationViewModal({ location, isOpen, onClose }) {
         <FiBox className="text-blue-600" size={24} />
         <div>
           <h3 className="text-lg font-bold text-slate-800">Location Details</h3>
-          <p className="text-sm text-slate-500">{location?.code}</p>
+          <p className="text-sm text-slate-500">{location?.code || '—'}</p>
         </div>
       </div>
 
@@ -34,30 +34,43 @@ export default function LocationViewModal({ location, isOpen, onClose }) {
         <p className="mb-6 text-sm text-slate-700">
           {location?.description || 'No description provided.'}
         </p>
-        <h4 className="mb-3 font-bold text-slate-800">
+
+        <h4
+          className="mb-3 font-bold text-slate-800"
+          aria-label="Inventory at this location"
+        >
           Inventory at this Location
         </h4>
+
         <div className="space-y-3">
           {inventoryItems.length > 0 ? (
-            inventoryItems.map(({ quantity, items: item }) => (
-              <div
-                key={item.id}
-                className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3"
-              >
-                <div className="flex items-center gap-3">
-                  <FiPackage className="text-slate-500" />
-                  <span className="font-medium text-slate-700">
-                    {item.attributes?.name || 'Unknown Item'}
-                  </span>
+            inventoryItems.map((entry) => {
+              const item = entry.item || entry.items; // support both shapes
+              const quantity = entry.quantity ?? 0;
+              const name =
+                item?.attributes?.name ||
+                item?.attributes?.part_number ||
+                item?.attributes?.description ||
+                'Unknown Item';
+
+              return (
+                <div
+                  key={item?.id || Math.random()}
+                  className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <FiPackage className="text-slate-500" />
+                    <span className="font-medium text-slate-700">{name}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-lg font-bold text-slate-800">
+                      {quantity}
+                    </span>
+                    <span className="ml-1 text-xs text-slate-500">units</span>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <span className="text-lg font-bold text-slate-800">
-                    {quantity}
-                  </span>
-                  <span className="ml-1 text-xs text-slate-500">units</span>
-                </div>
-              </div>
-            ))
+              );
+            })
           ) : (
             <p className="rounded-lg bg-slate-50 py-6 text-center text-sm text-slate-500">
               This location is empty.

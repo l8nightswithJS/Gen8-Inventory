@@ -108,7 +108,6 @@ const SortableHeader = ({
   sortConfig,
   className,
 }) => {
-  // This component is now safe because sortConfig has a default value
   const isSorted = sortConfig.key === sortKey;
   const isAsc = sortConfig.direction === 'ascending';
   return (
@@ -136,7 +135,6 @@ export default function InventoryTable({
   items,
   totalItems,
   columns = [],
-  // FIX: Provide a default value for sortConfig to prevent the crash
   sortConfig = { key: null, direction: 'ascending' },
   onSort,
   page,
@@ -187,6 +185,7 @@ export default function InventoryTable({
             {columns.map((key) => (
               <th
                 key={key}
+                scope="col" // ✅ Accessibility improvement
                 className={`px-4 py-3 text-[12px] font-semibold uppercase text-slate-600 ${
                   isNumericLike(key) ? 'text-right' : 'text-left'
                 }`}
@@ -202,7 +201,10 @@ export default function InventoryTable({
               </th>
             ))}
             {role === 'admin' && (
-              <th className="px-4 py-3 text-center text-[12px] font-semibold uppercase text-slate-600 w-28">
+              <th
+                scope="col"
+                className="px-4 py-3 text-center text-[12px] font-semibold uppercase text-slate-600 w-28"
+              >
                 Actions
               </th>
             )}
@@ -314,9 +316,20 @@ export default function InventoryTable({
 
   const MobileCards = () => (
     <div>
-      {safeItems.map((it) => (
-        <MobileCard key={it.id} item={it} onEdit={onEdit} onDelete={onDelete} />
-      ))}
+      {safeItems.length === 0 ? (
+        <p className="text-center text-gray-500 italic mt-4">
+          No items to display.
+        </p>
+      ) : (
+        safeItems.map((it) => (
+          <MobileCard
+            key={it.id}
+            item={it}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
+        ))
+      )}
     </div>
   );
 

@@ -1,27 +1,8 @@
 // frontend/src/components/EditClientModal.jsx
 import { useId, useState } from 'react';
-import axios from '../utils/axiosConfig';
+import api from '../utils/axiosConfig'; // ✅ unified API instance
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
-
-// ✅ Dedicated axios instance for client-service
-const clientApi = axios.create({
-  baseURL: process.env.REACT_APP_CLIENT_API_URL,
-});
-
-// ✅ Add auth token interceptor safely
-clientApi.interceptors.request.use(
-  (config) => {
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('token');
-      if (token) {
-        config.headers['Authorization'] = `Bearer ${token}`;
-      }
-    }
-    return config;
-  },
-  (error) => Promise.reject(error),
-);
 
 export default function EditClientModal({ client, onClose, onUpdated }) {
   const [name, setName] = useState(client.name || '');
@@ -45,13 +26,10 @@ export default function EditClientModal({ client, onClose, onUpdated }) {
       formData.append('barcode', barcode);
       if (logoFile) formData.append('logo', logoFile);
 
-      const { data } = await clientApi.put(
-        `/api/clients/${client.id}`,
-        formData,
-        {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        },
-      );
+      // ✅ Always hit gateway, not service URL
+      const { data } = await api.put(`/api/clients/${client.id}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
 
       onUpdated?.(data);
       onClose?.();

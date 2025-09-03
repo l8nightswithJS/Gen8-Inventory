@@ -1,9 +1,11 @@
+// frontend/src/pages/Login.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/axiosConfig';
 import logoSvg from '../assets/logo.svg';
 import SignupModal from '../components/SignupModal';
 import { FiMail, FiLock } from 'react-icons/fi';
+import { clearToken } from '../utils/auth'; // ✅ centralize token clearing
 
 function isTokenValid(token) {
   if (!token) return false;
@@ -27,8 +29,7 @@ export default function Login() {
     if (isTokenValid(token)) {
       navigate('/dashboard', { replace: true });
     } else {
-      localStorage.removeItem('token');
-      localStorage.removeItem('role');
+      clearToken(); // ✅ now consistent with Navbar, LogoutButton, IdleLogout, PrivateRoute
     }
   }, [navigate]);
 

@@ -5,23 +5,28 @@ import {
   Route,
   Navigate,
 } from 'react-router-dom';
+
 import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ClientPage from './pages/ClientPage';
 import AlertsPage from './pages/AlertsPage';
 import UsersPage from './pages/UsersPage';
+import StandaloneScanPage from './pages/StandaloneScanPage';
+
 import PrivateRoute from './components/PrivateRoute';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
-import StandaloneScanPage from './pages/StandaloneScanPage';
 
 export default function App() {
   return (
     <Router>
       <Routes>
+        {/* Public routes */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
+
+        {/* Private routes */}
         <Route
           path="/*"
           element={
@@ -37,7 +42,6 @@ export default function App() {
 
 function PrivateLayout() {
   return (
-    // Change background to a soft slate color for a more modern feel
     <div className="flex flex-col min-h-screen bg-slate-50">
       <Navbar />
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
@@ -51,6 +55,7 @@ function PrivateLayout() {
             element={<StandaloneScanPage />}
           />
           <Route path="users" element={<UsersPage />} />
+          {/* Redirect any unknown private path to dashboard */}
           <Route path="*" element={<Navigate to="dashboard" replace />} />
         </Routes>
       </main>

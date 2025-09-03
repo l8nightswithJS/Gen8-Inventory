@@ -4,7 +4,12 @@ import api from '../utils/axiosConfig';
 import ConfirmModal from '../components/ConfirmModal';
 import UserFormModal from '../components/UserFormModal';
 import Button from '../components/ui/Button';
-import { FiEdit2, FiTrash2, FiCheck, FiX } from 'react-icons/fi';
+import { FiEdit2, FiTrash2 } from 'react-icons/fi';
+
+const normalizeUser = (u) => ({
+  ...u,
+  email: u.email || u.username, // fallback for legacy data
+});
 
 const UserCard = ({ user, onApprove, onDeny, onEdit, onDelete, isPending }) => (
   <div
@@ -14,7 +19,7 @@ const UserCard = ({ user, onApprove, onDeny, onEdit, onDelete, isPending }) => (
   >
     <div className="flex items-start justify-between">
       <div>
-        <p className="font-bold text-lg text-slate-800">{user.username}</p>
+        <p className="font-bold text-lg text-slate-800">{user.email}</p>
         <p className="text-sm font-medium bg-slate-100 text-slate-600 inline-block px-2 py-0.5 rounded-full mt-1 capitalize">
           {user.role}
         </p>
@@ -22,11 +27,9 @@ const UserCard = ({ user, onApprove, onDeny, onEdit, onDelete, isPending }) => (
       {isPending ? (
         <div className="flex items-center gap-2">
           <Button onClick={() => onApprove(user)} size="sm" variant="success">
-            <FiCheck className="mr-2" />
             Approve
           </Button>
           <Button onClick={() => onDeny(user)} size="sm" variant="danger">
-            <FiX className="mr-2" />
             Deny
           </Button>
         </div>
@@ -60,16 +63,13 @@ export default function UsersPage() {
   const [pendingUsers, setPendingUsers] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
-  const [confirm, setConfirm] = useState(
-    {
-      type: '',
-      id: null,
-      username: '',
-      open: false,
-      loading: false,
-    },
-    [],
-  );
+  const [confirm, setConfirm] = useState({
+    type: '',
+    id: null,
+    email: '',
+    open: false,
+    loading: false,
+  });
   const [viewMode, setViewMode] = useState('desktop');
 
   useEffect(() => {
@@ -87,8 +87,8 @@ export default function UsersPage() {
         api.get('/api/users'),
         api.get('/api/users/pending'),
       ]);
-      setUsers(usersRes.data);
-      setPendingUsers(pendingRes.data);
+      setUsers(usersRes.data.map(normalizeUser));
+      setPendingUsers(pendingRes.data.map(normalizeUser));
     } catch (err) {
       console.error('Error fetching users:', err);
     }
@@ -107,19 +107,14 @@ export default function UsersPage() {
     setConfirm({
       type,
       id: user.id,
-      username: user.username,
+      email: user.email,
       open: true,
       loading: false,
     });
   };
+
   const closeConfirm = () =>
-    setConfirm({
-      type: '',
-      id: null,
-      username: '',
-      open: false,
-      loading: false,
-    });
+    setConfirm({ type: '', id: null, email: '', open: false, loading: false });
 
   const handleConfirm = async () => {
     setConfirm((c) => ({ ...c, loading: true }));
@@ -137,7 +132,6 @@ export default function UsersPage() {
       closeConfirm();
     }
   };
-  console.log('render', { users, pendingUsers, viewMode });
 
   const UserTable = () => (
     <div className="overflow-x-auto bg-white shadow-md rounded-lg">
@@ -145,7 +139,7 @@ export default function UsersPage() {
         <thead className="bg-slate-50 border-b">
           <tr>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-600">
-              Username
+              Email
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-600">
               Role
@@ -162,7 +156,7 @@ export default function UsersPage() {
               className="border-b last:border-b-0 bg-amber-50"
             >
               <td className="px-4 py-3 font-medium text-slate-800">
-                {u.username}{' '}
+                {u.email}{' '}
                 <span className="text-amber-600 font-normal">(Pending)</span>
               </td>
               <td className="px-4 py-3 capitalize text-slate-600">{u.role}</td>
@@ -192,7 +186,7 @@ export default function UsersPage() {
               className="border-b last:border-b-0 hover:bg-slate-50"
             >
               <td className="px-4 py-3 font-medium text-slate-800">
-                {u.username}
+                {u.email}
               </td>
               <td className="px-4 py-3 capitalize text-slate-600">{u.role}</td>
               <td className="px-4 py-3 text-center">
@@ -268,7 +262,7 @@ export default function UsersPage() {
           title={`${
             confirm.type.charAt(0).toUpperCase() + confirm.type.slice(1)
           } User`}
-          message={`Are you sure you want to ${confirm.type} "${confirm.username}"?`}
+          message={`Are you sure you want to ${confirm.type} "${confirm.email}"?`}
           variant={confirm.type === 'approve' ? 'success' : 'danger'}
           onCancel={closeConfirm}
           onConfirm={handleConfirm}

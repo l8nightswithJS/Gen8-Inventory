@@ -1,29 +1,19 @@
-import { clearToken } from '../utils/auth';
 // frontend/src/components/LogoutButton.jsx
 import { useNavigate } from 'react-router-dom';
+import { clearToken } from '../utils/auth';
+import Button from './ui/Button';
 
 export default function LogoutButton() {
   const navigate = useNavigate();
 
   const handleLogout = () => {
     clearToken();
-    
-    navigate('/');
+    navigate('/login', { replace: true });
   };
 
   return (
-    <button
-      onClick={handleLogout}
-      style={{
-        padding: '0.5rem 1rem',
-        background: '#e63946',
-        color: '#fff',
-        border: 'none',
-        borderRadius: '5px',
-        cursor: 'pointer',
-      }}
-    >
+    <Button onClick={handleLogout} size="sm" aria-label="Logout">
       Logout
-    </button>
+    </Button>
   );
 }

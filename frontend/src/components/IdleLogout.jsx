@@ -1,18 +1,21 @@
-import { clearToken } from '../utils/auth';
 // frontend/src/components/IdleLogout.jsx
 import { useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { clearToken } from '../utils/auth';
 
 export default function IdleLogout({ timeout = 15 * 60 * 1000 }) {
   const navigate = useNavigate();
-  const timerId = useRef();
+  const timerId = useRef(null);
 
-  // wrap in useCallback so it doesn't get a new identity each render
   const resetTimer = useCallback(() => {
-    if (timerId.current) clearTimeout(timerId.current);
+    if (timerId.current) {
+      clearTimeout(timerId.current);
+      timerId.current = null;
+    }
+
     timerId.current = setTimeout(() => {
       clearToken();
-      
+      // Optional: add a toast/alert here for UX
       navigate('/login', { replace: true });
     }, timeout);
   }, [navigate, timeout]);
@@ -26,18 +29,18 @@ export default function IdleLogout({ timeout = 15 * 60 * 1000 }) {
       'scroll',
     ];
 
-    // start the idle timer
     resetTimer();
 
-    // reset on any user interaction
-    events.forEach((e) => window.addEventListener(e, resetTimer));
+    events.forEach((event) => window.addEventListener(event, resetTimer));
 
     return () => {
-      // clean up both the timer and listeners
-      if (timerId.current) clearTimeout(timerId.current);
-      events.forEach((e) => window.removeEventListener(e, resetTimer));
+      if (timerId.current) {
+        clearTimeout(timerId.current);
+        timerId.current = null;
+      }
+      events.forEach((event) => window.removeEventListener(event, resetTimer));
     };
-  }, [resetTimer]); // now we properly declare the dependency
+  }, [resetTimer]);
 
   return null;
 }

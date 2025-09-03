@@ -17,12 +17,12 @@ export default function PrivateRoute({ children }) {
     typeof window !== 'undefined' ? localStorage.getItem('token') : null;
 
   if (!isTokenValid(token)) {
-    // clear any stale auth
     if (typeof window !== 'undefined') {
       localStorage.removeItem('token');
       localStorage.removeItem('role');
     }
-    return <Navigate to="/" replace />;
+    // ✅ Always redirect to login
+    return <Navigate to="/login" replace />;
   }
 
   return children;

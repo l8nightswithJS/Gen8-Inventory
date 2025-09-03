@@ -1,4 +1,6 @@
 // frontend/src/components/Footer.jsx
+import { Link } from 'react-router-dom';
+
 export default function Footer() {
   const year = new Date().getFullYear();
 
@@ -6,7 +8,7 @@ export default function Footer() {
     { href: '/how-to', text: 'How-to Guide' },
     { href: '/feedback', text: 'Feedback' },
     { href: '/support', text: 'Support' },
-    { href: '#', text: 'System Status' },
+    { href: '/status', text: 'System Status' }, // ✅ dedicated route
   ];
 
   const legalLinks = [
@@ -14,20 +16,25 @@ export default function Footer() {
     { href: '/privacy', text: 'Privacy' },
   ];
 
+  const allLinks = [...links, ...legalLinks];
+
   return (
     <footer className="bg-slate-100 border-t">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-5">
         {/* Mobile Layout: Stacked */}
         <div className="sm:hidden text-center">
-          <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
-            {links.map((link) => (
-              <a
+          <nav
+            aria-label="Footer navigation"
+            className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3"
+          >
+            {allLinks.map((link) => (
+              <Link
                 key={link.text}
-                href={link.href}
+                to={link.href}
                 className="text-sm font-medium text-gray-600 hover:text-gray-900"
               >
                 {link.text}
-              </a>
+              </Link>
             ))}
           </nav>
           <p className="text-sm text-gray-500 mt-4">
@@ -40,15 +47,18 @@ export default function Footer() {
           <p className="text-sm text-gray-500">
             © {year} Gener8 Inventory, Inc. All rights reserved.
           </p>
-          <nav className="flex items-center gap-x-6">
-            {[...links, ...legalLinks].map((link) => (
-              <a
+          <nav
+            aria-label="Footer navigation"
+            className="flex items-center gap-x-6"
+          >
+            {allLinks.map((link) => (
+              <Link
                 key={link.text}
-                href={link.href}
+                to={link.href}
                 className="text-sm font-medium text-gray-600 hover:text-gray-900"
               >
                 {link.text}
-              </a>
+              </Link>
             ))}
           </nav>
         </div>

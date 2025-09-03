@@ -1,3 +1,4 @@
+// frontend/src/components/SignupModal.jsx
 import { useState } from 'react';
 import api from '../utils/axiosConfig';
 import Button from './ui/Button';
@@ -22,13 +23,24 @@ export default function SignupModal({ onClose }) {
     setLoading(true);
     try {
       const { data } = await api.post(`/api/auth/register`, form);
-      setMsg(data.message);
-      setTimeout(onClose, 2500);
+      setMsg(data.message || 'Signup successful!');
+      setTimeout(() => {
+        if (onClose) onClose();
+      }, 2500);
     } catch (err) {
-      setMsg(err.response?.data?.message || 'Signup failed');
+      const message =
+        err?.response?.data?.message || 'Signup failed. Please try again.';
+      setMsg(`ERROR: ${message}`);
     } finally {
       setLoading(false);
     }
+  };
+
+  const getMsgClasses = () => {
+    if (!msg) return '';
+    return msg.startsWith('ERROR')
+      ? 'bg-red-50 text-red-600'
+      : 'bg-green-50 text-green-700';
   };
 
   return (
@@ -38,8 +50,11 @@ export default function SignupModal({ onClose }) {
         className="w-full max-w-md bg-white p-6 sm:p-8 rounded-lg shadow-xl space-y-4"
       >
         <h2 className="text-xl font-semibold text-center">Request Access</h2>
+
         {msg && (
-          <div className="text-center text-sm font-medium p-3 bg-slate-50 rounded-md">
+          <div
+            className={`text-center text-sm font-medium p-3 rounded-md ${getMsgClasses()}`}
+          >
             {msg}
           </div>
         )}
@@ -75,6 +90,7 @@ export default function SignupModal({ onClose }) {
           <option value="staff">Staff</option>
           <option value="admin">Admin</option>
         </select>
+
         <div className="flex justify-end gap-3 pt-2">
           <Button
             type="button"

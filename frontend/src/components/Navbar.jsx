@@ -1,23 +1,15 @@
-// frontend/src/components/Navbar.jsx
 import { useState } from 'react';
-import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import { FiMenu, FiX } from 'react-icons/fi';
+import LogoutButton from './LogoutButton';
 
 export default function Navbar() {
-  const navigate = useNavigate();
   const { pathname } = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const match = pathname.match(/^\/clients\/(\d+)/);
   const clientId = match ? match[1] : null;
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('role');
-    navigate('/login');
-  };
-
-  // The navLinks are now styled directly in the className
   const navLinks = (
     <>
       {clientId && (
@@ -48,12 +40,9 @@ export default function Navbar() {
       >
         Manage Users
       </NavLink>
-      <button
-        onClick={logout}
-        className="block w-full px-3 py-2 text-base font-medium text-left text-gray-700 rounded-md hover:bg-gray-100 hover:text-gray-900 md:text-sm md:w-auto"
-      >
-        Logout
-      </button>
+      <div className="px-3 py-2">
+        <LogoutButton />
+      </div>
     </>
   );
 

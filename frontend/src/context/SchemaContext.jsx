@@ -1,5 +1,11 @@
 // frontend/src/context/SchemaContext.jsx
-import { createContext, useContext, useMemo, useCallback } from 'react';
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+} from 'react';
 
 const SchemaCtx = createContext(null);
 
@@ -29,16 +35,26 @@ export function saveSchema(clientId, cols = []) {
 }
 
 export function SchemaProvider({ clientId, children }) {
-  const schema = useMemo(() => getSavedSchema(clientId), [clientId]);
+  const [schema, setSchemaState] = useState(() => getSavedSchema(clientId));
+
+  // If clientId changes, reload schema from storage
+  useEffect(() => {
+    setSchemaState(getSavedSchema(clientId));
+  }, [clientId]);
 
   const setSchema = useCallback(
-    (cols) => saveSchema(clientId, cols),
+    (cols) => {
+      const saved = saveSchema(clientId, cols);
+      setSchemaState(saved); // ✅ update state so consumers re-render
+    },
     [clientId],
   );
 
-  const value = useMemo(() => ({ schema, setSchema }), [schema, setSchema]);
-
-  return <SchemaCtx.Provider value={value}>{children}</SchemaCtx.Provider>;
+  return (
+    <SchemaCtx.Provider value={{ schema, setSchema }}>
+      {children}
+    </SchemaCtx.Provider>
+  );
 }
 
 export function useSchema() {

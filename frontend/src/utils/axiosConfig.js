@@ -3,23 +3,28 @@ import axios from 'axios';
 
 // 1. DYNAMIC BASE URL: point to the GATEWAY (not the auth service).
 // Uses env in prod; falls back to localhost gateway in dev.
-const baseURL = process.env.REACT_APP_API_GATEWAY_URL;
+const baseURL =
+  process.env.REACT_APP_API_BASE_URL ||
+  (process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : null);
 
-// All your original settings are preserved.
+// ✅ Add a debug log to confirm which baseURL is being used
+console.log('🔎 Axios Base URL:', baseURL);
+console.log('🔎 NODE_ENV:', process.env.NODE_ENV);
+console.log('🔎 REACT_APP_API_BASE_URL:', process.env.REACT_APP_API_BASE_URL);
+
+if (!baseURL) {
+  throw new Error(
+    '❌ Missing REACT_APP_API_BASE_URL. Define it in Vercel → Environment Variables.',
+  );
+}
+
 const api = axios.create({
   baseURL,
   timeout: 30000,
   withCredentials: false, // we're using Bearer tokens, not cookies
 });
 
-// 2. YOUR ROBUST TOKEN HANDLER: No changes needed here.
-// Read token from storage (covers a few common keys)
-
-// 3. YOUR REQUEST INTERCEPTOR: No changes needed here.
-// It correctly attaches the Authorization header on every request.
-
-// 4. YOUR RESPONSE INTERCEPTOR: No changes needed here.
-// This provides excellent, detailed error logging.
+// Response interceptor for error logging
 api.interceptors.response.use(
   (resp) => resp,
   (error) => {
@@ -35,18 +40,9 @@ api.interceptors.response.use(
       });
     }
 
-    // Optional: auto-logout on 401 (uncomment if you want this behavior)
-    // if (error?.response?.status === 401) {
-    //   localStorage.clear(); // Clear all localStorage for safety
-    //   sessionStorage.clear(); // Clear all sessionStorage
-    //   window.location.assign('/login');
-    // }
-
     return Promise.reject(error);
   },
 );
-
-export default api;
 
 // Unified token handler
 import { getToken } from './auth';
@@ -63,3 +59,5 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+
+export default api;

@@ -211,7 +211,7 @@ export default function ClientPage() {
             <Button
               as="a"
               // UPDATED: Use full URL for export
-              href={`${process.env.REACT_APP_INVENTORY_API_URL}/api/items/export?client_id=${clientId}`}
+              href={`${process.env.REACT_APP_API_BASE_URL}/api/items/export?client_id=${clientId}`}
               variant="secondary"
               title="Export Data"
             >

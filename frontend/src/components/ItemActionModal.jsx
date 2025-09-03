@@ -11,6 +11,9 @@ export default function ItemActionModal({
   onEditDetails,
 }) {
   const descId = 'item-action-modal-desc';
+  const a = item?.attributes || {};
+  const displayName =
+    a.name || a.part_number || a.description || 'Unknown Item';
 
   return (
     <BaseModal
@@ -20,13 +23,12 @@ export default function ItemActionModal({
       describedBy={descId}
       size="max-w-sm"
     >
-      {/* Header content is provided by BaseModal; we only render the body here */}
       <div className="px-4">
         {/* Subhead under title */}
         <div className="mb-4 -mt-2 flex items-center gap-3">
-          <FiPackage className="text-blue-600" size={22} />
+          <FiPackage className="text-blue-600 flex-shrink-0" size={22} />
           <p className="max-w-xs truncate text-sm text-slate-600">
-            {item?.attributes?.name || 'Unknown Item'}
+            {displayName}
           </p>
         </div>
 
@@ -39,8 +41,8 @@ export default function ItemActionModal({
             variant="primary"
             size="lg"
             onClick={() => onCheckStock(item)}
+            leftIcon={FiClipboard}
           >
-            <FiClipboard className="mr-2" />
             Check Stock Levels
           </Button>
 
@@ -48,8 +50,8 @@ export default function ItemActionModal({
             variant="secondary"
             size="lg"
             onClick={() => onEditDetails(item)}
+            leftIcon={FiEdit3}
           >
-            <FiEdit3 className="mr-2" />
             Edit Product Details
           </Button>
         </div>
