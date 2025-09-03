@@ -1,4 +1,3 @@
-// frontend/src/components/BarcodeScannerComponent.jsx
 import { useCallback, useMemo } from 'react';
 import { Scanner } from '@yudiel/react-qr-scanner';
 
@@ -13,10 +12,17 @@ export default function BarcodeScannerComponent({
 
   const handleScan = useCallback(
     (results) => {
-      // library can return multiple results; pick the first meaningful one
       const first = Array.isArray(results) ? results[0] : results;
+      if (!first) return;
+
       const text = first?.rawValue || first?.value || first?.text;
-      if (text && onDetected) onDetected(String(text));
+      const symbology =
+        first?.format || first?.symbology || first?.type || null;
+
+      if (text && onDetected) {
+        // ✅ Pass both code and symbology
+        onDetected(String(text), symbology);
+      }
     },
     [onDetected],
   );

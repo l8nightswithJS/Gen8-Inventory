@@ -1,7 +1,6 @@
 // frontend/src/components/BarcodeAssignModal.jsx
 import { useEffect, useId, useState } from 'react';
-import { assignBarcodeToItem } from '../api/barcodesApi'; // ⬅️ use unified API helper
-import api from '../api/axiosConfig'; // ⬅️ for list & delete via gateway
+import api from '../utils/axiosConfig'; // ✅ unified gateway instance
 import BarcodeScannerComponent from './BarcodeScannerComponent';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
@@ -25,7 +24,7 @@ export default function BarcodeAssignModal({
     let isMounted = true;
     (async () => {
       try {
-        // ⬅️ fetch from gateway: /api/barcodes/items/:itemId
+        // ✅ fetch via gateway: /api/barcodes/items/:itemId
         const { data } = await api.get(`/api/barcodes/items/${item.id}`);
         if (isMounted) setList(data || []);
       } catch (e) {
@@ -45,15 +44,18 @@ export default function BarcodeAssignModal({
     setBusy(true);
     setMsg('');
     try {
-      // ⬅️ align to helper signature: (code, itemId, clientId, sym)
-      await assignBarcodeToItem(
-        scanned.code,
-        item.id,
-        item.client_id,
-        scanned.symbology || '',
-      );
+      // ✅ assign via gateway: POST /api/barcodes
+      await api.post('/api/barcodes', {
+        client_id: item.client_id,
+        item_id: item.id,
+        barcode: scanned.code,
+        symbology: scanned.symbology || null,
+      });
+
       setMsg('Barcode assigned ✓');
       setScanned({ code: '', symbology: '' });
+
+      // refresh list
       const { data } = await api.get(`/api/barcodes/items/${item.id}`);
       setList(data || []);
       onAssigned?.();
@@ -72,7 +74,7 @@ export default function BarcodeAssignModal({
     )
       return;
     try {
-      // ⬅️ delete via gateway: /api/barcodes/:id
+      // ✅ delete via gateway: /api/barcodes/:id
       await api.delete(`/api/barcodes/${id}`);
       setList((prev) => prev.filter((b) => b.id !== id));
       setMsg('Barcode removed ✓');

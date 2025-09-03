@@ -1,16 +1,15 @@
 // frontend/src/components/AddItemModal.jsx
 import { useState } from 'react';
+import api from '../utils/axiosConfig'; // ✅ use gateway API directly
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
 
-// The new `api` prop is now a required part of the function signature
 export default function AddItemModal({
   clientId,
   schema = [],
   onClose,
   onCreated,
   isLotTrackingLocked,
-  api, // The inventoryApi instance passed from ClientPage.jsx
 }) {
   const [form, setForm] = useState({ alert_enabled: true });
   const [error, setError] = useState('');
@@ -73,7 +72,6 @@ export default function AddItemModal({
 
     try {
       setSubmitting(true);
-      // UPDATED: Use the passed-in `api` instance
       const { data } = await api.post('/api/items', {
         client_id: parseInt(clientId, 10),
         attributes,

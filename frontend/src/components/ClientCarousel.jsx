@@ -17,7 +17,10 @@ export default function ClientCarousel({
   const resolveLogo = (path) => {
     if (!path) return '';
     if (path.startsWith('http')) return path;
-    const base = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
+    // Always point to the API gateway
+    const base =
+      process.env.REACT_APP_API_GATEWAY_URL || 'http://localhost:8080';
     return `${base}${path}`;
   };
 

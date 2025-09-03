@@ -1,27 +1,8 @@
 // frontend/src/components/AddClientModal.jsx
 import { useState } from 'react';
-import axios from '../utils/axiosConfig';
+import api from '../utils/axiosConfig'; // ✅ use the unified gateway instance
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
-
-// ✅ Create a dedicated axios instance for client-service
-const clientApi = axios.create({
-  baseURL: process.env.REACT_APP_CLIENT_API_URL,
-});
-
-// ✅ Add auth token interceptor safely
-clientApi.interceptors.request.use(
-  (config) => {
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('token');
-      if (token) {
-        config.headers['Authorization'] = `Bearer ${token}`;
-      }
-    }
-    return config;
-  },
-  (error) => Promise.reject(error),
-);
 
 function AddClientForm({ onSuccess, onCancel }) {
   const [name, setName] = useState('');
@@ -46,7 +27,8 @@ function AddClientForm({ onSuccess, onCancel }) {
         formData.append('logo', logoFile);
       }
 
-      const res = await clientApi.post('/api/clients', formData, {
+      // ✅ Call gateway route
+      const res = await api.post('/api/clients', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 

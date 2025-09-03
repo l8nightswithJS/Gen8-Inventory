@@ -3,9 +3,9 @@ import { useRef, useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import Button from './ui/Button';
 import { FiUploadCloud } from 'react-icons/fi';
+import api from '../utils/axiosConfig'; // ✅ unified axios instance
 
-// The new `api` prop is now a required part of the function signature
-export default function BulkImport({ clientId, refresh, onClose, api }) {
+export default function BulkImport({ clientId, refresh, onClose }) {
   const fileRef = useRef(null);
   const [fileName, setFileName] = useState('');
   const [headers, setHeaders] = useState([]);
@@ -56,6 +56,7 @@ export default function BulkImport({ clientId, refresh, onClose, api }) {
     'low_stock_threshold',
   ]);
 
+  // Auto-map common headers when file is loaded
   useEffect(() => {
     if (!headers.length) return;
     const newInputs = {};
@@ -87,9 +88,7 @@ export default function BulkImport({ clientId, refresh, onClose, api }) {
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
-    if (!file) {
-      return;
-    }
+    if (!file) return;
 
     resetState();
     setError('');
@@ -143,6 +142,7 @@ export default function BulkImport({ clientId, refresh, onClose, api }) {
 
   const handleInputChange = (col, val) =>
     setInputValues((prev) => ({ ...prev, [col]: val }));
+
   const handleMappingBlur = (col) => {
     const raw = inputValues[col]?.trim() ?? '';
     setMapping((prev) => ({ ...prev, [col]: normalizeKey(raw) }));
@@ -175,7 +175,6 @@ export default function BulkImport({ clientId, refresh, onClose, api }) {
 
     setSubmitting(true);
     try {
-      // UPDATED: Use the passed-in `api` instance
       const resp = await api.post('/api/items/bulk', {
         client_id: parseInt(clientId, 10),
         items,
