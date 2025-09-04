@@ -15,19 +15,16 @@ const {
 const PORT = Number(RENDER_PORT) || 8080;
 
 if (!AUTH_URL || !INVENTORY_URL || !CLIENT_URL || !BARCODE_URL) {
-  console.error(
-    'Missing one or more upstream URLs (AUTH_URL, INVENTORY_URL, CLIENT_URL, BARCODE_URL)',
-  );
+  console.error('❌ Missing one or more upstream URLs');
   process.exit(1);
 }
 
 const app = express();
 
-// CORS setup
+// --- CORS ---
 const allowlist = CORS_ORIGIN.split(',')
   .map((s) => s.trim())
   .filter(Boolean);
-
 app.use(
   cors({
     origin(origin, cb) {
@@ -40,28 +37,26 @@ app.use(
   }),
 );
 
-// 🔎 Log every incoming request to the gateway
+// Debug log all incoming requests
 app.use((req, _res, next) => {
   console.log(`[GW] Incoming ${req.method} ${req.originalUrl}`);
   next();
 });
-
 app.use(morgan('tiny'));
 
 app.get('/healthz', (_req, res) => res.json({ ok: true }));
 
-// Proxy helper
-const prox = (target, extraOptions = {}) =>
+// --- Proxy helper ---
+const prox = (target) =>
   createProxyMiddleware({
     target,
     changeOrigin: true,
     xfwd: true,
     proxyTimeout: 25_000,
     timeout: 25_000,
-    logLevel: 'warn',
     onProxyReq(proxyReq, req) {
       console.log(
-        `[GW] Proxying ${req.method} ${req.originalUrl} -> ${target}${req.url}`,
+        `[GW] Proxying ${req.method} ${req.originalUrl} -> ${target}`,
       );
     },
     onError(err, req, res) {
@@ -76,38 +71,15 @@ const prox = (target, extraOptions = {}) =>
         });
       }
     },
-    ...extraOptions,
   });
 
-// ✅ Auth service (keep /api/auth prefix)
-app.use(
-  '/api/auth',
-  prox(AUTH_URL, { pathRewrite: { '^/api/auth': '/api/auth' } }),
-);
-
-// ✅ Inventory service (keep /api/items prefix)
-app.use(
-  '/api/items',
-  prox(INVENTORY_URL, { pathRewrite: { '^/api/items': '/api/items' } }),
-);
-
-// ✅ Clients service (keep /api/clients prefix)
-app.use(
-  '/api/clients',
-  prox(CLIENT_URL, { pathRewrite: { '^/api/clients': '/api/clients' } }),
-);
-
-// ✅ Barcodes service (keep /api/barcodes prefix)
-app.use(
-  '/api/barcodes',
-  prox(BARCODE_URL, { pathRewrite: { '^/api/barcodes': '/api/barcodes' } }),
-);
-
-// ✅ Passthrough for /api/scan (maps directly to barcode-service)
-app.use(
-  '/api/scan',
-  prox(BARCODE_URL, { pathRewrite: { '^/api/scan': '/api/scan' } }),
-);
+// --- Routes ---
+// ✅ forward exactly, don’t rewrite
+app.use('/api/auth', prox(AUTH_URL));
+app.use('/api/items', prox(INVENTORY_URL));
+app.use('/api/clients', prox(CLIENT_URL));
+app.use('/api/barcodes', prox(BARCODE_URL));
+app.use('/api/scan', prox(BARCODE_URL));
 
 app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 
