@@ -23,6 +23,12 @@ mustBeFn(logout, 'logout');
 // ✅ Use shared-auth middleware instead of local one
 const { authMiddleware } = require('shared-auth');
 
+// 🟢 Debug logs for visibility
+router.use((req, _res, next) => {
+  console.log(`[authRoutes] ${req.method} ${req.originalUrl}`);
+  next();
+});
+
 // Public routes
 router.post('/login', login);
 router.post('/register', register);
