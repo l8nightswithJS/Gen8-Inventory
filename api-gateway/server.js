@@ -79,7 +79,12 @@ const prox = (target) =>
   });
 
 // Auth service
-app.use('/api/auth', prox(AUTH_URL));
+app.use(
+  '/api/auth',
+  prox(AUTH_URL, {
+    pathRewrite: { '^/api/auth': '/api/auth' }, // keep /api/auth prefix
+  }),
+);
 
 // Core services
 app.use('/api/items', prox(INVENTORY_URL));
