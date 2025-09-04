@@ -1,4 +1,3 @@
-// api-gateway/server.js
 import express from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
@@ -37,7 +36,7 @@ app.use(
   }),
 );
 
-// Debug log all incoming requests
+// Debug log incoming requests
 app.use((req, _res, next) => {
   console.log(`[GW] Incoming ${req.method} ${req.originalUrl}`);
   next();
@@ -47,13 +46,14 @@ app.use(morgan('tiny'));
 app.get('/healthz', (_req, res) => res.json({ ok: true }));
 
 // --- Proxy helper ---
-const prox = (target) =>
+const prox = (target, options = {}) =>
   createProxyMiddleware({
     target,
     changeOrigin: true,
     xfwd: true,
     proxyTimeout: 25_000,
     timeout: 25_000,
+    logLevel: 'debug', // enable full debug
     onProxyReq(proxyReq, req) {
       console.log(
         `[GW] Proxying ${req.method} ${req.originalUrl} -> ${target}`,
@@ -71,10 +71,10 @@ const prox = (target) =>
         });
       }
     },
+    ...options,
   });
 
 // --- Routes ---
-// ✅ forward exactly, don’t rewrite
 app.use('/api/auth', prox(AUTH_URL));
 app.use('/api/items', prox(INVENTORY_URL));
 app.use('/api/clients', prox(CLIENT_URL));
