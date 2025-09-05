@@ -41,11 +41,8 @@ app.use('/api/auth/logout', authMiddleware);
 // Public routes for login/register + protected ones handled above
 app.use('/api/auth', authRouter);
 
-// Apply authentication middleware globally below this point
-app.use(authMiddleware);
-
 // Protected routes for user management
-app.use('/api/users', usersRouter);
+app.use('/api/users', authMiddleware, usersRouter);
 
 const PORT = Number(process.env.PORT) || 8001;
 app.listen(PORT, '0.0.0.0', () => {
