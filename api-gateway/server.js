@@ -75,13 +75,7 @@ const prox = (target, options = {}) =>
   });
 
 // --- Routes ---
-app.use(
-  '/api/auth',
-  prox(AUTH_URL, {
-    pathRewrite: { '^/api/auth': '' },
-  }),
-);
-
+app.use('/api/auth', prox(AUTH_URL));
 app.use('/api/items', prox(INVENTORY_URL));
 app.use('/api/clients', prox(CLIENT_URL));
 app.use('/api/barcodes', prox(BARCODE_URL));
