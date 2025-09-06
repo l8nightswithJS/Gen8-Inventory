@@ -42,7 +42,7 @@ app.use(express.urlencoded({ extended: true }));
 // Uploads dir
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-app.use('/uploads', express.static(uploadDir));
+app.use('/', express.static(uploadDir));
 
 /**
  * 🔐 Protect all /api routes with JWT
@@ -50,10 +50,10 @@ app.use('/uploads', express.static(uploadDir));
  */
 
 // Routes
-app.use('/api/items', authMiddleware, requireClientMatch, inventoryRouter);
-app.use('/api/labels', authMiddleware, labelsRouter); // example: labels may not need tenant scoping
+app.use('/', authMiddleware, requireClientMatch, inventoryRouter);
+app.use('/', authMiddleware, labelsRouter); // example: labels may not need tenant scoping
 app.use(
-  '/api/locations',
+  '/',
   authMiddleware,
   requireClientMatch,
   requireRole('admin', 'manager'),
