@@ -50,7 +50,7 @@ app.use('/', express.static(uploadDir));
  */
 
 // Routes
-app.use('/', authMiddleware, requireClientMatch, inventoryRouter);
+app.use('/', authMiddleware, inventoryRouter);
 app.use('/', authMiddleware, labelsRouter); // example: labels may not need tenant scoping
 app.use(
   '/',
