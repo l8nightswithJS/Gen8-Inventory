@@ -76,15 +76,31 @@ const prox = (target, options = {}) =>
   });
 
 // --- Routes ---
-app.use('/api/auth', prox(AUTH_URL));
+// Auth service (login, registration, users, etc.)
+app.use('/api/auth', prox(AUTH_URL, { pathRewrite: { '^/api/auth': '' } }));
 app.use(
   '/api/users',
   prox(AUTH_URL, { pathRewrite: { '^/api/users': '/api/users' } }),
 );
-app.use('/api/items', prox(INVENTORY_URL));
-app.use('/api/clients', prox(CLIENT_URL));
-app.use('/api/barcodes', prox(BARCODE_URL));
-app.use('/api/scan', prox(BARCODE_URL));
+
+// Inventory service
+app.use(
+  '/api/items',
+  prox(INVENTORY_URL, { pathRewrite: { '^/api/items': '' } }),
+);
+
+// Client service
+app.use(
+  '/api/clients',
+  prox(CLIENT_URL, { pathRewrite: { '^/api/clients': '' } }),
+);
+
+// Barcode service
+app.use(
+  '/api/barcodes',
+  prox(BARCODE_URL, { pathRewrite: { '^/api/barcodes': '' } }),
+);
+app.use('/api/scan', prox(BARCODE_URL, { pathRewrite: { '^/api/scan': '' } }));
 
 app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 
