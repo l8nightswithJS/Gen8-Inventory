@@ -20,6 +20,7 @@ const labelsRouter = require('./routes/labels');
 const locationsRouter = require('./routes/locations');
 
 const app = express();
+app.set('etag', false);
 
 app.get('/', (req, res) => {
   res.json({
