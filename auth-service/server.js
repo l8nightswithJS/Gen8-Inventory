@@ -31,7 +31,7 @@ app.use('/me', authMiddleware);
 app.use('/logout', authMiddleware);
 
 // Public routes (login, register)
-app.use('/', authRouter);
+
 app.use(
   '/users',
   (req, res, next) => {
@@ -44,6 +44,7 @@ app.use(
 // --- User management routes ---
 // Gateway rewrites /api/users/* -> here as /users/*
 app.use('/users', authMiddleware, usersRouter);
+app.use('/', authRouter);
 
 const PORT = Number(process.env.PORT) || 8001;
 app.listen(PORT, '0.0.0.0', () => {
