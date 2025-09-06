@@ -1,6 +1,7 @@
 // auth-service/routes/authRoutes.js
 const express = require('express');
 const router = express.Router();
+const { authMiddleware } = require('shared-auth');
 
 let ctrl = require('../controllers/authController');
 ctrl = ctrl && ctrl.default ? ctrl.default : ctrl;
@@ -21,7 +22,6 @@ mustBeFn(me, 'me');
 mustBeFn(logout, 'logout');
 
 // ✅ Use shared-auth middleware instead of local one
-const { authMiddleware } = require('shared-auth');
 
 // 🟢 Debug logs for visibility
 router.use((req, _res, next) => {

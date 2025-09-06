@@ -29,6 +29,7 @@ app.get('/api/auth/healthz', (_req, res) => {
   res.json({ service: 'auth', ok: true, timestamp: Date.now() });
 });
 
+app.use('/api/auth', authRouter);
 /**
  * Protect only sensitive auth endpoints.
  * These MUST be registered BEFORE /api/auth router
@@ -39,7 +40,6 @@ app.use('/api/auth/me', authMiddleware);
 app.use('/api/auth/logout', authMiddleware);
 
 // Public routes for login/register + protected ones handled above
-app.use('/api/auth', authRouter);
 
 // Protected routes for user management
 app.use('/api/users', authMiddleware, usersRouter);
