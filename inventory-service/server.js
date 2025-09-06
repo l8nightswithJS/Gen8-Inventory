@@ -51,7 +51,7 @@ app.use('/uploads', express.static(uploadDir));
  */
 
 // Routes
-app.use('/items', authMiddleware, inventoryRouter);
+app.use('/api/items', authMiddleware, inventoryRouter);
 app.use('/labels', authMiddleware, labelsRouter); // example: labels may not need tenant scoping
 app.use(
   '/locations',
