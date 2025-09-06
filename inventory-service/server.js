@@ -48,13 +48,13 @@ app.use('/uploads', express.static(uploadDir));
  * 🔐 Protect all /api routes with JWT
  * - Use requireClientMatch + requireRole inside routers where needed
  */
-app.use('/api', authMiddleware);
 
 // Routes
-app.use('/api/items', requireClientMatch, inventoryRouter);
-app.use('/api/labels', labelsRouter); // example: labels may not need tenant scoping
+app.use('/api/items', authMiddleware, requireClientMatch, inventoryRouter);
+app.use('/api/labels', authMiddleware, labelsRouter); // example: labels may not need tenant scoping
 app.use(
   '/api/locations',
+  authMiddleware,
   requireClientMatch,
   requireRole('admin', 'manager'),
   locationsRouter,

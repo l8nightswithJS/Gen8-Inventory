@@ -13,11 +13,10 @@ app.use(cors());
 app.use(express.json());
 
 // 🔐 Protect API routes (except health)
-app.use('/api', authMiddleware);
 
 // Routes
-app.use('/api/barcodes', barcodeRoutes);
-app.use('/api/scan', scanRouter);
+app.use('/api/barcodes', authMiddleware, barcodeRoutes);
+app.use('/api/scan', authMiddleware, scanRouter);
 
 // Health endpoint
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
