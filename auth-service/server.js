@@ -26,6 +26,7 @@ app.get('/healthz', (_req, res) => {
 });
 
 // --- Auth routes ---
+app.use('/users', authMiddleware, usersRouter);
 app.use('/verify', authMiddleware);
 app.use('/me', authMiddleware);
 app.use('/logout', authMiddleware);
@@ -43,7 +44,8 @@ app.use(
 );
 // --- User management routes ---
 // Gateway rewrites /api/users/* -> here as /users/*
-app.use('/users', authMiddleware, usersRouter);
+
+app.use('/auth', authRouter);
 app.use('/', authRouter);
 
 const PORT = Number(process.env.PORT) || 8001;
