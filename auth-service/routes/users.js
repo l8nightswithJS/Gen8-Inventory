@@ -9,7 +9,7 @@ const router = express.Router();
 // Protect all routes in this file, allowing only admins
 router.use(requireRole('admin'));
 
-router.get('/', userController.getAllUsers);
+router.get('/users', userController.getAllUsers);
 router.get('/pending', userController.getPendingUsers);
 
 router.post(
