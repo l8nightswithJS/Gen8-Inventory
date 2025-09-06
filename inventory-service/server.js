@@ -43,7 +43,7 @@ app.use(express.urlencoded({ extended: true }));
 // Uploads dir
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-app.use('/api/uploads', express.static(uploadDir));
+app.use('/uploads', express.static(uploadDir));
 
 /**
  * 🔐 Protect all /api routes with JWT
@@ -51,10 +51,10 @@ app.use('/api/uploads', express.static(uploadDir));
  */
 
 // Routes
-app.use('/api/items', authMiddleware, inventoryRouter);
-app.use('/api/labels', authMiddleware, labelsRouter); // example: labels may not need tenant scoping
+app.use('/items', authMiddleware, inventoryRouter);
+app.use('/labels', authMiddleware, labelsRouter); // example: labels may not need tenant scoping
 app.use(
-  '/api/locations',
+  '/locations',
   authMiddleware,
   requireClientMatch,
   requireRole('admin', 'manager'),
@@ -62,7 +62,7 @@ app.use(
 );
 
 // Health endpoint (public)
-app.get('/api/health', (_req, res) => res.json({ ok: true }));
+app.get('/health', (_req, res) => res.json({ ok: true }));
 
 // Global error handler
 app.use(errorHandler);
