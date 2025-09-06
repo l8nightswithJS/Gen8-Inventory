@@ -29,7 +29,7 @@ app.get('/api/auth/healthz', (_req, res) => {
   res.json({ service: 'auth', ok: true, timestamp: Date.now() });
 });
 
-app.use('/api', authRouter);
+app.use('/', authRouter);
 /**
  * Protect only sensitive auth endpoints.
  * These MUST be registered BEFORE /api/auth router
