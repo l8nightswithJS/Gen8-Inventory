@@ -23,26 +23,27 @@ app.use(cors());
 app.use(express.json());
 
 /**
- * 🔎 Health check (directly confirms this service is alive)
+ * 🔎 Health check (path corrected to match gateway's path rewrite)
  */
-app.get('/api/auth/healthz', (_req, res) => {
+app.get('/healthz', (_req, res) => {
   res.json({ service: 'auth', ok: true, timestamp: Date.now() });
 });
 
-app.use('/', authRouter);
 /**
- * Protect only sensitive auth endpoints.
- * These MUST be registered BEFORE /api/auth router
- * so they don’t affect /login or /register.
+ * Protect sensitive auth endpoints first.
+ * The gateway strips "/api/auth", so we listen for the resulting path (e.g., "/verify").
  */
-app.use('/api/auth/verify', authMiddleware);
-app.use('/api/auth/me', authMiddleware);
-app.use('/api/auth/logout', authMiddleware);
+app.use('/verify', authMiddleware);
+app.use('/me', authMiddleware);
+app.use('/logout', authMiddleware);
 
-// Public routes for login/register + protected ones handled above
+// Public routes like /login and /register are handled by this router.
+// This is placed after the specific middleware above to ensure they are protected first.
+app.use('/', authRouter);
 
-// Protected routes for user management
-app.use('/api/users', authMiddleware, usersRouter);
+// Protected routes for user management.
+// The gateway rewrites "/api/users" to "/api/auth/users".
+app.use('/api/auth/users', authMiddleware, usersRouter);
 
 const PORT = Number(process.env.PORT) || 8001;
 app.listen(PORT, '0.0.0.0', () => {

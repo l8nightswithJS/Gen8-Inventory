@@ -14,11 +14,6 @@ const {
 } = process.env;
 const PORT = Number(RENDER_PORT) || 8080;
 
-if (!AUTH_URL || !INVENTORY_URL || !CLIENT_URL || !BARCODE_URL) {
-  console.error('❌ Missing one or more upstream URLs');
-  process.exit(1);
-}
-
 const app = express();
 
 // --- CORS ---
@@ -80,7 +75,7 @@ const prox = (target, options = {}) =>
 app.use('/api/auth', prox(AUTH_URL, { pathRewrite: { '^/api/auth': '' } }));
 app.use(
   '/api/users',
-  prox(AUTH_URL, { pathRewrite: { '^/api/users': '/api/users' } }),
+  prox(AUTH_URL, { pathRewrite: { '^/api/users': '/api/auth/users' } }),
 );
 
 // Inventory service

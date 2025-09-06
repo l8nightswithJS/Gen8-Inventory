@@ -1,5 +1,5 @@
 // auth-service/controllers/userController.js
-const { sbAuth } = require('../lib/supabaseClient');
+const { sbAdmin } = require('../lib/supabaseClient');
 
 const handleSupabaseError = (res, error, context) => {
   console.error(`Error in ${context}:`, error);
@@ -10,27 +10,27 @@ const handleSupabaseError = (res, error, context) => {
 };
 
 exports.getAllUsers = async (req, res) => {
-  const { data, error } = await sbAuth
+  const { data, error } = await sbAdmin
     .from('users')
     .select('id, username, role, approved')
     .order('username', { ascending: true });
-  if (error) throw error;
+  if (error) return handleSupabaseError(res, error, 'getAllUsers');
   res.json(data || []);
 };
 
 exports.getPendingUsers = async (req, res) => {
-  const { data, error } = await sbAuth
+  const { data, error } = await sbAdmin
     .from('users')
     .select('id, username, role, approved')
     .eq('approved', false)
     .order('username', { ascending: true });
-  if (error) throw error;
+  if (error) return handleSupabaseError(res, error, 'getPendingUsers');
   res.json(data || []);
 };
 
 exports.getUserById = async (req, res) => {
   const { id } = req.params;
-  const { data, error } = await sbAuth
+  const { data, error } = await sbAdmin
     .from('users')
     .select('*')
     .eq('id', id)
@@ -42,7 +42,7 @@ exports.getUserById = async (req, res) => {
 
 exports.approveUser = async (req, res) => {
   const { id } = req.params;
-  const { data, error } = await sbAuth
+  const { data, error } = await sbAdmin
     .from('users')
     .update({ approved: true })
     .eq('id', id)
@@ -51,11 +51,10 @@ exports.approveUser = async (req, res) => {
   res.json({ message: 'User approved successfully', user: data[0] });
 };
 
-// RENAMED and UPDATED this function
 exports.updateUserRole = async (req, res) => {
   const { id } = req.params;
-  const { role } = req.body; // Only handles role updates
-  const { data, error } = await sbAuth
+  const { role } = req.body;
+  const { data, error } = await sbAdmin
     .from('users')
     .update({ role })
     .eq('id', id)
@@ -66,8 +65,7 @@ exports.updateUserRole = async (req, res) => {
 
 exports.deleteUser = async (req, res) => {
   const { id } = req.params;
-  // This will delete the user from auth.users and cascade to public.users
-  const { error } = await sbAuth.auth.admin.deleteUser(id);
+  const { error } = await sbAdmin.auth.admin.deleteUser(id);
   if (error) {
     return handleSupabaseError(res, error, 'deleteUser');
   }
