@@ -73,10 +73,7 @@ const prox = (target, options = {}) =>
 // --- Routes ---
 // Auth service (login, registration, users, etc.)
 app.use('/api/auth', prox(AUTH_URL, { pathRewrite: { '^/api/auth': '' } }));
-app.use(
-  '/api/users',
-  prox(AUTH_URL, { pathRewrite: { '^/api/users': '/api/auth/users' } }),
-);
+app.use('/api/users', prox(AUTH_URL));
 
 // Inventory service
 app.use(
