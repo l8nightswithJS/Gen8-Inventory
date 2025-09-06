@@ -27,7 +27,7 @@ app.use(
 );
 
 // Routes
-app.use('/clients', authMiddleware, clientsRouter);
+app.use('/', authMiddleware, clientsRouter);
 
 const PORT = Number(process.env.PORT) || 8003;
 app.listen(PORT, '0.0.0.0', () => {
