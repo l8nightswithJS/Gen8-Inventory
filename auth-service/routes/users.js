@@ -11,7 +11,10 @@ router.use(requireRole('admin'));
 
 router.get('/', userController.getAllUsers);
 router.get('/pending', userController.getPendingUsers);
-
+router.use((req, res, next) => {
+  console.log(`[USERS-ROUTER] ${req.method} ${req.originalUrl}`);
+  next();
+});
 router.post(
   '/:id/approve',
   param('id').isUUID(),

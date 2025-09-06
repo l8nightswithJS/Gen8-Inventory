@@ -32,7 +32,15 @@ app.use('/logout', authMiddleware);
 
 // Public routes (login, register)
 app.use('/', authRouter);
-
+app.use(
+  '/users',
+  (req, res, next) => {
+    console.log(`[AUTH-SVC] Incoming ${req.method} ${req.originalUrl}`);
+    next();
+  },
+  authMiddleware,
+  usersRouter,
+);
 // --- User management routes ---
 // Gateway rewrites /api/users/* -> here as /users/*
 app.use('/users', authMiddleware, usersRouter);
