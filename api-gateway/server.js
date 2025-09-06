@@ -77,7 +77,7 @@ app.use('/api/auth', prox(AUTH_URL));
 // User management (admin only)
 app.use(
   '/api/users',
-  prox(AUTH_URL, { pathRewrite: { '^/api/users': '/api/auth/users' } }),
+  prox(AUTH_URL, { pathRewrite: { '^/api/users': '/users' } }),
 );
 
 // Inventory service
