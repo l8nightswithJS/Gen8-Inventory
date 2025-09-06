@@ -49,7 +49,7 @@ const prox = (target, options = {}) =>
     xfwd: true,
     proxyTimeout: 25_000,
     timeout: 25_000,
-    logLevel: 'debug', // enable full debug
+    logLevel: 'debug',
     onProxyReq(proxyReq, req) {
       console.log(
         `[GW] Proxying ${req.method} ${req.originalUrl} -> ${target}`,
@@ -71,9 +71,14 @@ const prox = (target, options = {}) =>
   });
 
 // --- Routes ---
-// Auth service (login, registration, users, etc.)
+// Auth service (login, register, verify, logout)
 app.use('/api/auth', prox(AUTH_URL));
-app.use('/users', prox(AUTH_URL));
+
+// User management (admin only)
+app.use(
+  '/api/users',
+  prox(AUTH_URL, { pathRewrite: { '^/api/users': '/api/auth/users' } }),
+);
 
 // Inventory service
 app.use(

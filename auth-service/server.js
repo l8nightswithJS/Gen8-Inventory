@@ -12,7 +12,7 @@ const usersRouter = require('./routes/users');
 const app = express();
 app.set('etag', false);
 
-// make responses uncacheable by browsers/proxies
+// Prevent caching
 app.use((_req, res, next) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.set('Pragma', 'no-cache');
@@ -22,27 +22,22 @@ app.use((_req, res, next) => {
 app.use(cors());
 app.use(express.json());
 
-/**
- * 🔎 Health check (path corrected to match gateway's path rewrite)
- */
+// Health check
 app.get('/healthz', (_req, res) => {
   res.json({ service: 'auth', ok: true, timestamp: Date.now() });
 });
 
-/**
- * Protect sensitive auth endpoints first.
- * The gateway strips "/api/auth", so we listen for the resulting path (e.g., "/verify").
- */
+// --- Auth routes ---
+// Gateway forwards /api/auth/* → here as /...
 app.use('/verify', authMiddleware);
 app.use('/me', authMiddleware);
 app.use('/logout', authMiddleware);
 
-// Public routes like /login and /register are handled by this router.
-// This is placed after the specific middleware above to ensure they are protected first.
+// Public routes (login, register)
 app.use('/', authRouter);
 
-// Protected routes for user management.
-// The gateway rewrites "/api/users" to "/api/auth/users".
+// --- User management routes ---
+// Gateway forwards /api/users/* → here as /api/auth/users/*
 app.use('/api/auth/users', authMiddleware, usersRouter);
 
 const PORT = Number(process.env.PORT) || 8001;
