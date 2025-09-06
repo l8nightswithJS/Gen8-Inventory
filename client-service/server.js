@@ -20,11 +20,7 @@ app.use(express.json());
 // 🔐 Protect API routes (except health)
 
 // Serve uploaded logos
-app.use(
-  '/uploads',
-  authMiddleware,
-  express.static(path.join(__dirname, 'uploads')),
-);
+app.use('/', authMiddleware, express.static(path.join(__dirname, 'uploads')));
 
 // Routes
 app.use('/', authMiddleware, clientsRouter);
