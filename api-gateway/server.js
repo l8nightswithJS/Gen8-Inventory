@@ -1,4 +1,3 @@
-// api-gateway/server.js
 import express from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
@@ -12,8 +11,8 @@ const {
   CLIENT_URL,
   BARCODE_URL,
 } = process.env;
-const PORT = Number(RENDER_PORT) || 8080;
 
+const PORT = Number(RENDER_PORT) || 8080;
 const app = express();
 
 // --- CORS ---
@@ -32,16 +31,17 @@ app.use(
   }),
 );
 
-// Debug log incoming requests
+// Debug logging
 app.use((req, _res, next) => {
   console.log(`[GW] Incoming ${req.method} ${req.originalUrl}`);
   next();
 });
 app.use(morgan('tiny'));
 
-app.get('/healthz', (_req, res) => res.json({ ok: true }));
+// Health check
+app.get('/healthz', (_req, res) => res.json({ ok: true, gateway: true }));
 
-// --- Proxy helper ---
+// Proxy helper
 const prox = (target, options = {}) =>
   createProxyMiddleware({
     target,
@@ -50,55 +50,35 @@ const prox = (target, options = {}) =>
     proxyTimeout: 25_000,
     timeout: 25_000,
     logLevel: 'debug',
-    onProxyReq(proxyReq, req) {
-      console.log(
-        `[GW] Proxying ${req.method} ${req.originalUrl} -> ${target}`,
-      );
-    },
-    onError(err, req, res) {
-      console.error(
-        `[GW] Upstream error ${req.method} ${req.originalUrl} -> ${target}:`,
-        err?.code || err?.message,
-      );
-      if (!res.headersSent) {
-        res.status(502).json({
-          error: 'EUPSTREAM',
-          detail: err?.code || 'Upstream unavailable',
-        });
-      }
-    },
     ...options,
   });
 
-// --- Routes ---
-// Auth service (login, register, verify, logout)
+// Routes
 app.use('/api/auth', prox(AUTH_URL));
-
-// User management (admin only)
 app.use(
   '/api/users',
   prox(AUTH_URL, { pathRewrite: { '^/api/users': '/users' } }),
 );
 
-// Inventory service
 app.use(
   '/api/items',
-  prox(INVENTORY_URL, { pathRewrite: { '^/api/items': '' } }),
+  prox(INVENTORY_URL, { pathRewrite: { '^/api/items': '/items' } }),
 );
-
-// Client service
 app.use(
   '/api/clients',
-  prox(CLIENT_URL, { pathRewrite: { '^/api/clients': '' } }),
+  prox(CLIENT_URL, { pathRewrite: { '^/api/clients': '/clients' } }),
 );
 
-// Barcode service
 app.use(
   '/api/barcodes',
-  prox(BARCODE_URL, { pathRewrite: { '^/api/barcodes': '' } }),
+  prox(BARCODE_URL, { pathRewrite: { '^/api/barcodes': '/barcodes' } }),
 );
-app.use('/api/scan', prox(BARCODE_URL, { pathRewrite: { '^/api/scan': '' } }));
+app.use(
+  '/api/scan',
+  prox(BARCODE_URL, { pathRewrite: { '^/api/scan': '/scan' } }),
+);
 
+// Catch-all
 app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 
 app.listen(PORT, '0.0.0.0', () => {

@@ -1,4 +1,3 @@
-// barcode-service/server.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -12,14 +11,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 🔐 Protect API routes (except health)
+// Health endpoint
+app.get('/healthz', (_req, res) => res.json({ service: 'barcode', ok: true }));
 
 // Routes
-app.use('/api/barcodes', authMiddleware, barcodeRoutes);
-app.use('/api/scan', authMiddleware, scanRouter);
-
-// Health endpoint
-app.get('/api/health', (_req, res) => res.json({ ok: true }));
+app.use('/barcodes', authMiddleware, barcodeRoutes);
+app.use('/scan', authMiddleware, scanRouter);
 
 const PORT = Number(process.env.PORT) || 8002;
 app.listen(PORT, '0.0.0.0', () => {

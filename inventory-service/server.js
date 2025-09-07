@@ -1,20 +1,16 @@
-// inventory-service/server.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 
-// Shared auth middlewares (from packages/shared-auth)
 const {
   authMiddleware,
   requireRole,
   requireClientMatch,
-  handleValidation,
   errorHandler,
 } = require('shared-auth');
 
-// Core routes
 const inventoryRouter = require('./routes/inventory');
 const labelsRouter = require('./routes/labels');
 const locationsRouter = require('./routes/locations');
@@ -22,12 +18,10 @@ const locationsRouter = require('./routes/locations');
 const app = express();
 app.set('etag', false);
 
-app.get('/', (req, res) => {
-  res.json({
-    message: 'Gener8 Inventory API is running.',
-    version: '2.0-login-fix',
-  });
-});
+// Health endpoint
+app.get('/healthz', (_req, res) =>
+  res.json({ service: 'inventory', ok: true }),
+);
 
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN;
 app.use(
@@ -45,14 +39,9 @@ const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 app.use('/uploads', express.static(uploadDir));
 
-/**
- * 🔐 Protect all /api routes with JWT
- * - Use requireClientMatch + requireRole inside routers where needed
- */
-
 // Routes
 app.use('/items', authMiddleware, inventoryRouter);
-app.use('/labels', authMiddleware, labelsRouter); // example: labels may not need tenant scoping
+app.use('/labels', authMiddleware, labelsRouter);
 app.use(
   '/locations',
   authMiddleware,
@@ -60,9 +49,6 @@ app.use(
   requireRole('admin', 'manager'),
   locationsRouter,
 );
-
-// Health endpoint (public)
-app.get('/health', (_req, res) => res.json({ ok: true }));
 
 // Global error handler
 app.use(errorHandler);
