@@ -2,19 +2,26 @@
 const express = require('express');
 const { body, param } = require('express-validator');
 const userController = require('../controllers/userController');
-const { requireRole, handleValidation } = require('shared-auth'); // Import the middleware
+const { requireRole, handleValidation } = require('shared-auth');
 
 const router = express.Router();
 
-// Protect all routes in this file, allowing only admins
-router.use(requireRole('admin'));
-
-router.get('/', userController.getAllUsers);
-router.get('/pending', userController.getPendingUsers);
+// ✅ Place ALL general middleware at the top.
+// This ensures they run for every request handled by this router.
 router.use((req, res, next) => {
   console.log(`[USERS-ROUTER] ${req.method} ${req.originalUrl}`);
   next();
 });
+
+// Protect all subsequent routes in this file, allowing only admins
+router.use(requireRole('admin'));
+
+// --- Define specific routes below ---
+
+router.get('/', userController.getAllUsers);
+
+router.get('/pending', userController.getPendingUsers);
+
 router.post(
   '/:id/approve',
   param('id').isUUID(),
