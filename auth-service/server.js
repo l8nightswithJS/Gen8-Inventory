@@ -27,7 +27,7 @@ app.get('/healthz', (_req, res) => {
 app.use('/users', authMiddleware, usersRouter);
 
 // Auth routes (public login/register + verify/logout etc.)
-app.use('/auth', authRouter);
+app.use('/', authRouter);
 
 const PORT = Number(process.env.PORT) || 8001;
 app.listen(PORT, '0.0.0.0', () => {
