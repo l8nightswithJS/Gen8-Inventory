@@ -41,7 +41,7 @@ export default function ClientPage() {
   const [items, setItems] = useState([]);
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
-  const [viewMode] = useState('desktop');
+  const [viewMode, setViewMode] = useState('desktop'); // MODIFIED
 
   // --- Modal State ---
   const [modalState, setModalState] = useState({
@@ -64,6 +64,23 @@ export default function ClientPage() {
   });
   const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(15);
+
+  // ADDED: useEffect to handle responsive viewMode
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setViewMode('mobile');
+      } else {
+        setViewMode('desktop');
+      }
+    };
+
+    handleResize(); // Set initial view mode on load
+    window.addEventListener('resize', handleResize); // Add listener for window changes
+
+    // Cleanup listener on component unmount
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const fetchItems = useCallback(async () => {
     try {
@@ -166,68 +183,76 @@ export default function ClientPage() {
   }, [items, schema]);
 
   return (
-    <div className="mx-auto max-w-7xl">
-      <div className="mb-6">
-        <button
-          onClick={() => navigate('/dashboard')}
-          className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-800"
-        >
-          <FiChevronLeft />
-          All Clients
-        </button>
-        <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight">
-          {client?.name || 'Loading...'}
-        </h1>
+    <div className="mx-auto max-w-7xl px-4">
+      {/* MODIFIED: Improved responsive header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-y-4">
+        <div>
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-800 mb-2 sm:mb-0"
+          >
+            <FiChevronLeft />
+            All Clients
+          </button>
+          <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+            {client?.name || 'Loading...'}
+          </h1>
+        </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 mb-4 justify-end">
-        <SearchBar onSearch={setQuery} />
-        <Button
-          onClick={() => handleModal('scan', true)}
-          variant="secondary"
-          title="Scan"
-        >
-          <FiCamera className="sm:mr-2" />
-          <span className="hidden sm:inline">Scan</span>
-        </Button>
-        {isAdmin && (
-          <>
-            <Button
-              onClick={() => handleModal('addItem', true)}
-              variant="secondary"
-              title="Add Item"
-            >
-              <FiPlus className="sm:mr-2" />
-              <span className="hidden sm:inline">Add</span>
-            </Button>
-            <Button
-              onClick={() => handleModal('import', true)}
-              variant="secondary"
-              title="Bulk Import"
-            >
-              <FiLayers className="sm:mr-2" />
-              <span className="hidden sm:inline">Bulk</span>
-            </Button>
-            <Button
-              as="a"
-              // UPDATED: Use full URL for export
-              href={`${process.env.REACT_APP_API_BASE_URL}/api/items/export?client_id=${clientId}`}
-              variant="secondary"
-              title="Export Data"
-            >
-              <FiDownload className="sm:mr-2" />
-              <span className="hidden sm:inline">Export</span>
-            </Button>
-            <Button
-              onClick={() => handleModal('columnSetup', true)}
-              variant="secondary"
-              title="Edit Columns"
-            >
-              <FiColumns className="sm:mr-2" />
-              <span className="hidden sm:inline">Columns</span>
-            </Button>
-          </>
-        )}
+      {/* MODIFIED: Improved responsive action bar */}
+      <div className="flex flex-col md:flex-row md:items-center gap-4 mb-4">
+        <div className="flex-grow">
+          <SearchBar onSearch={setQuery} />
+        </div>
+        <div className="flex items-center flex-wrap gap-2 justify-start md:justify-end">
+          <Button
+            onClick={() => handleModal('scan', true)}
+            variant="secondary"
+            title="Scan"
+          >
+            <FiCamera className="sm:mr-2" />
+            <span className="hidden sm:inline">Scan</span>
+          </Button>
+          {isAdmin && (
+            <>
+              <Button
+                onClick={() => handleModal('addItem', true)}
+                variant="secondary"
+                title="Add Item"
+              >
+                <FiPlus className="sm:mr-2" />
+                <span className="hidden sm:inline">Add</span>
+              </Button>
+              <Button
+                onClick={() => handleModal('import', true)}
+                variant="secondary"
+                title="Bulk Import"
+              >
+                <FiLayers className="sm:mr-2" />
+                <span className="hidden sm:inline">Bulk</span>
+              </Button>
+              <Button
+                as="a"
+                // UPDATED: Use full URL for export
+                href={`${process.env.REACT_APP_API_BASE_URL}/api/items/export?client_id=${clientId}`}
+                variant="secondary"
+                title="Export Data"
+              >
+                <FiDownload className="sm:mr-2" />
+                <span className="hidden sm:inline">Export</span>
+              </Button>
+              <Button
+                onClick={() => handleModal('columnSetup', true)}
+                variant="secondary"
+                title="Edit Columns"
+              >
+                <FiColumns className="sm:mr-2" />
+                <span className="hidden sm:inline">Columns</span>
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       {error && <p className="text-red-600 my-3">{error}</p>}
