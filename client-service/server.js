@@ -5,6 +5,7 @@ const path = require('path');
 const { authMiddleware } = require('shared-auth');
 
 const clientsRouter = require('./routes/clients');
+const { createClient } = require('./controllers/clientsController');
 
 const app = express();
 
@@ -21,6 +22,7 @@ app.use('/', authMiddleware, express.static(path.join(__dirname, 'uploads')));
 
 // Routes
 app.use('/', authMiddleware, clientsRouter);
+app.use('/add', authMiddleware, createClient);
 
 const PORT = Number(process.env.PORT) || 8003;
 app.listen(PORT, '0.0.0.0', () => {
