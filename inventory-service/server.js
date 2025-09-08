@@ -23,10 +23,10 @@ app.get('/healthz', (_req, res) =>
   res.json({ service: 'inventory', ok: true }),
 );
 
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN;
+const CORS_ORIGIN = process.env.CORS_ORIGIN;
 app.use(
   cors({
-    origin: FRONTEND_ORIGIN || '*',
+    origin: CORS_ORIGIN || '*',
     credentials: true,
   }),
 );
@@ -40,10 +40,10 @@ if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 app.use('/uploads', express.static(uploadDir));
 
 // Routes
-app.use('/items', authMiddleware, inventoryRouter);
-app.use('/labels', authMiddleware, labelsRouter);
+app.use('/', authMiddleware, inventoryRouter);
+app.use('/', authMiddleware, labelsRouter);
 app.use(
-  '/locations',
+  '/',
   authMiddleware,
   requireClientMatch,
   requireRole('admin', 'manager'),

@@ -17,11 +17,7 @@ app.get('/healthz', (_req, res) => {
 });
 
 // Serve uploaded logos
-app.use(
-  '/uploads',
-  authMiddleware,
-  express.static(path.join(__dirname, 'uploads')),
-);
+app.use('/', authMiddleware, express.static(path.join(__dirname, 'uploads')));
 
 // Routes
 app.use('/', authMiddleware, clientsRouter);
