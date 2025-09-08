@@ -18,7 +18,7 @@ router.get(
 );
 
 router.post(
-  '/',
+  '/add',
   upload.single('logo'),
   body('name').isString().trim().notEmpty(),
   handleValidation,
