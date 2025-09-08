@@ -12,8 +12,8 @@ const handleSupabaseError = (res, error, context) => {
 exports.getAllUsers = async (req, res) => {
   const { data, error } = await sbAdmin
     .from('users')
-    .select('id, username, role, approved')
-    .order('username', { ascending: true });
+    .select('id, email, role, approved')
+    .order('email', { ascending: true });
   if (error) return handleSupabaseError(res, error, 'getAllUsers');
   res.json(data || []);
 };
@@ -21,9 +21,9 @@ exports.getAllUsers = async (req, res) => {
 exports.getPendingUsers = async (req, res) => {
   const { data, error } = await sbAdmin
     .from('users')
-    .select('id, username, role, approved')
+    .select('id, email, role, approved')
     .eq('approved', false)
-    .order('username', { ascending: true });
+    .order('email', { ascending: true });
   if (error) return handleSupabaseError(res, error, 'getPendingUsers');
   res.json(data || []);
 };

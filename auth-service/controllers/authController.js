@@ -32,7 +32,7 @@ async function ensureUserProfile(authUser, defaults = {}) {
 
   const { data, error } = await sbAdmin
     .from('users')
-    .upsert({ id, role, approved }, { onConflict: 'id' })
+    .upsert({ id, email, role, approved }, { onConflict: 'id' })
     .select('id, role, approved')
     .single();
 
