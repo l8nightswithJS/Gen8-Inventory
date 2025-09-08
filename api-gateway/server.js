@@ -95,11 +95,11 @@ app.use('/api/clients', prox(CLIENT_URL));
 // Barcode service
 app.use(
   '/api/barcodes',
-  prox(BARCODE_URL, { pathRewrite: { '^/api/barcodes': '/api/barcodes' } }),
+  prox(BARCODE_URL, { pathRewrite: { '^/api/barcodes': '/barcodes' } }),
 );
 app.use(
   '/api/scan',
-  prox(BARCODE_URL, { pathRewrite: { '^/api/scan': '/api/scan' } }),
+  prox(BARCODE_URL, { pathRewrite: { '^/api/scan': '/scan' } }),
 );
 
 // Catch-all 404
