@@ -15,8 +15,8 @@ app.use(express.json());
 app.get('/healthz', (_req, res) => res.json({ service: 'barcode', ok: true }));
 
 // Routes
-app.use('/', authMiddleware, barcodeRoutes);
-app.use('/', authMiddleware, scanRouter);
+app.use('/api/barcodes', authMiddleware, barcodeRoutes);
+app.use('/api/scan', authMiddleware, scanRouter);
 
 const PORT = Number(process.env.PORT) || 8002;
 app.listen(PORT, '0.0.0.0', () => {
