@@ -18,7 +18,7 @@ export default function ScanModal({ client, onClose, onScanSuccess }) {
     try {
       // ✅ goes through gateway → /api/scan
       const { data: result } = await api.post('/api/scan', {
-        barcode,
+        item_id: barcode,
         client_id: client.id,
       });
 
