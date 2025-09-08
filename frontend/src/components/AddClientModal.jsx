@@ -28,7 +28,7 @@ function AddClientForm({ onSuccess, onCancel }) {
       }
 
       // ✅ Call gateway route
-      const res = await api.post('/api/clients', formData, {
+      const res = await api.post('/api/clients/add', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
