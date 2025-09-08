@@ -22,12 +22,12 @@ app.use(express.json());
 app.get('/healthz', (_req, res) => {
   res.json({ service: 'auth', ok: true, timestamp: Date.now() });
 });
+app.use('/', authRouter);
 
 // User management (protected)
 app.use('/', authMiddleware, usersRouter);
 
 // Auth routes (public login/register + verify/logout etc.)
-app.use('/', authRouter);
 
 const PORT = Number(process.env.PORT) || 8001;
 app.listen(PORT, '0.0.0.0', () => {
