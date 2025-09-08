@@ -90,10 +90,7 @@ app.use(
 );
 
 // Client service
-app.use(
-  '/api/clients',
-  prox(CLIENT_URL, { pathRewrite: { '^/api/clients': '/clients' } }),
-);
+app.use('/api/clients', prox(CLIENT_URL));
 
 // Barcode service
 app.use(

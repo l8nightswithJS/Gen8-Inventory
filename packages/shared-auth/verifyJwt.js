@@ -7,7 +7,7 @@ function verifyJwt(token) {
   }
 
   try {
-    return jwt.verify(token, secret); // returns decoded payload
+    return jwt.verify(token, secret) || console.log(token, secret); // returns decoded payload
   } catch (err) {
     throw new Error('Invalid or expired token');
   }
