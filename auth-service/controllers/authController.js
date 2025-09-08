@@ -28,7 +28,7 @@ async function ensureUserProfile(authUser, defaults = {}) {
   const email = authUser.email || meta.email || '';
   const role = meta.role || defaults.role || 'staff';
   const approved =
-    typeof defaults.approved === 'boolean' ? defaults.approved : true;
+    typeof defaults.approved === 'boolean' ? defaults.approved : false;
 
   const { data, error } = await sbAdmin
     .from('users')
