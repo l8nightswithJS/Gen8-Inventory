@@ -20,7 +20,7 @@ app.get('/healthz', (_req, res) => {
 app.use('/', authMiddleware, express.static(path.join(__dirname, 'uploads')));
 
 // Routes
-app.use('/add', authMiddleware, clientsRouter);
+app.use('/', authMiddleware, clientsRouter);
 
 const PORT = Number(process.env.PORT) || 8003;
 app.listen(PORT, '0.0.0.0', () => {
