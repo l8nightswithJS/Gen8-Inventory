@@ -68,6 +68,17 @@ router.delete(
   inventoryController.deleteItem, // Use the correct reference
 );
 
+router.post(
+  '/adjust',
+  body('item_id').isInt().withMessage('item_id is required'),
+  body('location_id').isInt().withMessage('location_id is required'),
+  body('change_quantity')
+    .isInt()
+    .withMessage('change_quantity must be an integer'),
+  handleValidation,
+  inventoryController.adjustInventory,
+);
+
 // ---------- Bulk import (remains admin-only) ----------
 const bulkValidators = [
   body('client_id').isInt().withMessage('client_id is required').toInt(),

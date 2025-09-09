@@ -105,6 +105,47 @@ exports.acknowledgeAlert = async (req, res, next) => {
   }
 };
 
+exports.adjustInventory = async (req, res, next) => {
+  try {
+    const { item_id, location_id, change_quantity } = req.body;
+
+    // This is the atomic database operation.
+    // It tells PostgreSQL to find the matching row and mathematically
+    // add the change_quantity, preventing any race conditions.
+    const result = await pool.query(
+      `INSERT INTO inventory (item_id, location_id, quantity)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (item_id, location_id)
+       DO UPDATE SET quantity = inventory.quantity + EXCLUDED.quantity
+       RETURNING quantity`,
+      [item_id, location_id, change_quantity],
+    );
+
+    if (result.rows.length === 0) {
+      // This case is unlikely with the UPSERT, but good for safety
+      return res
+        .status(404)
+        .json({ message: 'Could not update inventory record.' });
+    }
+
+    res.json({
+      message: 'Inventory updated successfully',
+      item_id,
+      location_id,
+      new_quantity: result.rows[0].quantity,
+    });
+  } catch (err) {
+    // Handle cases like negative inventory if you add a CHECK constraint
+    if (err.code === '23514') {
+      // check_violation error code
+      return res
+        .status(409)
+        .json({ message: 'Update failed: quantity cannot be negative.' });
+    }
+    next(err);
+  }
+};
+
 // ---------- Items CRUD ----------
 
 // GET /api/items?client_id=123
@@ -115,11 +156,26 @@ exports.listItems = async (req, res, next) => {
       return res.status(400).json({ message: 'client_id is required' });
     }
 
+    // This new query joins items with inventory and sums the quantities
     const result = await pool.query(
-      'SELECT * FROM items WHERE client_id = $1 ORDER BY id ASC',
+      `SELECT
+          i.id,
+          i.client_id,
+          i.attributes,
+          i.last_updated,
+          i.sku,
+          i.description,
+          COALESCE(SUM(inv.quantity), 0)::int AS total_quantity
+       FROM items i
+       LEFT JOIN inventory inv ON i.id = inv.item_id
+       WHERE i.client_id = $1
+       GROUP BY i.id
+       ORDER BY i.id ASC`,
       [clientId],
     );
-    res.json(result.rows.map(rowToItem));
+
+    // The response now includes the total_quantity for each item
+    res.json(result.rows);
   } catch (err) {
     next(err);
   }
@@ -133,12 +189,37 @@ exports.getItemById = async (req, res, next) => {
       return res.status(400).json({ message: 'Invalid id' });
     }
 
-    const result = await pool.query('SELECT * FROM items WHERE id = $1', [id]);
-    if (result.rows.length === 0) {
+    // This query gets item details and a JSON array of its inventory levels
+    const itemResult = await pool.query(
+      `SELECT
+          i.id,
+          i.client_id,
+          i.attributes,
+          i.last_updated,
+          i.sku,
+          i.description,
+          (
+            SELECT COALESCE(json_agg(
+              json_build_object(
+                'location_id', inv.location_id,
+                'location_code', loc.code,
+                'quantity', inv.quantity
+              )
+            ), '[]'::json)
+            FROM inventory inv
+            JOIN locations loc ON inv.location_id = loc.id
+            WHERE inv.item_id = i.id
+          ) as inventory_levels
+       FROM items i
+       WHERE i.id = $1`,
+      [id],
+    );
+
+    if (itemResult.rows.length === 0) {
       return res.status(404).json({ message: 'Not found' });
     }
 
-    res.json(rowToItem(result.rows[0]));
+    res.json(itemResult.rows[0]);
   } catch (err) {
     next(err);
   }
