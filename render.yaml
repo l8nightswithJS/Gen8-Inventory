@@ -2,6 +2,7 @@ services:
   - type: web
     name: api-gateway
     env: node
+    rootDir: api-gateway
     buildCommand: 'npm install'
     startCommand: 'node server.js'
     envVars:
@@ -25,6 +26,7 @@ services:
   - type: web
     name: auth-service
     env: node
+    rootDir: auth-service
     buildCommand: 'npm install'
     startCommand: 'node server.js'
     envVars:
@@ -37,6 +39,7 @@ services:
   - type: web
     name: barcode-service
     env: node
+    rootDir: barcode-service
     buildCommand: 'npm install'
     startCommand: 'node server.js'
     envVars:
@@ -47,6 +50,7 @@ services:
   - type: web
     name: client-service
     env: node
+    rootDir: client-service
     buildCommand: 'npm install'
     startCommand: 'node server.js'
     envVars:
@@ -57,6 +61,7 @@ services:
   - type: web
     name: inventory-service
     env: node
+    rootDir: inventory-service
     buildCommand: 'npm install'
     startCommand: 'node server.js'
     envVars:
@@ -79,6 +84,7 @@ services:
   - type: web
     name: frontend
     env: static
+    rootDir: frontend
     buildCommand: 'npm install && npm run build'
     staticPublishPath: 'build'
     envVars:
