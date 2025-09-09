@@ -29,9 +29,8 @@ services:
     plan: professional
     buildCommand: 'npm install'
     startCommand: 'node server.js'
-    envGroups:
-      - gen8-shared-env
     envVars:
+      - fromGroup: gen8-shared-env
       - key: PORT
         value: '8001'
       - key: DATABASE_URL
@@ -43,9 +42,8 @@ services:
     plan: professional
     buildCommand: 'npm install'
     startCommand: 'node server.js'
-    envGroups:
-      - gen8-shared-env
     envVars:
+      - fromGroup: gen8-shared-env
       - key: PORT
         value: '8002'
 
@@ -55,9 +53,8 @@ services:
     plan: professional
     buildCommand: 'npm install'
     startCommand: 'node server.js'
-    envGroups:
-      - gen8-shared-env
     envVars:
+      - fromGroup: gen8-shared-env
       - key: PORT
         value: '8003'
 
@@ -67,9 +64,8 @@ services:
     plan: professional
     buildCommand: 'npm install'
     startCommand: 'node server.js'
-    envGroups:
-      - gen8-shared-env
     envVars:
+      - fromGroup: gen8-shared-env
       - key: PORT
         value: '8000'
       - key: PRINT_BATCH_SIZE
