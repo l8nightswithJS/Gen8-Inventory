@@ -1,0 +1,98 @@
+services:
+  - type: web
+    name: api-gateway
+    env: node
+    plan: professional
+    buildCommand: 'npm install'
+    startCommand: 'node server.js'
+    envVars:
+      - key: PORT
+        value: '8080'
+      - key: ALLOW_ORIGIN
+        value: 'https://gen8-inventory.vercel.app,http://localhost:3000'
+      - key: AUTH_URL
+        value: 'https://gener8-inventory-api.onrender.com'
+      - key: BARCODE_URL
+        value: 'https://barcode-service.onrender.com'
+      - key: CLIENT_URL
+        value: 'https://client-service-c5ak.onrender.com'
+      - key: CORS_ORIGIN
+        value: 'https://gen8-inventory.vercel.app,http://localhost:3000'
+      - key: INVENTORY_URL
+        value: 'https://inventory-service-h68j.onrender.com'
+      - key: JWT_SECRET
+        value: 'f856c44a-92c2-4730-b118-316dc174a5d9'
+
+  - type: web
+    name: auth-service
+    env: node
+    plan: professional
+    buildCommand: 'npm install'
+    startCommand: 'node server.js'
+    envGroups:
+      - gen8-shared-env
+    envVars:
+      - key: PORT
+        value: '8001'
+      - key: DATABASE_URL
+        value: 'postgresql://postgres:2Gs4kxBVxHypeL1G@db.itglhwjighxcfovzxwcd.supabase.co:5432/postgres'
+
+  - type: web
+    name: barcode-service
+    env: node
+    plan: professional
+    buildCommand: 'npm install'
+    startCommand: 'node server.js'
+    envGroups:
+      - gen8-shared-env
+    envVars:
+      - key: PORT
+        value: '8002'
+
+  - type: web
+    name: client-service
+    env: node
+    plan: professional
+    buildCommand: 'npm install'
+    startCommand: 'node server.js'
+    envGroups:
+      - gen8-shared-env
+    envVars:
+      - key: PORT
+        value: '8003'
+
+  - type: web
+    name: inventory-service
+    env: node
+    plan: professional
+    buildCommand: 'npm install'
+    startCommand: 'node server.js'
+    envGroups:
+      - gen8-shared-env
+    envVars:
+      - key: PORT
+        value: '8000'
+      - key: PRINT_BATCH_SIZE
+        value: '100'
+      - key: ZEBRA_HOST
+        value: '<printer-ip-or-host>'
+      - key: ZEBRA_PORT
+        value: '9100'
+      - key: ZPL_COPIES
+        value: '1'
+      - key: ZPL_LABEL_HEIGHT
+        value: '406'
+      - key: ZPL_LABEL_WIDTH
+        value: '812'
+
+  - type: static_site
+    name: frontend
+    env: static
+    plan: professional
+    buildCommand: 'npm install && npm run build'
+    staticPublishPath: 'build'
+    envVars:
+      - key: REACT_APP_API_BASE_URL
+        value: 'https://gen8-inventory.onrender.com'
+      - key: REACT_APP_API_GATEWAY_URL
+        value: 'https://gen8-inventory.onrender.com'
