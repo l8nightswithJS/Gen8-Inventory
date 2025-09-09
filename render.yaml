@@ -85,7 +85,7 @@ services:
       - key: ZPL_LABEL_WIDTH
         value: '812'
 
-  - type: static_site
+  - type: web
     name: frontend
     env: static
     plan: professional
