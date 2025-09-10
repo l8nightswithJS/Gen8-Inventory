@@ -78,7 +78,11 @@ const prox = (target, options = {}) =>
 app.use('/api/auth', prox(AUTH_URL, { pathRewrite: { '^/api/auth': '' } }));
 
 // User management (admin only)
-app.use('/api/users', prox(AUTH_URL, { pathRewrite: { '^/api/users': '' } }));
+app.use('/api/users', prox(AUTH_URL, { pathRewrite: { '^/api/users': '/' } }));
+app.use(
+  '/api/users',
+  prox(AUTH_URL, { pathRewrite: { '^/api/users': '/pending' } }),
+);
 
 // Inventory service
 app.use(
