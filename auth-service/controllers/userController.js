@@ -1,4 +1,5 @@
-// auth-service/controllers/userController.js
+// In auth-service/controllers/userController.js (Complete File)
+
 const { sbAdmin } = require('../lib/supabaseClient');
 
 const handleSupabaseError = (res, error, context) => {
@@ -28,16 +29,18 @@ exports.getPendingUsers = async (req, res) => {
   res.json(data || []);
 };
 
-exports.getUserById = async (req, res) => {
+exports.getUserClients = async (req, res) => {
   const { id } = req.params;
-  const { data, error } = await sbAdmin
-    .from('users')
-    .select('*')
-    .eq('id', id)
-    .single();
-  if (error) return handleSupabaseError(res, error, 'getUserById');
-  if (!data) return res.status(404).json({ message: 'User not found' });
-  res.json(data);
+  try {
+    const { data, error } = await sbAdmin
+      .from('user_clients')
+      .select('client_id')
+      .eq('user_id', id);
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error) {
+    return handleSupabaseError(res, error, 'getUserClients');
+  }
 };
 
 exports.approveUser = async (req, res) => {
@@ -51,22 +54,7 @@ exports.approveUser = async (req, res) => {
   res.json({ message: 'User approved successfully', user: data[0] });
 };
 
-// Add this function to userController.js
-exports.assignClientToUser = async (req, res) => {
-  const { id } = req.params;
-  const { client_id } = req.body;
-
-  const { data, error } = await sbAdmin
-    .from('users')
-    .update({ client_id: client_id })
-    .eq('id', id)
-    .select();
-
-  if (error) return handleSupabaseError(res, error, 'assignClientToUser');
-  res.json({ message: 'User assigned to client successfully', user: data[0] });
-};
-
-exports.updateUserRole = async (req, res) => {
+exports.updateUser = async (req, res) => {
   const { id } = req.params;
   const { role } = req.body;
   const { data, error } = await sbAdmin
@@ -78,6 +66,42 @@ exports.updateUserRole = async (req, res) => {
   res.json({ message: 'User updated successfully', user: data[0] });
 };
 
+exports.updateUserClients = async (req, res) => {
+  const { id } = req.params;
+  const { client_ids } = req.body;
+
+  if (!Array.isArray(client_ids)) {
+    return res.status(400).json({ message: 'client_ids must be an array.' });
+  }
+
+  // NOTE: This uses Supabase direct connection, which may not be available.
+  // We'll use the standard client which is safer.
+  try {
+    // Transaction Step 1: Delete old associations
+    const { error: deleteError } = await sbAdmin
+      .from('user_clients')
+      .delete()
+      .eq('user_id', id);
+    if (deleteError) throw deleteError;
+
+    // Transaction Step 2: Insert new associations if any exist
+    if (client_ids.length > 0) {
+      const linksToInsert = client_ids.map((clientId) => ({
+        user_id: id,
+        client_id: clientId,
+      }));
+      const { error: insertError } = await sbAdmin
+        .from('user_clients')
+        .insert(linksToInsert);
+      if (insertError) throw insertError;
+    }
+
+    res.json({ message: `User's client access updated successfully.` });
+  } catch (error) {
+    return handleSupabaseError(res, error, 'updateUserClients');
+  }
+};
+
 exports.deleteUser = async (req, res) => {
   const { id } = req.params;
   const { error } = await sbAdmin.auth.admin.deleteUser(id);
@@ -85,38 +109,4 @@ exports.deleteUser = async (req, res) => {
     return handleSupabaseError(res, error, 'deleteUser');
   }
   res.status(204).send();
-};
-
-exports.updateUserClients = async (req, res) => {
-  const { id } = req.params;
-  const { client_ids } = req.body; // Expecting an array of numbers, e.g., [1, 17]
-
-  if (!Array.isArray(client_ids)) {
-    return res.status(400).json({ message: 'client_ids must be an array.' });
-  }
-
-  const client = await sbAdmin.rpc('get_db_client'); // Using Supabase's direct connection pool for transaction
-  try {
-    await client.query('BEGIN');
-
-    // First, delete all existing client associations for this user.
-    await client.query('DELETE FROM user_clients WHERE user_id = $1', [id]);
-
-    // If the new list is not empty, insert the new associations.
-    if (client_ids.length > 0) {
-      const insertValues = client_ids
-        .map((clientId) => `('${id}', ${clientId})`)
-        .join(',');
-      const insertQuery = `INSERT INTO user_clients (user_id, client_id) VALUES ${insertValues}`;
-      await client.query(insertQuery);
-    }
-
-    await client.query('COMMIT');
-    res.json({ message: `User's client access updated successfully.` });
-  } catch (error) {
-    await client.query('ROLLBACK');
-    return handleSupabaseError(res, error, 'updateUserClients');
-  } finally {
-    client.release();
-  }
 };
