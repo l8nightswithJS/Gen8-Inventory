@@ -31,7 +31,7 @@ app.use(requireClientMatch);
 // --- Protected Routes ---
 // The usersRouter is now mounted at the /users path and automatically
 // inherits the security middleware from above.
-app.use('/users', usersRouter);
+app.use('/', usersRouter);
 
 const PORT = Number(process.env.PORT) || 8001;
 app.listen(PORT, '0.0.0.0', () => {
