@@ -15,24 +15,70 @@ export default function UserFormModal({
   const [password, setPassword] = useState('');
   const [feedback, setFeedback] = useState({ type: '', message: '' });
   const [loading, setLoading] = useState(false);
+  const [allClients, setAllClients] = useState([]);
+  const [assignedClientIDs, setAssignedClientIDs] = useState(new Set());
 
   useEffect(() => {
     if (isOpen) {
+      setLoading(true);
+      // Reset form state when modal opens
+      setPassword('');
+      setFeedback({ type: '', message: '' });
+
       if (userToEdit) {
-        setEmail(userToEdit.email || userToEdit.username || '');
-        setRole(
-          ['admin', 'staff'].includes(userToEdit.role)
-            ? userToEdit.role
-            : 'staff',
-        );
+        setEmail(userToEdit.email || '');
+        setRole(userToEdit.role || 'staff');
       } else {
         setEmail('');
         setRole('staff');
       }
-      setPassword('');
-      setFeedback({ type: '', message: '' });
+
+      // Fetch all clients for the dropdown, and the user's currently assigned clients
+      const fetchInitialData = async () => {
+        try {
+          const clientsPromise = api.get('/api/clients');
+          const userClientsPromise = userToEdit
+            ? api.get(`/api/users/${userToEdit.id}/clients`)
+            : Promise.resolve({ data: [] });
+
+          const [clientsResponse, userClientsResponse] = await Promise.all([
+            clientsPromise,
+            userClientsPromise,
+          ]);
+
+          setAllClients(clientsResponse.data || []);
+
+          // Create a Set of assigned client IDs for efficient lookup
+          const assignedIds = new Set(
+            userClientsResponse.data.map((c) => c.client_id),
+          );
+          setAssignedClientIDs(assignedIds);
+        } catch (err) {
+          console.error('Failed to load modal data', err);
+          setFeedback({
+            type: 'error',
+            message: 'Could not load client data.',
+          });
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      fetchInitialData();
     }
   }, [isOpen, userToEdit]);
+
+  const handleClientCheckboxChange = (clientId, isChecked) => {
+    setAssignedClientIDs((prev) => {
+      const newSet = new Set(prev);
+      if (isChecked) {
+        newSet.add(clientId);
+      } else {
+        newSet.delete(clientId);
+      }
+      return newSet;
+    });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -49,9 +95,24 @@ export default function UserFormModal({
     setLoading(true);
     try {
       if (userToEdit) {
-        await api.put(`/api/users/${userToEdit.id}`, { role });
+        // When editing, we'll save both the role and the client assignments.
+        // We run these two API calls in parallel for efficiency.
+        const roleUpdatePromise = api.put(`/api/users/${userToEdit.id}`, {
+          role,
+        });
+        const clientsUpdatePromise = api.put(
+          `/api/users/${userToEdit.id}/clients`,
+          {
+            client_ids: Array.from(assignedClientIDs), // Convert the Set to an array
+          },
+        );
+
+        await Promise.all([roleUpdatePromise, clientsUpdatePromise]);
+
         setFeedback({ type: 'success', message: 'User updated successfully!' });
       } else {
+        // Creating a new user remains the same.
+        // An admin can assign clients after the user is created.
         await api.post('/api/auth/register', {
           email: email.trim(),
           role,
@@ -59,6 +120,7 @@ export default function UserFormModal({
         });
         setFeedback({ type: 'success', message: 'User created successfully!' });
       }
+
       onSuccess?.();
       setTimeout(onClose, 2000); // auto-close after success
     } catch (err) {
@@ -177,6 +239,37 @@ export default function UserFormModal({
             <option value="staff">Staff</option>
           </select>
         </div>
+        <fieldset>
+          <legend className="block text-sm font-medium text-gray-700 mb-1">
+            Assign to Clients
+          </legend>
+          <div className="max-h-40 overflow-y-auto border rounded-md p-2 space-y-1">
+            {allClients.length > 0 ? (
+              allClients.map((client) => (
+                <div key={client.id} className="flex items-center">
+                  <input
+                    id={`client-${client.id}`}
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    checked={assignedClientIDs.has(client.id)}
+                    onChange={(e) =>
+                      handleClientCheckboxChange(client.id, e.target.checked)
+                    }
+                    disabled={loading}
+                  />
+                  <label
+                    htmlFor={`client-${client.id}`}
+                    className="ml-2 text-sm text-gray-700"
+                  >
+                    {client.name}
+                  </label>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-gray-500">No clients to display.</p>
+            )}
+          </div>
+        </fieldset>
       </form>
     </BaseModal>
   );
