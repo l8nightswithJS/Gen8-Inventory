@@ -1,35 +1,28 @@
-// In client-service/server.js (Corrected and Final Version)
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { authMiddleware, requireClientMatch } = require('shared-auth');
+const { authMiddleware } = require('shared-auth');
 
 const clientsRouter = require('./routes/clients');
+const { createClient } = require('./controllers/clientsController');
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-// --- Public Routes ---
-// Health check is public and mounted before security.
+// Health check
 app.get('/healthz', (_req, res) => {
   res.json({ service: 'clients', ok: true });
 });
 
-// --- Security Middleware ---
-// All routes defined after these lines are now protected.
-app.use(authMiddleware);
-app.use(requireClientMatch);
+// Serve uploaded logos
+app.use('/', authMiddleware, express.static(path.join(__dirname, 'uploads')));
 
-// --- Protected Routes ---
-
-// Serve uploaded logos from a dedicated, protected path.
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// Mount the main API router. It inherits the security checks from above.
-app.use('/', clientsRouter);
+// Routes
+app.use('/', authMiddleware, clientsRouter);
+app.use('/add', authMiddleware, createClient);
 
 const PORT = Number(process.env.PORT) || 8003;
 app.listen(PORT, '0.0.0.0', () => {
