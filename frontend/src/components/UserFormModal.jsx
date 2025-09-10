@@ -66,7 +66,7 @@ export default function UserFormModal({
 
       fetchInitialData();
     }
-  }, [isOpen, userToEdit]);
+  }, [isOpen, userToEdit, api]);
 
   const handleClientCheckboxChange = (clientId, isChecked) => {
     setAssignedClientIDs((prev) => {
