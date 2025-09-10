@@ -29,12 +29,30 @@ router.post(
   userController.approveUser,
 );
 
+// Add this route to users.js, probably after the approveUser route
+router.post(
+  '/:id/assign-client',
+  param('id').isUUID(),
+  body('client_id').isInt(),
+  handleValidation,
+  userController.assignClientToUser,
+);
+
 router.put(
   '/:id',
   param('id').isUUID(),
   body('role').isIn(['admin', 'staff']),
   handleValidation,
   userController.updateUserRole,
+);
+
+router.put(
+  '/:id/clients',
+  param('id').isUUID(),
+  body('client_ids').isArray(),
+  body('client_ids.*').isInt(), // Validates that each item in the array is an integer
+  handleValidation,
+  userController.updateUserClients,
 );
 
 router.delete(

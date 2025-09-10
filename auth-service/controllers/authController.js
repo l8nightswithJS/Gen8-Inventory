@@ -86,6 +86,9 @@ async function register(req, res) {
 /**
  * POST /api/auth/login
  */
+// In auth-service/controllers/authController.js
+// Replace the entire login function
+
 async function login(req, res) {
   try {
     const { email, password } = req.body || {};
@@ -105,7 +108,7 @@ async function login(req, res) {
     }
     const authUser = data.user;
 
-    // Ensure profile
+    // Get the user's profile from our public.users table
     let { data: profile, error: selErr } = await sbAdmin
       .from('users')
       .select('id, role, approved')
@@ -123,12 +126,24 @@ async function login(req, res) {
       return res.status(403).json({ message: 'Account pending approval' });
     }
 
+    // --- NEW LOGIC START ---
+    // Fetch all client IDs associated with this user from the new join table
+    const { data: clientLinks } = await sbAdmin
+      .from('user_clients')
+      .select('client_id')
+      .eq('user_id', profile.id);
+
+    // Create a simple array of client IDs, e.g., [1, 17, 25]
+    const clientIds = clientLinks ? clientLinks.map((c) => c.client_id) : [];
+    // --- NEW LOGIC END ---
+
     // JWT payload
     const payload = {
       id: profile.id,
       role: profile.role,
       email: authUser.email || normalizedEmail,
       approved: profile.approved,
+      client_ids: clientIds, // <-- Use the new array of client IDs
     };
 
     const token = jwt.sign(payload, JWT_SECRET, {
