@@ -95,15 +95,16 @@ export default function UserFormModal({
     setLoading(true);
     try {
       if (userToEdit) {
-        // When editing, we'll save both the role and the client assignments.
-        // We run these two API calls in parallel for efficiency.
+        // When editing, save both role and client assignments in parallel.
         const roleUpdatePromise = api.put(`/api/users/${userToEdit.id}`, {
           role,
         });
+
         const clientsUpdatePromise = api.put(
           `/api/users/${userToEdit.id}/clients`,
           {
-            client_ids: Array.from(assignedClientIDs), // Convert the Set to an array
+            // Convert the Set of selected client IDs into an array for the API
+            client_ids: Array.from(assignedClientIDs),
           },
         );
 
@@ -112,7 +113,6 @@ export default function UserFormModal({
         setFeedback({ type: 'success', message: 'User updated successfully!' });
       } else {
         // Creating a new user remains the same.
-        // An admin can assign clients after the user is created.
         await api.post('/api/auth/register', {
           email: email.trim(),
           role,
