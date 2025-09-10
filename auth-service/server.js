@@ -25,7 +25,7 @@ app.get('/healthz', (_req, res) => {
 app.use('/', authRouter);
 
 // User management (protected)
-app.use('/', authMiddleware, usersRouter);
+app.use('/users', authMiddleware, usersRouter);
 
 // Auth routes (public login/register + verify/logout etc.)
 
