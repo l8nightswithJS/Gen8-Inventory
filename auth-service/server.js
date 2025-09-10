@@ -7,6 +7,12 @@ const authRouter = require('./routes/authRoutes');
 const usersRouter = require('./routes/users');
 
 const app = express();
+app.use((req, res, next) => {
+  console.log(
+    `[auth-service] Received request: ${req.method} ${req.originalUrl}`,
+  );
+  next();
+});
 app.set('etag', false);
 
 app.use((_req, res, next) => {
