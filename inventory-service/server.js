@@ -39,16 +39,12 @@ const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 app.use('/uploads', express.static(uploadDir));
 
+app.use(authMiddleware);
+app.use(requireClientMatch);
 // Routes
-app.use('/', authMiddleware, inventoryRouter);
-app.use('/', authMiddleware, labelsRouter);
-app.use(
-  '/',
-  authMiddleware,
-  requireClientMatch,
-  requireRole('admin', 'manager'),
-  locationsRouter,
-);
+app.use('/', inventoryRouter);
+app.use('/', labelsRouter);
+app.use('/', locationsRouter);
 
 // Global error handler
 app.use(errorHandler);
