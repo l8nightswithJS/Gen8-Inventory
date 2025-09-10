@@ -74,19 +74,23 @@ exports.updateUserClients = async (req, res) => {
     return res.status(400).json({ message: 'client_ids must be an array.' });
   }
 
-  // NOTE: This uses Supabase direct connection, which may not be available.
-  // We'll use the standard client which is safer.
+  // --- ADD THIS LINE TO SANITIZE THE INPUT ---
+  // This creates a Set to automatically remove duplicates and then converts it back to an array.
+  const uniqueClientIds = [
+    ...new Set(client_ids.map((id) => parseInt(id, 10))),
+  ];
+
   try {
-    // Transaction Step 1: Delete old associations
+    // First, delete all existing client associations for this user.
     const { error: deleteError } = await sbAdmin
       .from('user_clients')
       .delete()
       .eq('user_id', id);
     if (deleteError) throw deleteError;
 
-    // Transaction Step 2: Insert new associations if any exist
-    if (client_ids.length > 0) {
-      const linksToInsert = client_ids.map((clientId) => ({
+    // If the new list is not empty, insert the new, unique associations.
+    if (uniqueClientIds.length > 0) {
+      const linksToInsert = uniqueClientIds.map((clientId) => ({
         user_id: id,
         client_id: clientId,
       }));
