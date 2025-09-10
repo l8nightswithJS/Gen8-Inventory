@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { authMiddleware } = require('shared-auth');
+const { authMiddleware, requireClientMatch } = require('shared-auth');
 
 const authRouter = require('./routes/authRoutes');
 const usersRouter = require('./routes/users');
@@ -31,7 +31,7 @@ app.get('/healthz', (_req, res) => {
 app.use('/', authRouter);
 
 // User management (protected)
-app.use('/', authMiddleware, usersRouter);
+app.use('/', authMiddleware, requireClientMatch, usersRouter);
 
 // Auth routes (public login/register + verify/logout etc.)
 
