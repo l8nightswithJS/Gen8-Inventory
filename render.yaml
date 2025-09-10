@@ -11,13 +11,13 @@ services:
       - key: PORT
         value: '8080'
       - key: AUTH_URL
-        value: 'https://auth-service.onrender.com'
+        value: 'http://auth-service:8001'
       - key: BARCODE_URL
-        value: 'https://barcode-service.onrender.com'
+        value: 'http://barcode-service:8002'
       - key: CLIENT_URL
-        value: 'https://client-service.onrender.com'
+        value: 'http://client-service:8003'
       - key: INVENTORY_URL
-        value: 'https://inventory-service.onrender.com'
+        value: 'http://inventory-service:8000'
 
   - type: pserv
     name: auth-service
