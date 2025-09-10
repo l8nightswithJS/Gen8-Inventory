@@ -1,7 +1,7 @@
-// In packages/shared-auth/requireClientMatch.js
+// In packages/shared-auth/requireClientMatch.js (Corrected and Secure)
 
 function requireClientMatch(req, res, next) {
-  // The JWT payload now contains 'client_ids', an array of numbers.
+  // Get the list of client IDs the user is allowed to see from their token.
   const allowedClients = req.user?.client_ids;
 
   if (!Array.isArray(allowedClients)) {
@@ -10,26 +10,36 @@ function requireClientMatch(req, res, next) {
       .json({ error: 'Forbidden: Missing client scope in token.' });
   }
 
-  // Get the requested client_id from the body or query params.
-  const requestedClientId = parseInt(
-    req.body?.client_id || req.query?.client_id,
-    10,
-  );
+  // Find the client ID from the request, whether it's in the URL path, query, or body.
+  const requestedClientIdStr =
+    req.params.clientId ||
+    req.params.id ||
+    req.query.client_id ||
+    req.body.client_id;
 
-  // If the request is for a specific client, check if the user has access.
-  if (requestedClientId) {
-    if (allowedClients.includes(requestedClientId)) {
-      return next(); // User has access, proceed.
-    } else {
-      return res
-        .status(403)
-        .json({ error: 'Forbidden: You do not have access to this client.' });
-    }
+  // If the request isn't for a specific client (e.g., getting a list), let it pass.
+  // The controller will be responsible for filtering the results.
+  if (!requestedClientIdStr) {
+    return next();
   }
 
-  // If the request does not specify a client_id (e.g., fetching a list of all clients),
-  // we can just proceed. The route can handle further filtering if needed.
-  return next();
+  const requestedClientId = parseInt(requestedClientIdStr, 10);
+
+  if (isNaN(requestedClientId)) {
+    return res
+      .status(400)
+      .json({ error: 'Invalid client ID format in request.' });
+  }
+
+  // This is the core security check.
+  if (allowedClients.includes(requestedClientId)) {
+    return next(); // Success: The user is authorized for this client.
+  } else {
+    // Failure: The user is trying to access a client they are not assigned to.
+    return res
+      .status(403)
+      .json({ error: 'Forbidden: You do not have access to this client.' });
+  }
 }
 
 module.exports = requireClientMatch;
