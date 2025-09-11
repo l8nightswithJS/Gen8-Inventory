@@ -1,3 +1,4 @@
+// In inventory-service/server.js (Corrected and Final Version)
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -11,6 +12,8 @@ const {
   errorHandler,
 } = require('shared-auth');
 
+// Import the controller directly to access the master view function
+const inventoryController = require('./controllers/inventoryController');
 const inventoryRouter = require('./routes/inventory');
 const labelsRouter = require('./routes/labels');
 const locationsRouter = require('./routes/locations');
@@ -18,35 +21,37 @@ const locationsRouter = require('./routes/locations');
 const app = express();
 app.set('etag', false);
 
-// Health endpoint
+// --- Public Routes & Basic Setup ---
 app.get('/healthz', (_req, res) =>
   res.json({ service: 'inventory', ok: true }),
 );
 
-const CORS_ORIGIN = process.env.CORS_ORIGIN;
-app.use(
-  cors({
-    origin: CORS_ORIGIN || '*',
-    credentials: true,
-  }),
-);
-
+app.use(cors({ origin: process.env.CORS_ORIGIN || '*', credentials: true }));
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Uploads dir
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-app.use('/uploads', express.static(uploadDir));
 
+// --- Protected Routes ---
+
+// All routes in this service require the user to be logged in.
 app.use(authMiddleware);
-app.use(requireClientMatch);
-// Routes
-app.use('/', inventoryRouter);
-app.use('/', labelsRouter);
-app.use('/', locationsRouter);
 
-// Global error handler
+// The Master View is special: it's admin-only but does NOT get a client match check.
+app.get(
+  '/inventory/by-location',
+  requireRole('admin'),
+  inventoryController.getMasterInventoryByLocation,
+);
+
+// These routers handle client-specific data, so they DO get the client match check.
+app.use('/uploads', requireClientMatch, express.static(uploadDir));
+app.use('/', requireClientMatch, inventoryRouter);
+app.use('/', requireClientMatch, labelsRouter);
+app.use('/', requireClientMatch, locationsRouter);
+
+// --- Final Setup ---
 app.use(errorHandler);
 
 const PORT = Number(process.env.PORT) || 8000;
