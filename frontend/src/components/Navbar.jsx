@@ -10,6 +10,9 @@ export default function Navbar() {
   const match = pathname.match(/^\/clients\/(\d+)/);
   const clientId = match ? match[1] : null;
 
+  // ADDED: Check if the current user is an admin
+  const isAdmin = localStorage.getItem('role') === 'admin';
+
   const navLinks = (
     <>
       {clientId && (
@@ -27,6 +30,24 @@ export default function Navbar() {
           Alerts
         </NavLink>
       )}
+
+      {/* ADDED: The new NavLink for the Master View, visible only to admins */}
+      {isAdmin && (
+        <NavLink
+          to="/inventory/master"
+          className={({ isActive }) =>
+            `block px-3 py-2 rounded-md transition-colors md:text-sm ${
+              isActive
+                ? 'bg-blue-50 text-blue-700 font-semibold'
+                : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+            }`
+          }
+          onClick={() => setIsMenuOpen(false)}
+        >
+          Master View
+        </NavLink>
+      )}
+
       <NavLink
         to="/users"
         className={({ isActive }) =>
