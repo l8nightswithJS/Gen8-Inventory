@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/axiosConfig'; // ✅ correct path from /pages
-
+import QuantityAdjustModal from '../components/QuantityAdjustModal';
 // --- Main Components ---
 import InventoryTable from '../components/InventoryTable';
 import SearchBar from '../components/SearchBar';
@@ -42,8 +42,8 @@ export default function ClientPage() {
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState('desktop'); // MODIFIED
-
-  // --- Modal State ---
+  const [currentLocation, setCurrentLocation] = useState(null);
+  const [adjustingItem, setAdjustingItem] = useState(null);
   const [modalState, setModalState] = useState({
     addItem: false,
     import: false,
@@ -54,10 +54,7 @@ export default function ClientPage() {
     scannedLocation: null,
     scannedItem: null,
   });
-
   const [schema, setSchema] = useState(() => getSavedSchema(clientId));
-
-  // --- Sorting & Pagination State ---
   const [sortConfig, setSortConfig] = useState({
     key: 'part_number',
     direction: 'ascending',
@@ -121,11 +118,26 @@ export default function ClientPage() {
   };
 
   const handleScanSuccess = (result) => {
-    handleModal('scan', false);
+    handleModal('scan', false); // Always close the scanner modal first
+
     if (result.type === 'location') {
+      // If a location is scanned, save it as the active location.
+      setCurrentLocation(result.data);
+      // Also show the location details modal for user feedback.
       handleModal('scannedLocation', result.data);
     } else if (result.type === 'item') {
-      handleModal('scannedItem', result.data);
+      // If an item is scanned, check if we have an active location.
+      if (!currentLocation) {
+        // If NO location is active, alert the user and open the old item action modal.
+        alert(
+          'No active location. Please scan a location first to adjust stock.',
+        );
+        handleModal('scannedItem', result.data);
+      } else {
+        // If a location IS active, we're ready to adjust stock.
+        // Set the 'adjustingItem' state, which we will use to open our new quantity modal.
+        setAdjustingItem(result.data);
+      }
     }
   };
 
@@ -360,6 +372,17 @@ export default function ClientPage() {
               `Checking stock for ${item.attributes.name}... (Feature coming soon)`,
             );
             handleModal('scannedItem', null);
+          }}
+        />
+      )}
+      {adjustingItem && currentLocation && (
+        <QuantityAdjustModal
+          item={adjustingItem}
+          location={currentLocation}
+          onClose={() => setAdjustingItem(null)}
+          onSuccess={() => {
+            setAdjustingItem(null);
+            fetchItems(); // This refreshes the inventory list after a successful adjustment
           }}
         />
       )}
