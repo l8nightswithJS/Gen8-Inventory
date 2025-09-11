@@ -1,6 +1,6 @@
 {
   "name": "shared-auth",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "description": "Shared authentication middleware and utilities for Gener8 services",
   "main": "index.js",
   "license": "MIT",
