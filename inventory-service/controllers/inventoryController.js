@@ -415,3 +415,40 @@ exports.exportItems = async (req, res, next) => {
     next(err);
   }
 };
+
+exports.getMasterInventoryByLocation = async (req, res, next) => {
+  try {
+    // This single query joins locations, inventory, items, and clients,
+    // and uses PostgreSQL's JSON functions to build a nested response.
+    const query = `
+      SELECT
+        l.id AS location_id,
+        l.code AS location_code,
+        l.description AS location_description,
+        COALESCE(
+          jsonb_agg(
+            jsonb_build_object(
+              'item_id', i.id,
+              'sku', i.sku,
+              'item_description', i.description,
+              'client_id', c.id,
+              'client_name', c.name,
+              'quantity', inv.quantity
+            )
+          ) FILTER (WHERE i.id IS NOT NULL),
+          '[]'::jsonb
+        ) AS items
+      FROM locations l
+      LEFT JOIN inventory inv ON l.id = inv.location_id
+      LEFT JOIN items i ON inv.item_id = i.id
+      LEFT JOIN clients c ON i.client_id = c.id
+      GROUP BY l.id
+      ORDER BY l.code;
+    `;
+
+    const result = await pool.query(query);
+    res.json(result.rows);
+  } catch (err) {
+    next(err);
+  }
+};

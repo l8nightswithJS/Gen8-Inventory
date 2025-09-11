@@ -10,6 +10,11 @@ const { requireRole, handleValidation } = require('shared-auth');
 const router = express.Router();
 
 // This line will now work correctly because 'authenticate' is the function itself.
+router.get(
+  '/by-location',
+  requireRole('admin'), // Only admins can access this global view
+  inventoryController.getMasterInventoryByLocation,
+);
 
 // ---------- Alerts ----------
 router.get(
