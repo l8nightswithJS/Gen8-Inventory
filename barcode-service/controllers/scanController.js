@@ -1,63 +1,53 @@
-// barcode-service/controllers/scanController.js
-const pool = require('../db/pool');
+// In barcode-service/controllers/scanController.js
+// Replace the entire processScan function
 
-const handleDbError = (res, error, context) => {
-  console.error(`Error in ${context}:`, error);
-  return res.status(500).json({
-    message: `Internal server error during ${context}`,
-    details: error.message,
-  });
-};
-
-// @desc    Process a scanned barcode to identify its type (item or location)
-// @route   POST /api/scan
-// @access  Private
 exports.processScan = async (req, res) => {
   const { barcode, client_id } = req.body;
 
-  if (!barcode || !client_id) {
-    return res
-      .status(400)
-      .json({ message: 'barcode and client_id are required' });
+  if (!barcode) {
+    return res.status(400).json({ message: 'barcode is required' });
   }
 
   try {
-    // 1. Check if it's a Location barcode
+    // 1. Check if it's a Location barcode (no longer uses client_id)
     const locationResult = await pool.query(
-      'SELECT * FROM locations WHERE client_id = $1 AND code = $2 LIMIT 1',
-      [client_id, barcode],
+      'SELECT * FROM locations WHERE code = $1 LIMIT 1',
+      [barcode],
     );
 
     if (locationResult.rowCount > 0) {
       const location = locationResult.rows[0];
+      // We can still optionally fetch inventory at this location for a specific client
+      let inventoryItems = [];
+      if (client_id) {
+        const inventoryResult = await pool.query(
+          `SELECT i.*, inv.quantity
+           FROM inventory inv
+           JOIN items i ON i.id = inv.item_id
+           WHERE inv.location_id = $1 AND i.client_id = $2`,
+          [location.id, client_id],
+        );
+        inventoryItems = inventoryResult.rows || [];
+      }
 
-      // Fetch inventory at this location
-      const inventoryResult = await pool.query(
-        `SELECT i.*, inv.quantity
-         FROM inventory inv
-         JOIN items i ON i.id = inv.item_id
-         WHERE inv.location_id = $1`,
-        [location.id],
-      );
-
-      const response = { ...location, items: inventoryResult.rows || [] };
+      const response = { ...location, items: inventoryItems };
       return res.json({ type: 'location', data: response });
     }
 
-    // 2. If not a location, check if it's an Item barcode
-    const itemResult = await pool.query(
-      'SELECT * FROM items WHERE client_id = $1 AND barcode = $2 LIMIT 1',
-      [client_id, barcode],
-    );
+    // 2. If not a location, check if it's an Item barcode (this requires client_id)
+    if (client_id) {
+      const itemResult = await pool.query(
+        'SELECT * FROM items WHERE client_id = $1 AND barcode = $2 LIMIT 1',
+        [client_id, barcode],
+      );
 
-    if (itemResult.rowCount > 0) {
-      return res.json({ type: 'item', data: itemResult.rows[0] });
+      if (itemResult.rowCount > 0) {
+        return res.json({ type: 'item', data: itemResult.rows[0] });
+      }
     }
 
     // 3. If no match is found
-    return res
-      .status(404)
-      .json({ message: `Barcode "${barcode}" not found for this client.` });
+    return res.status(404).json({ message: `Barcode "${barcode}" not found.` });
   } catch (error) {
     return handleDbError(res, error, 'processScan');
   }

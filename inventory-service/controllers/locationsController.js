@@ -1,4 +1,4 @@
-// inventory-service/controllers/locationsController.js
+// In inventory-service/controllers/locationsController.js (Updated)
 const pool = require('../db/pool');
 
 const handleDbError = (res, error, context) => {
@@ -9,41 +9,40 @@ const handleDbError = (res, error, context) => {
   });
 };
 
-// @desc    Get all locations for a specific client
-// @route   GET /api/locations
-// @access  Private
+// @desc    Get all global locations
+// @route   GET /locations
 exports.getLocations = async (req, res) => {
   try {
-    const { client_id } = req.query;
-    if (!client_id) {
-      return res.status(400).json({ message: 'client_id is required' });
-    }
-
+    // Now fetches ALL locations, no longer filtered by client_id
     const result = await pool.query(
-      'SELECT * FROM locations WHERE client_id = $1 ORDER BY id ASC',
-      [client_id],
+      'SELECT * FROM locations ORDER BY code ASC',
     );
-
     res.json(result.rows || []);
   } catch (error) {
     return handleDbError(res, error, 'getLocations');
   }
 };
 
-// @desc    Create a new location
-// @route   POST /api/locations
-// @access  Private
+// @desc    Create a new global location
+// @route   POST /locations
 exports.createLocation = async (req, res) => {
   try {
-    const { client_id, code, description } = req.body;
+    // No longer needs a client_id
+    const { code, description } = req.body;
 
     const result = await pool.query(
-      'INSERT INTO locations (client_id, code, description) VALUES ($1, $2, $3) RETURNING *',
-      [client_id, code, description],
+      'INSERT INTO locations (code, description) VALUES ($1, $2) RETURNING *',
+      [code, description],
     );
 
     res.status(201).json(result.rows[0]);
   } catch (error) {
+    // Handle unique constraint violation on the 'code'
+    if (error.code === '23505') {
+      return res
+        .status(409)
+        .json({ message: 'A location with this code already exists.' });
+    }
     return handleDbError(res, error, 'createLocation');
   }
 };
