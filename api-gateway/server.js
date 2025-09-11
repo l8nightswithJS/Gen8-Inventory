@@ -59,6 +59,12 @@ app.use(
   prox(INVENTORY_URL, { pathRewrite: { '^/api/items': '/items' } }),
 );
 
+// ADD THIS NEW RULE for the master inventory view
+app.use(
+  '/api/inventory',
+  prox(INVENTORY_URL, { pathRewrite: { '^/api/inventory': '' } }),
+);
+
 // Client service -> Proxies /api/clients to /
 app.use(
   '/api/clients',
