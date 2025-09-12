@@ -4,7 +4,7 @@ services:
     env: node
     plan: standard # 2 GB RAM, 1 CPU
     rootDir: api-gateway
-    buildCommand: 'npm ci'
+    buildCommand: 'npm ci' #new start command
     startCommand: 'node --preserve-symlinks server.js'
     envVars:
       - fromGroup: gen8-shared-env
