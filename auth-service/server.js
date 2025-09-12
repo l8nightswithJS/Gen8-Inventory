@@ -26,7 +26,7 @@ app.use(authMiddleware);
 
 // --- Protected Routes ---
 // The usersRouter is mounted at the /users path and inherits the security.
-app.use('/', usersRouter);
+app.use('/api/auth', usersRouter);
 
 const PORT = Number(process.env.PORT) || 8001;
 app.listen(PORT, '0.0.0.0', () => {
