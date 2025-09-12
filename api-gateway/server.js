@@ -45,7 +45,10 @@ const prox = (target, options = {}) =>
 // --- Routes ---
 
 // Auth service (login, register, etc.) -> Proxies /api/auth to /
-app.use('/api/auth', prox(AUTH_URL, { pathRewrite: { '^/api/auth': '' } }));
+app.use(
+  '/api/auth',
+  prox(AUTH_URL, { pathRewrite: { '^/api/auth': '/login' } }),
+);
 
 // User management -> Proxies /api/users to /users
 app.use(
