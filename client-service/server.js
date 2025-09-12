@@ -26,10 +26,10 @@ app.use(requireClientMatch);
 // --- Protected Routes ---
 
 // Serve uploaded logos from a dedicated, protected path.
-app.use('/api/auth/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/api/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Mount the main API router. It inherits the security checks from above.
-app.use('/api/auth', clientsRouter);
+app.use('/api/clients', clientsRouter);
 
 const PORT = Number(process.env.PORT) || 8003;
 app.listen(PORT, '0.0.0.0', () => {

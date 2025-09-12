@@ -34,22 +34,22 @@ const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
 // --- Protected Routes ---
-app.use('/api/auth/uploads', requireClientMatch, express.static(uploadDir));
+app.use('/api/uploads', requireClientMatch, express.static(uploadDir));
 // All routes in this service require the user to be logged in.
 app.use(authMiddleware);
 
 // The Master View is special: it's admin-only but does NOT get a client match check.
 app.get(
-  '/api/auth/inventory/by-location',
+  '/api/inventory/by-location',
   requireRole('admin'),
   inventoryController.getMasterInventoryByLocation,
 );
 
 // These routers handle client-specific data, so they DO get the client match check.
 
-app.use('/api/auth', requireClientMatch, inventoryRouter);
-app.use('/api/auth', requireClientMatch, labelsRouter);
-app.use('/api/auth', requireClientMatch, locationsRouter);
+app.use('/api/items', requireClientMatch, inventoryRouter);
+app.use('/api/labels', requireClientMatch, labelsRouter);
+app.use('/api/locations', requireClientMatch, locationsRouter);
 
 // --- Final Setup ---
 app.use(errorHandler);
