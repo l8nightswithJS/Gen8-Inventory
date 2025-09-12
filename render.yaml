@@ -11,13 +11,15 @@ services:
       - key: PORT
         value: '8080'
       - key: AUTH_URL
-        value: 'http://auth-service:8001'
+        value: 'http://auth-service-o42e:8001'
       - key: BARCODE_URL
-        value: 'http://barcode-service:8002'
+        value: 'barcode-service-5kbu:8002'
       - key: CLIENT_URL
-        value: 'http://client-service:8003'
+        value: 'http://client-service-z4vu:8003'
       - key: INVENTORY_URL
-        value: 'http://inventory-service:8000'
+        value: 'http://inventory-service-3qjv:8000
+
+'
 
   - type: pserv
     name: auth-service
