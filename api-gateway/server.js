@@ -3,6 +3,7 @@ import express from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
 import { createProxyMiddleware } from 'http-proxy-middleware';
+import Agent from 'agentkeepalive';
 
 const {
   PORT: RENDER_PORT,
@@ -32,23 +33,36 @@ app.use(
   }),
 );
 app.use(express.json());
-app.use(morgan('tiny'));
 
 const prox = (target, options = {}) =>
   createProxyMiddleware({
     target,
     changeOrigin: true,
     logLevel: 'debug',
-    // --- ADD THIS BLOCK ---
+    // ADD THIS to re-stream the request body
+    onProxyReq: (proxyReq, req, res) => {
+      if (req.body) {
+        const bodyData = JSON.stringify(req.body);
+        proxyReq.setHeader('Content-Type', 'application/json');
+        proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
+        proxyReq.write(bodyData);
+      }
+    },
+    // ADD THIS for robust connection handling
+    agent: new Agent({
+      maxSockets: 100,
+      keepAlive: true,
+      maxFreeSockets: 10,
+      timeout: 60000,
+      freeSocketTimeout: 30000,
+    }),
     onError: (err, req, res) => {
       console.error('[HPM] PROXY ERROR:', err);
-      console.error('[HPM] Request:', req.method, req.originalUrl);
-      console.error('[HPM] Target:', target);
     },
-    // --- END OF BLOCK ---
     ...options,
   });
 
+app.use(morgan('tiny'));
 // --- Routes ---
 
 // Auth service (login, register, etc.) -> Proxies /api/auth to /
