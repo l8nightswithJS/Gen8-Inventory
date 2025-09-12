@@ -14,6 +14,7 @@ import AlertsPage from './pages/AlertsPage';
 import UsersPage from './pages/UsersPage';
 import StandaloneScanPage from './pages/StandaloneScanPage';
 import MasterInventoryPage from './pages/MasterInventoryPage';
+import LocationsPage from './pages/LocationsPage';
 import PrivateRoute from './components/PrivateRoute';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
@@ -56,6 +57,7 @@ function PrivateLayout() {
           />
           <Route path="users" element={<UsersPage />} />
           <Route path="inventory/master" element={<MasterInventoryPage />} />
+          <Route path="locations" element={<LocationsPage />} />
           {/* Redirect any unknown private path to dashboard */}
           <Route path="*" element={<Navigate to="dashboard" replace />} />
         </Routes>

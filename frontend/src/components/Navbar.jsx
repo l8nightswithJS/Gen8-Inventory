@@ -61,6 +61,21 @@ export default function Navbar() {
       >
         Manage Users
       </NavLink>
+      {isAdmin && (
+        <NavLink
+          to="/locations"
+          className={({ isActive }) =>
+            `block px-3 py-2 rounded-md transition-colors md:text-sm ${
+              isActive
+                ? 'bg-blue-50 text-blue-700 font-semibold'
+                : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+            }`
+          }
+          onClick={() => setIsMenuOpen(false)}
+        >
+          Manage Locations
+        </NavLink>
+      )}
       <div className="px-3 py-2">
         <LogoutButton />
       </div>
