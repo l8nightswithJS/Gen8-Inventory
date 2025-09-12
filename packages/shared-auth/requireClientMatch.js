@@ -1,6 +1,13 @@
-// In packages/shared-auth/requireClientMatch.js (Corrected and Secure)
+// In packages/shared-auth/requireClientMatch.js (Final Version)
 
 function requireClientMatch(req, res, next) {
+  // --- ADD THIS WHITELIST CHECK ---
+  // If the request path is for a known global route, skip the client check.
+  if (req.path === '/inventory/by-location') {
+    return next();
+  }
+  // --- END OF ADDITION ---
+
   // Get the list of client IDs the user is allowed to see from their token.
   const allowedClients = req.user?.client_ids;
 
@@ -17,8 +24,7 @@ function requireClientMatch(req, res, next) {
     req.query.client_id ||
     req.body.client_id;
 
-  // If the request isn't for a specific client (e.g., getting a list), let it pass.
-  // The controller will be responsible for filtering the results.
+  // If the request isn't for a specific client, let it pass.
   if (!requestedClientIdStr) {
     return next();
   }
