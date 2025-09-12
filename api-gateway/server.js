@@ -31,7 +31,7 @@ app.use(
     credentials: true,
   }),
 );
-
+app.use(express.json());
 app.use(morgan('tiny'));
 
 const prox = (target, options = {}) =>
@@ -39,6 +39,13 @@ const prox = (target, options = {}) =>
     target,
     changeOrigin: true,
     logLevel: 'debug',
+    // --- ADD THIS BLOCK ---
+    onError: (err, req, res) => {
+      console.error('[HPM] PROXY ERROR:', err);
+      console.error('[HPM] Request:', req.method, req.originalUrl);
+      console.error('[HPM] Target:', target);
+    },
+    // --- END OF BLOCK ---
     ...options,
   });
 
