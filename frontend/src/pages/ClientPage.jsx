@@ -17,6 +17,7 @@ import EditItemModal from '../components/EditItemModal';
 import ScanModal from '../components/ScanModal';
 import LocationViewModal from '../components/LocationViewModal';
 import ItemActionModal from '../components/ItemActionModal';
+import UsbScannerInput from '../components/UsbScannerInput';
 
 // --- Helpers & Context ---
 import { getSavedSchema, saveSchema } from '../context/SchemaContext';
@@ -117,6 +118,24 @@ export default function ClientPage() {
     setModalState((prev) => ({ ...prev, [modal]: value }));
   };
 
+  const handleUsbScan = async (barcode) => {
+    try {
+      const { data: result } = await api.post('/api/scan', {
+        barcode: barcode,
+        client_id: clientId,
+      });
+      if (result && result.type) {
+        handleScanSuccess(result);
+      }
+    } catch (err) {
+      const errorMessage =
+        err.response?.status === 404
+          ? `Barcode "${barcode}" was not found.`
+          : err.response?.data?.message || 'An unexpected error occurred.';
+      setError(errorMessage);
+    }
+  };
+
   const handleScanSuccess = (result) => {
     handleModal('scan', false); // Always close the scanner modal first
 
@@ -214,8 +233,12 @@ export default function ClientPage() {
 
       {/* MODIFIED: Improved responsive action bar */}
       <div className="flex flex-col md:flex-row md:items-center gap-4 mb-4">
-        <div className="flex-grow">
+        {/* MODIFIED: Wrapped SearchBar and UsbScannerInput in a flex container */}
+        <div className="flex-grow flex flex-col sm:flex-row gap-4">
           <SearchBar onSearch={setQuery} />
+          <div className="sm:w-64 flex-shrink-0">
+            <UsbScannerInput onScan={handleUsbScan} />
+          </div>
         </div>
         <div className="flex items-center flex-wrap gap-2 justify-start md:justify-end">
           <Button
