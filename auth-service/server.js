@@ -23,7 +23,6 @@ app.use('/', authRouter);
 // --- Security Middleware ---
 // Any router mounted AFTER these lines will be protected.
 app.use(authMiddleware);
-app.use(requireClientMatch);
 
 // --- Protected Routes ---
 // The usersRouter is mounted at the /users path and inherits the security.
