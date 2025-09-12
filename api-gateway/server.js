@@ -50,7 +50,7 @@ app.use('/api/auth', prox(AUTH_URL, { pathRewrite: { '^/api/auth': '' } }));
 // User management -> Proxies /api/users to /users
 app.use(
   '/api/users',
-  prox(AUTH_URL, { pathRewrite: { '^/api/users': '/users' } }), // <-- THIS IS THE CRITICAL LINE
+  prox(AUTH_URL, { pathRewrite: { '^/api/users': '' } }), // <-- THIS IS THE CRITICAL LINE
 );
 
 // Inventory service -> Proxies /api/items to /items
@@ -68,7 +68,7 @@ app.use(
 // Client service -> Proxies /api/clients to /
 app.use(
   '/api/clients',
-  prox(CLIENT_URL, { pathRewrite: { '^/api/clients': '/clients' } }),
+  prox(CLIENT_URL, { pathRewrite: { '^/api/clients': '' } }),
 );
 
 // Barcode service
