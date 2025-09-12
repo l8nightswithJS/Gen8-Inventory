@@ -1,10 +1,10 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { authMiddleware } = require('shared-auth');
+const { authMiddleware, requireClientMatch } = require('shared-auth');
 
-const barcodeRoutes = require('./routes/barcodes');
-const scanRouter = require('./routes/scan');
+const barcodes = require('./routes/barcodes');
+const scan = require('./routes/scan');
 
 const app = express();
 
@@ -14,9 +14,12 @@ app.use(express.json());
 // Health endpoint
 app.get('/healthz', (_req, res) => res.json({ service: 'barcode', ok: true }));
 
+app.use(authMiddleware);
+app.use(requireClientMatch);
+
 // Routes
-app.use('/api/barcodes', authMiddleware, barcodeRoutes);
-app.use('/api/scan', authMiddleware, scanRouter);
+app.use('/api/barcodes', barcodes);
+app.use('/api/scan', scan);
 
 const PORT = Number(process.env.PORT) || 8002;
 app.listen(PORT, '0.0.0.0', () => {
