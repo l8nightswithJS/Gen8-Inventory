@@ -6,5 +6,8 @@
     "client-service",
     "barcode-service",
     "packages/*"
-  ]
+  ],
+  "engines": {
+    "node": "18.x"
+  }
 }

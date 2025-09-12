@@ -4,7 +4,7 @@ services:
     env: node
     plan: standard # 2 GB RAM, 1 CPU
     rootDir: api-gateway
-    buildCommand: 'npm install'
+    buildCommand: 'npm ci'
     startCommand: 'node server.js'
     envVars:
       - fromGroup: gen8-shared-env
@@ -24,7 +24,7 @@ services:
     env: node
     plan: standard # 2 GB RAM, 1 CPU
     rootDir: auth-service
-    buildCommand: 'npm install'
+    buildCommand: 'npm ci'
     startCommand: 'node server.js'
     envVars:
       - fromGroup: gen8-shared-env
@@ -38,7 +38,7 @@ services:
     env: node
     plan: starter # 512 MB RAM, 0.5 CPU
     rootDir: barcode-service
-    buildCommand: 'npm install'
+    buildCommand: 'npm ci'
     startCommand: 'node server.js'
     envVars:
       - fromGroup: gen8-shared-env
@@ -50,7 +50,7 @@ services:
     env: node
     plan: starter # 512 MB RAM, 0.5 CPU
     rootDir: client-service
-    buildCommand: 'npm install'
+    buildCommand: 'npm ci'
     startCommand: 'node server.js'
     envVars:
       - fromGroup: gen8-shared-env
@@ -62,7 +62,7 @@ services:
     env: node
     plan: starter # 512 MB RAM, 0.5 CPU
     rootDir: inventory-service
-    buildCommand: 'npm install'
+    buildCommand: 'npm ci'
     startCommand: 'node server.js'
     envVars:
       - fromGroup: gen8-shared-env
