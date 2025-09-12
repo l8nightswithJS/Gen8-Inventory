@@ -28,7 +28,6 @@ pnpm-debug.log*
 
 # Editor backups and lock files
 *.log
-*.lock
 *.swp
 *.swo
 
