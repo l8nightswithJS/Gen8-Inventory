@@ -90,6 +90,9 @@ async function register(req, res) {
 // Replace the entire login function
 
 async function login(req, res) {
+  // --- LOG #1 ---
+  console.log(`[${new Date().toISOString()}] LOGIN: Route handler started.`);
+
   try {
     const { email, password } = req.body || {};
     if (!email || !password)
@@ -97,16 +100,35 @@ async function login(req, res) {
 
     const normalizedEmail = String(email).trim().toLowerCase();
 
+    // --- LOG #2 ---
+    console.log(
+      `[${new Date().toISOString()}] LOGIN: Signing in with Supabase Auth for ${normalizedEmail}...`,
+    );
+
     // Sign in with Supabase Auth
     const { data, error: signInError } = await sbAuth.auth.signInWithPassword({
       email: normalizedEmail,
       password,
     });
 
+    // --- LOG #3 ---
+    console.log(
+      `[${new Date().toISOString()}] LOGIN: Supabase Auth signIn complete.`,
+    );
+
     if (signInError || !data?.user) {
+      console.error(
+        `[${new Date().toISOString()}] LOGIN: Supabase Auth Error -`,
+        signInError,
+      );
       return res.status(401).json({ message: 'Invalid email or password' });
     }
     const authUser = data.user;
+
+    // --- LOG #4 ---
+    console.log(
+      `[${new Date().toISOString()}] LOGIN: Fetching user profile from 'users' table...`,
+    );
 
     // Get the user's profile from our public.users table
     let { data: profile, error: selErr } = await sbAdmin
@@ -115,27 +137,43 @@ async function login(req, res) {
       .eq('id', authUser.id)
       .single();
 
+    // --- LOG #5 ---
+    console.log(`[${new Date().toISOString()}] LOGIN: Profile fetch complete.`);
+
     if (selErr || !profile) {
+      // This block will run if the user exists in Supabase Auth but not in our public 'users' table yet
+      console.log(
+        `[${new Date().toISOString()}] LOGIN: Profile not found, creating one...`,
+      );
       profile = await ensureUserProfile(authUser, {
         role: 'staff',
         approved: true,
       });
+      console.log(`[${new Date().toISOString()}] LOGIN: Profile created.`);
     }
 
     if (profile.approved === false) {
       return res.status(403).json({ message: 'Account pending approval' });
     }
 
-    // --- NEW LOGIC START ---
+    // --- LOG #6 ---
+    console.log(
+      `[${new Date().toISOString()}] LOGIN: Fetching client links...`,
+    );
+
     // Fetch all client IDs associated with this user from the new join table
     const { data: clientLinks } = await sbAdmin
       .from('user_clients')
       .select('client_id')
       .eq('user_id', profile.id);
 
+    // --- LOG #7 ---
+    console.log(
+      `[${new Date().toISOString()}] LOGIN: Client links fetch complete. Creating JWT.`,
+    );
+
     // Create a simple array of client IDs, e.g., [1, 17, 25]
     const clientIds = clientLinks ? clientLinks.map((c) => c.client_id) : [];
-    // --- NEW LOGIC END ---
 
     // JWT payload
     const payload = {
@@ -143,7 +181,7 @@ async function login(req, res) {
       role: profile.role,
       email: authUser.email || normalizedEmail,
       approved: profile.approved,
-      client_ids: clientIds, // <-- Use the new array of client IDs
+      client_ids: clientIds,
     };
 
     const token = jwt.sign(payload, JWT_SECRET, {
@@ -152,9 +190,16 @@ async function login(req, res) {
       issuer: JWT_ISSUER,
     });
 
+    // --- LOG #8 ---
+    console.log(
+      `[${new Date().toISOString()}] LOGIN: JWT created. Sending final response.`,
+    );
     return res.json({ token, user: payload });
   } catch (err) {
-    console.error('[AUTH][login] error:', err);
+    console.error(
+      `[${new Date().toISOString()}] LOGIN CATCH BLOCK: An unexpected error occurred.`,
+      err,
+    );
     return res.status(500).json({ message: 'Login failed' });
   }
 }
