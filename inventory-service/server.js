@@ -34,7 +34,7 @@ const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
 // --- Protected Routes ---
-
+app.use('/uploads', requireClientMatch, express.static(uploadDir));
 // All routes in this service require the user to be logged in.
 app.use(authMiddleware);
 
@@ -46,7 +46,7 @@ app.get(
 );
 
 // These routers handle client-specific data, so they DO get the client match check.
-app.use('/uploads', requireClientMatch, express.static(uploadDir));
+
 app.use('/', requireClientMatch, inventoryRouter);
 app.use('/', requireClientMatch, labelsRouter);
 app.use('/', requireClientMatch, locationsRouter);
