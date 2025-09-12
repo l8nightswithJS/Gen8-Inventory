@@ -68,7 +68,7 @@ app.use(
 // Client service -> Proxies /api/clients to /
 app.use(
   '/api/clients',
-  prox(CLIENT_URL, { pathRewrite: { '^/api/clients': '' } }),
+  prox(CLIENT_URL, { pathRewrite: { '^/api/clients': '/clients' } }),
 );
 
 // Barcode service
