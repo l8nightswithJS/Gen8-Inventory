@@ -18,7 +18,7 @@ app.use(express.json());
 app.get('/healthz', (_req, res) => {
   res.json({ service: 'auth', ok: true, timestamp: Date.now() });
 });
-app.use('/login', authRouter);
+app.use('/', authRouter);
 
 // --- Security Middleware ---
 // Any router mounted AFTER these lines will be protected.
