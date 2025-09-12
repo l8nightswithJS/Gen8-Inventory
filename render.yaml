@@ -13,7 +13,7 @@ services:
       - key: AUTH_URL
         value: 'http://auth-service-o42e:8001'
       - key: BARCODE_URL
-        value: 'barcode-service-5kbu:8002'
+        value: 'http://barcode-service-5kbu:8002'
       - key: CLIENT_URL
         value: 'http://client-service-z4vu:8003'
       - key: INVENTORY_URL
