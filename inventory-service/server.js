@@ -14,6 +14,7 @@ const {
 
 // Import the controller directly to access the master view function
 const inventoryController = require('./controllers/inventoryController');
+const locationsController = require('./controllers/locationsController');
 const inventoryRouter = require('./routes/inventory');
 const labelsRouter = require('./routes/labels');
 const locationsRouter = require('./routes/locations');
@@ -45,11 +46,16 @@ app.get(
   inventoryController.getMasterInventoryByLocation,
 );
 
+app.get(
+  '/api/locations',
+  requireRole('admin'),
+  locationsController.getLocations,
+);
+
 // These routers handle client-specific data, so they DO get the client match check.
 
 app.use('/api/items', requireClientMatch, inventoryRouter);
 app.use('/api/labels', requireClientMatch, labelsRouter);
-app.use('/api/locations', requireClientMatch, locationsRouter);
 
 // --- Final Setup ---
 app.use(errorHandler);
