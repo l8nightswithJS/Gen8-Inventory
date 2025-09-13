@@ -46,11 +46,7 @@ app.get(
   inventoryController.getMasterInventoryByLocation,
 );
 
-app.get(
-  '/api/locations',
-  requireRole('admin'),
-  locationsController.getLocations,
-);
+app.use('/api/locations', requireRole('admin'), locationsRouter);
 
 // These routers handle client-specific data, so they DO get the client match check.
 
