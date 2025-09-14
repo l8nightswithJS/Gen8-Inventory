@@ -16,4 +16,12 @@ router.post(
   ctrl.createLocation,
 );
 
+// ADD THIS NEW ROUTE
+router.delete(
+  '/:id',
+  param('id').isInt().withMessage('A valid location ID is required'),
+  handleValidation,
+  ctrl.deleteLocation,
+);
+
 module.exports = router;
