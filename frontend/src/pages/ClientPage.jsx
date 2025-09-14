@@ -30,6 +30,7 @@ export default function ClientPage() {
   const navigate = useNavigate();
   const isAdmin = localStorage.getItem('role') === 'admin';
 
+  // --- State Hooks ---
   const [client, setClient] = useState(null);
   const [items, setItems] = useState([]);
   const [query, setQuery] = useState('');
@@ -141,16 +142,17 @@ export default function ClientPage() {
     }
   };
 
+  // --- Memoized Calculations ---
   const filteredItems = useMemo(() => {
     if (!query) return items;
     const lowerQuery = query.toLowerCase();
     return items.filter((item) => {
-      // ✅ MODIFIED: Search core fields and attributes
       const coreValues = [
         item.part_number,
         item.lot_number,
         item.name,
         item.description,
+        item.barcode,
       ];
       const attributeValues = Object.values(item.attributes || {});
       return [...coreValues, ...attributeValues].some((val) =>
@@ -163,7 +165,6 @@ export default function ClientPage() {
     let sortableItems = [...filteredItems];
     if (sortConfig.key) {
       sortableItems.sort((a, b) => {
-        // ✅ MODIFIED: Check top-level first, then attributes
         const valA = a[sortConfig.key] ?? a.attributes?.[sortConfig.key];
         const valB = b[sortConfig.key] ?? b.attributes?.[sortConfig.key];
         if (valA == null) return 1;
@@ -185,17 +186,31 @@ export default function ClientPage() {
   const columns = useMemo(() => {
     if (schema.length > 0) return schema;
     if (items.length === 0)
-      return ['part_number', 'name', 'lot_number', 'total_quantity'];
-    // ✅ MODIFIED: Get all keys from top-level and attributes for default columns
-    const keys = new Set([
+      return [
+        'part_number',
+        'name',
+        'description',
+        'lot_number',
+        'barcode',
+        'total_quantity',
+      ];
+
+    // ✅ MODIFIED: The default set of columns now includes all important core fields.
+    const defaultCoreFields = [
       'part_number',
       'name',
+      'description',
       'lot_number',
+      'barcode',
       'total_quantity',
-    ]);
+    ];
+    const keys = new Set(defaultCoreFields);
+
+    // Add any extra custom fields from the attributes blob
     items.forEach((it) =>
       Object.keys(it.attributes || {}).forEach((key) => keys.add(key)),
     );
+
     return Array.from(keys);
   }, [items, schema]);
 
@@ -299,6 +314,7 @@ export default function ClientPage() {
         viewMode={viewMode}
       />
 
+      {/* --- Modals --- */}
       {modalState.columnSetup && (
         <ColumnSetupModal
           isOpen={true}
@@ -364,8 +380,7 @@ export default function ClientPage() {
             handleModal('editItem', item);
           }}
           onCheckStock={(_item) => {
-            // ✅ MODIFIED: Added underscore to item
-            alert(`Checking stock... (Feature coming soon)`);
+            alert(`Checking stock...`);
             handleModal('scannedItem', null);
           }}
         />
