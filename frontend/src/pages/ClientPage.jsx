@@ -1,14 +1,11 @@
-// frontend/src/pages/ClientPage.jsx
+// frontend/src/pages/ClientPage.jsx (Corrected)
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import api from '../utils/axiosConfig'; // ✅ correct path from /pages
+import api from '../utils/axiosConfig';
 import QuantityAdjustModal from '../components/QuantityAdjustModal';
-// --- Main Components ---
 import InventoryTable from '../components/InventoryTable';
 import SearchBar from '../components/SearchBar';
 import Button from '../components/ui/Button';
-
-// --- Modal Components ---
 import AddItemModal from '../components/AddItemModal';
 import BulkImport from '../components/BulkImport';
 import ColumnSetupModal from '../components/ColumnSetupModal';
@@ -18,8 +15,6 @@ import ScanModal from '../components/ScanModal';
 import LocationViewModal from '../components/LocationViewModal';
 import ItemActionModal from '../components/ItemActionModal';
 import UsbScannerInput from '../components/UsbScannerInput';
-
-// --- Helpers & Context ---
 import { getSavedSchema, saveSchema } from '../context/SchemaContext';
 import {
   FiPlus,
@@ -30,19 +25,16 @@ import {
   FiChevronLeft,
 } from 'react-icons/fi';
 
-const QTY_KEYS = ['quantity', 'on_hand', 'qty_in_stock', 'stock'];
-
 export default function ClientPage() {
   const { clientId } = useParams();
   const navigate = useNavigate();
   const isAdmin = localStorage.getItem('role') === 'admin';
 
-  // --- State Hooks ---
   const [client, setClient] = useState(null);
   const [items, setItems] = useState([]);
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
-  const [viewMode, setViewMode] = useState('desktop'); // MODIFIED
+  const [viewMode, setViewMode] = useState('desktop');
   const [currentLocation, setCurrentLocation] = useState(null);
   const [adjustingItem, setAdjustingItem] = useState(null);
   const [modalState, setModalState] = useState({
@@ -63,20 +55,12 @@ export default function ClientPage() {
   const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(15);
 
-  // ADDED: useEffect to handle responsive viewMode
   useEffect(() => {
     const handleResize = () => {
-      if (window.innerWidth < 768) {
-        setViewMode('mobile');
-      } else {
-        setViewMode('desktop');
-      }
+      window.innerWidth < 768 ? setViewMode('mobile') : setViewMode('desktop');
     };
-
-    handleResize(); // Set initial view mode on load
-    window.addEventListener('resize', handleResize); // Add listener for window changes
-
-    // Cleanup listener on component unmount
+    handleResize();
+    window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
@@ -88,19 +72,17 @@ export default function ClientPage() {
       });
       setItems(Array.isArray(data) ? data : []);
     } catch (err) {
-      // surface auth vs other errors a bit nicer
       const status = err?.response?.status;
-      if (status === 401 || status === 403) {
-        setError('You’re not authorized to view items for this client.');
-      } else {
-        setError('Failed to load items.');
-      }
+      setError(
+        status === 401 || status === 403
+          ? 'You’re not authorized to view items for this client.'
+          : 'Failed to load items.',
+      );
     }
   }, [clientId]);
 
   const fetchClientDetails = useCallback(async () => {
     try {
-      // UPDATED: Use clientApi
       const res = await api.get(`/api/clients/${clientId}`);
       setClient(res.data);
     } catch (err) {
@@ -114,47 +96,35 @@ export default function ClientPage() {
     fetchItems();
   }, [clientId, fetchItems, fetchClientDetails]);
 
-  const handleModal = (modal, value) => {
+  const handleModal = (modal, value) =>
     setModalState((prev) => ({ ...prev, [modal]: value }));
-  };
 
   const handleUsbScan = async (barcode) => {
     try {
       const { data: result } = await api.post('/api/scan', {
-        barcode: barcode,
+        barcode,
         client_id: clientId,
       });
-      if (result && result.type) {
-        handleScanSuccess(result);
-      }
+      if (result?.type) handleScanSuccess(result);
     } catch (err) {
-      const errorMessage =
+      setError(
         err.response?.status === 404
           ? `Barcode "${barcode}" was not found.`
-          : err.response?.data?.message || 'An unexpected error occurred.';
-      setError(errorMessage);
+          : err.response?.data?.message || 'An error occurred.',
+      );
     }
   };
 
   const handleScanSuccess = (result) => {
-    handleModal('scan', false); // Always close the scanner modal first
-
+    handleModal('scan', false);
     if (result.type === 'location') {
-      // If a location is scanned, save it as the active location.
       setCurrentLocation(result.data);
-      // Also show the location details modal for user feedback.
       handleModal('scannedLocation', result.data);
     } else if (result.type === 'item') {
-      // If an item is scanned, check if we have an active location.
       if (!currentLocation) {
-        // If NO location is active, alert the user and open the old item action modal.
-        alert(
-          'No active location. Please scan a location first to adjust stock.',
-        );
+        alert('No active location. Scan a location first to adjust stock.');
         handleModal('scannedItem', result.data);
       } else {
-        // If a location IS active, we're ready to adjust stock.
-        // Set the 'adjustingItem' state, which we will use to open our new quantity modal.
         setAdjustingItem(result.data);
       }
     }
@@ -163,7 +133,6 @@ export default function ClientPage() {
   const confirmDelete = async () => {
     if (!modalState.deleteItem) return;
     try {
-      // UPDATED: Use inventoryApi
       await api.delete(`/api/items/${modalState.deleteItem.id}`);
       handleModal('deleteItem', null);
       fetchItems();
@@ -172,22 +141,31 @@ export default function ClientPage() {
     }
   };
 
-  // --- Memoized Calculations (No changes needed here) ---
   const filteredItems = useMemo(() => {
     if (!query) return items;
-    return items.filter((item) =>
-      Object.values(item.attributes).some((val) =>
-        String(val).toLowerCase().includes(query.toLowerCase()),
-      ),
-    );
+    const lowerQuery = query.toLowerCase();
+    return items.filter((item) => {
+      // ✅ MODIFIED: Search core fields and attributes
+      const coreValues = [
+        item.part_number,
+        item.lot_number,
+        item.name,
+        item.description,
+      ];
+      const attributeValues = Object.values(item.attributes || {});
+      return [...coreValues, ...attributeValues].some((val) =>
+        String(val).toLowerCase().includes(lowerQuery),
+      );
+    });
   }, [items, query]);
 
   const sortedItems = useMemo(() => {
     let sortableItems = [...filteredItems];
-    if (sortConfig.key !== null) {
+    if (sortConfig.key) {
       sortableItems.sort((a, b) => {
-        const valA = a.attributes[sortConfig.key];
-        const valB = b.attributes[sortConfig.key];
+        // ✅ MODIFIED: Check top-level first, then attributes
+        const valA = a[sortConfig.key] ?? a.attributes?.[sortConfig.key];
+        const valB = b[sortConfig.key] ?? b.attributes?.[sortConfig.key];
         if (valA == null) return 1;
         if (valB == null) return -1;
         if (typeof valA === 'number' && typeof valB === 'number')
@@ -206,24 +184,30 @@ export default function ClientPage() {
 
   const columns = useMemo(() => {
     if (schema.length > 0) return schema;
-    if (items.length === 0) return [];
-    const keys = new Set(
-      items.flatMap((it) => Object.keys(it.attributes || {})),
+    if (items.length === 0)
+      return ['part_number', 'name', 'lot_number', 'total_quantity'];
+    // ✅ MODIFIED: Get all keys from top-level and attributes for default columns
+    const keys = new Set([
+      'part_number',
+      'name',
+      'lot_number',
+      'total_quantity',
+    ]);
+    items.forEach((it) =>
+      Object.keys(it.attributes || {}).forEach((key) => keys.add(key)),
     );
-    return Array.from(keys).filter((k) => !QTY_KEYS.includes(k));
+    return Array.from(keys);
   }, [items, schema]);
 
   return (
     <div className="mx-auto max-w-7xl px-4">
-      {/* MODIFIED: Improved responsive header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-y-4">
         <div>
           <button
             onClick={() => navigate('/dashboard')}
             className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-800 mb-2 sm:mb-0"
           >
-            <FiChevronLeft />
-            All Clients
+            <FiChevronLeft /> All Clients
           </button>
           <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
             {client?.name || 'Loading...'}
@@ -231,9 +215,7 @@ export default function ClientPage() {
         </div>
       </div>
 
-      {/* MODIFIED: Improved responsive action bar */}
       <div className="flex flex-col md:flex-row md:items-center gap-4 mb-4">
-        {/* MODIFIED: Wrapped SearchBar and UsbScannerInput in a flex container */}
         <div className="flex-grow flex flex-col sm:flex-row gap-4">
           <SearchBar onSearch={setQuery} />
           <div className="sm:w-64 flex-shrink-0">
@@ -269,7 +251,6 @@ export default function ClientPage() {
               </Button>
               <Button
                 as="a"
-                // UPDATED: Use full URL for export
                 href={`${process.env.REACT_APP_API_BASE_URL}/api/items/export?client_id=${clientId}`}
                 variant="secondary"
                 title="Export Data"
@@ -318,7 +299,6 @@ export default function ClientPage() {
         viewMode={viewMode}
       />
 
-      {/* --- Modals --- */}
       {modalState.columnSetup && (
         <ColumnSetupModal
           isOpen={true}
@@ -336,8 +316,6 @@ export default function ClientPage() {
           clientId={clientId}
           onClose={() => handleModal('import', false)}
           refresh={fetchItems}
-          // UPDATED: Pass the correct API instance to the modal
-          api={api}
         />
       )}
       {modalState.addItem && (
@@ -346,8 +324,6 @@ export default function ClientPage() {
           clientId={clientId}
           onClose={() => handleModal('addItem', false)}
           onCreated={fetchItems}
-          // UPDATED: Pass the correct API instance to the modal
-          api={api}
         />
       )}
       {modalState.editItem && (
@@ -356,8 +332,6 @@ export default function ClientPage() {
           item={modalState.editItem}
           onClose={() => handleModal('editItem', null)}
           onUpdated={fetchItems}
-          // UPDATED: Pass the correct API instance to the modal
-          api={api}
         />
       )}
       {modalState.deleteItem && (
@@ -368,7 +342,6 @@ export default function ClientPage() {
           onConfirm={confirmDelete}
         />
       )}
-
       {modalState.scan && client && (
         <ScanModal
           client={client}
@@ -390,10 +363,9 @@ export default function ClientPage() {
             handleModal('scannedItem', null);
             handleModal('editItem', item);
           }}
-          onCheckStock={(item) => {
-            alert(
-              `Checking stock for ${item.attributes.name}... (Feature coming soon)`,
-            );
+          onCheckStock={(_item) => {
+            // ✅ MODIFIED: Added underscore to item
+            alert(`Checking stock... (Feature coming soon)`);
             handleModal('scannedItem', null);
           }}
         />
@@ -405,7 +377,7 @@ export default function ClientPage() {
           onClose={() => setAdjustingItem(null)}
           onSuccess={() => {
             setAdjustingItem(null);
-            fetchItems(); // This refreshes the inventory list after a successful adjustment
+            fetchItems();
           }}
         />
       )}
