@@ -1,16 +1,8 @@
-// frontend/src/components/ColumnSetupModal.jsx
+// frontend/src/components/ColumnSetupModal.jsx (Corrected)
 import { useState } from 'react';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
-
-const normalizeKey = (str) =>
-  (str || '')
-    .toString()
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '_')
-    .replace(/[^\w]/g, '')
-    .replace(/_+/g, '_');
+import { getCanonicalKey, normalizeKey } from '../utils/columnMapper'; // ✅ Import our new helper
 
 export default function ColumnSetupModal({
   isOpen,
@@ -21,12 +13,21 @@ export default function ColumnSetupModal({
   const [cols, setCols] = useState(
     initial.length
       ? initial
-      : ['name', 'part_number', 'description', 'quantity', 'location'],
+      : [
+          'part_number',
+          'name',
+          'description',
+          'lot_number',
+          'barcode',
+          'total_quantity',
+        ],
   );
   const [input, setInput] = useState('');
 
   const addCol = () => {
-    const k = normalizeKey(input);
+    // ✅ MODIFIED: Use the intelligent mapper to find the correct key
+    const k = getCanonicalKey(input);
+
     if (!k || cols.includes(k)) {
       setInput('');
       return;
@@ -73,7 +74,7 @@ export default function ColumnSetupModal({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="Add column (e.g., vendor_sku)"
+            placeholder="Add column (e.g., Bar Code)"
             className="flex-1 border rounded px-3 py-2 border-gray-300"
           />
           <Button onClick={addCol} variant="primary">
@@ -86,7 +87,7 @@ export default function ColumnSetupModal({
               key={c}
               className="inline-flex items-center gap-2 bg-gray-100 px-2 py-1 rounded text-sm font-medium"
             >
-              {c}
+              {c.replace(/_/g, ' ')}
               <button
                 onClick={() => remove(c)}
                 className="text-red-600 hover:text-red-800 font-bold"
@@ -97,14 +98,13 @@ export default function ColumnSetupModal({
             </span>
           ))}
           {!cols.length && (
-            <em className="text-gray-500 p-2">No columns defined.</em>
+            <p className="text-gray-500 p-2 italic">No columns defined.</p>
           )}
         </div>
         <div className="border-t pt-3 text-xs text-gray-500">
           <p>
-            Note: Controls for lot numbers, thresholds, and alerts will always
-            be available when editing an item, even if they are not included
-            here.
+            You can add core columns (like &apos;Part #&apos; or
+            &apos;Barcode&apos;) or your own custom columns.
           </p>
         </div>
       </div>
