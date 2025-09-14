@@ -1,5 +1,6 @@
-// frontend/src/utils/axiosConfig.js
+// frontend/src/utils/axiosConfig.js (Corrected)
 import axios from 'axios';
+import { getToken } from './auth'; // ✅ MOVED TO THE TOP
 
 // 1. DYNAMIC BASE URL: point to the GATEWAY (not the auth service).
 // Uses env in prod; falls back to localhost gateway in dev.
@@ -45,8 +46,6 @@ api.interceptors.response.use(
 );
 
 // Unified token handler
-import { getToken } from './auth';
-
 api.interceptors.request.use((config) => {
   const token = getToken();
   if (token) {
