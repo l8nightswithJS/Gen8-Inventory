@@ -1,7 +1,8 @@
-// In frontend/src/pages/LocationsPage.jsx
+// In frontend/src/pages/LocationsPage.jsx (Updated with Delete functionality)
 import { useState, useEffect, useCallback } from 'react';
 import api from '../utils/axiosConfig';
 import Button from '../components/ui/Button';
+import ConfirmModal from '../components/ConfirmModal'; // <-- Import ConfirmModal
 import { FiEdit2, FiTrash2 } from 'react-icons/fi';
 
 export default function LocationsPage() {
@@ -9,10 +10,12 @@ export default function LocationsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // New state to manage the delete confirmation modal
+  const [deletingLocation, setDeletingLocation] = useState(null);
+
   const fetchLocations = useCallback(async () => {
     try {
       setLoading(true);
-      // This calls the GET /api/locations endpoint we updated in inventory-service
       const { data } = await api.get('/api/locations');
       setLocations(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -26,6 +29,21 @@ export default function LocationsPage() {
   useEffect(() => {
     fetchLocations();
   }, [fetchLocations]);
+
+  // New function to handle the actual deletion after confirmation
+  const handleDeleteLocation = async () => {
+    if (!deletingLocation) return;
+    try {
+      await api.delete(`/api/locations/${deletingLocation.id}`);
+      setDeletingLocation(null); // Close the modal on success
+      fetchLocations(); // Refresh the list of locations
+    } catch (err) {
+      console.error('Failed to delete location:', err);
+      // Display error message from server if available
+      setError(err.response?.data?.message || 'Failed to delete location.');
+      setDeletingLocation(null); // Close the modal on error
+    }
+  };
 
   return (
     <div className="mx-auto max-w-4xl px-4">
@@ -42,7 +60,7 @@ export default function LocationsPage() {
       </div>
 
       {loading && <p className="text-slate-500">Loading locations...</p>}
-      {error && <p className="text-red-600">{error}</p>}
+      {error && <p className="text-red-600 mb-4">{error}</p>}
 
       {!loading && !error && (
         <div className="overflow-x-auto bg-white shadow-md rounded-lg">
@@ -77,11 +95,13 @@ export default function LocationsPage() {
                       <Button variant="ghost" size="sm" title="Edit">
                         <FiEdit2 />
                       </Button>
+                      {/* Updated onClick to open the confirmation modal */}
                       <Button
                         variant="ghost"
                         size="sm"
                         className="text-rose-600"
                         title="Delete"
+                        onClick={() => setDeletingLocation(loc)}
                       >
                         <FiTrash2 />
                       </Button>
@@ -92,6 +112,18 @@ export default function LocationsPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* Conditionally render the confirmation modal */}
+      {deletingLocation && (
+        <ConfirmModal
+          isOpen={true}
+          title="Delete Location?"
+          message={`Are you sure you want to delete the location "${deletingLocation.code}"? This cannot be undone.`}
+          variant="danger"
+          onCancel={() => setDeletingLocation(null)}
+          onConfirm={handleDeleteLocation}
+        />
       )}
     </div>
   );
