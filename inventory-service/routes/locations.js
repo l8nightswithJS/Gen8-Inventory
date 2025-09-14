@@ -17,6 +17,22 @@ router.post(
   ctrl.createLocation,
 );
 
+router.put(
+  '/:id',
+  param('id').isInt().withMessage('A valid location ID is required'),
+  body('code').isString().notEmpty().withMessage('Location code is required'),
+  body('description').optional().isString(),
+  handleValidation,
+  ctrl.updateLocation,
+);
+
+router.delete(
+  '/:id',
+  // ... (existing DELETE route)
+);
+
+module.exports = router;
+
 router.delete(
   '/:id',
   param('id').isInt().withMessage('A valid location ID is required'),

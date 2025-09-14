@@ -49,6 +49,36 @@ exports.createLocation = async (req, res) => {
 
 // In inventory-service/controllers/locationsController.js
 
+// @desc    Update a location
+// @route   PUT /api/locations/:id
+exports.updateLocation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { code, description } = req.body;
+
+    const result = await pool.query(
+      'UPDATE locations SET code = $1, description = $2 WHERE id = $3 RETURNING *',
+      [code, description, id],
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: 'Location not found.' });
+    }
+
+    res.status(200).json(result.rows[0]);
+  } catch (error) {
+    // Handle unique constraint violation if renaming to an existing code
+    if (error.code === '23505') {
+      return res
+        .status(409)
+        .json({ message: 'A location with this code already exists.' });
+    }
+    return handleDbError(res, error, 'updateLocation');
+  }
+};
+
+// In inventory-service/controllers/locationsController.js
+
 // @desc    Delete a location
 // @route   DELETE /api/locations/:id
 exports.deleteLocation = async (req, res) => {
@@ -68,12 +98,10 @@ exports.deleteLocation = async (req, res) => {
     // Handle potential foreign key constraint errors if items are in this location
     if (error.code === '23503') {
       // foreign_key_violation
-      return res
-        .status(409)
-        .json({
-          message:
-            'Cannot delete location because it contains inventory. Please move all items first.',
-        });
+      return res.status(409).json({
+        message:
+          'Cannot delete location because it contains inventory. Please move all items first.',
+      });
     }
     return handleDbError(res, error, 'deleteLocation');
   }
