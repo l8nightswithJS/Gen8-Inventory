@@ -51,6 +51,7 @@ app.use('/api/locations', requireRole('admin'), locationsRouter);
 // These routers handle client-specific data, so they DO get the client match check.
 
 app.use('/api/items', requireClientMatch, inventoryRouter);
+app.use('/api/inventory', requireClientMatch, inventoryRouter);
 app.use('/api/labels', requireClientMatch, labelsRouter);
 
 // --- Final Setup ---
