@@ -27,11 +27,9 @@ exports.bulkImportItems = async (req, res, next) => {
   try {
     const { client_id, items } = req.body;
     if (!client_id || !Array.isArray(items) || items.length === 0) {
-      return res
-        .status(400)
-        .json({
-          message: 'client_id and a non-empty items array are required.',
-        });
+      return res.status(400).json({
+        message: 'client_id and a non-empty items array are required.',
+      });
     }
 
     // --- Start of Intelligent Mapping Logic ---
@@ -51,11 +49,9 @@ exports.bulkImportItems = async (req, res, next) => {
 
     const coreColumns = Object.keys(finalRows[0].coreData);
     if (!coreColumns.includes('part_number')) {
-      return res
-        .status(400)
-        .json({
-          message: 'Import failed. No mappable part_number column was found.',
-        });
+      return res.status(400).json({
+        message: 'Import failed. No mappable part_number column was found.',
+      });
     }
 
     const values = finalRows.map((row) => {
@@ -80,12 +76,10 @@ exports.bulkImportItems = async (req, res, next) => {
   } catch (err) {
     if (err.code === '23505') {
       // unique_violation
-      return res
-        .status(409)
-        .json({
-          message:
-            'Import failed. One or more items contained a part_number and lot_number combination that already exists.',
-        });
+      return res.status(409).json({
+        message:
+          'Import failed. One or more items contained a part_number and lot_number combination that already exists.',
+      });
     }
     console.error('Bulk import error:', err);
     next(err);
@@ -169,12 +163,14 @@ exports.getMasterInventoryByLocation = async (req, res, next) => {
       LEFT JOIN inventory inv ON l.id = inv.location_id
       LEFT JOIN items i ON inv.item_id = i.id
       LEFT JOIN clients c ON i.client_id = c.id
-      GROUP BY l.id
+      GROUP BY l.id, l.code, l.description -- ✅ CORRECTED THIS LINE
       ORDER BY l.code;
     `;
+
     const result = await pool.query(query);
     res.json(result.rows);
   } catch (err) {
+    console.error('Error fetching master inventory:', err); // Good practice to log the actual error
     next(err);
   }
 };
@@ -235,12 +231,10 @@ exports.createItem = async (req, res, next) => {
     res.status(201).json(result.rows[0]);
   } catch (err) {
     if (err.code === '23505') {
-      return res
-        .status(409)
-        .json({
-          message:
-            'An item with this Part Number and Lot Number combination already exists.',
-        });
+      return res.status(409).json({
+        message:
+          'An item with this Part Number and Lot Number combination already exists.',
+      });
     }
     next(err);
   }
@@ -279,12 +273,10 @@ exports.updateItem = async (req, res, next) => {
     res.json(result.rows[0]);
   } catch (err) {
     if (err.code === '23505') {
-      return res
-        .status(409)
-        .json({
-          message:
-            'An item with this Part Number and Lot Number combination already exists.',
-        });
+      return res.status(409).json({
+        message:
+          'An item with this Part Number and Lot Number combination already exists.',
+      });
     }
     next(err);
   }
