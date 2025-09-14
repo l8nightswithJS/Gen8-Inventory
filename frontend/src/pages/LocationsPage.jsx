@@ -1,9 +1,10 @@
-// In frontend/src/pages/LocationsPage.jsx
+// In frontend/src/pages/LocationsPage.jsx (Final Version)
 import { useState, useEffect, useCallback } from 'react';
 import api from '../utils/axiosConfig';
 import Button from '../components/ui/Button';
 import ConfirmModal from '../components/ConfirmModal';
-import AddLocationModal from '../components/AddLocationModal'; // <-- Import the new modal
+import AddLocationModal from '../components/AddLocationModal';
+import EditLocationModal from '../components/EditLocationModal'; // <-- Import the new Edit modal
 import { FiEdit2, FiTrash2 } from 'react-icons/fi';
 
 export default function LocationsPage() {
@@ -11,9 +12,10 @@ export default function LocationsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deletingLocation, setDeletingLocation] = useState(null);
-
-  // New state to manage the "Add Location" modal
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+  // New state to manage the "Edit Location" modal
+  const [editingLocation, setEditingLocation] = useState(null);
 
   const fetchLocations = useCallback(async () => {
     try {
@@ -56,7 +58,6 @@ export default function LocationsPage() {
             Add, edit, or remove warehouse locations.
           </p>
         </div>
-        {/* Updated button to open the modal */}
         <Button variant="secondary" onClick={() => setIsAddModalOpen(true)}>
           + Add Location
         </Button>
@@ -95,7 +96,13 @@ export default function LocationsPage() {
                   </td>
                   <td className="px-4 py-3 text-center">
                     <div className="flex items-center justify-center gap-1">
-                      <Button variant="ghost" size="sm" title="Edit">
+                      {/* Updated onClick to open the edit modal */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title="Edit"
+                        onClick={() => setEditingLocation(loc)}
+                      >
                         <FiEdit2 />
                       </Button>
                       <Button
@@ -127,13 +134,25 @@ export default function LocationsPage() {
         />
       )}
 
-      {/* Conditionally render the new AddLocationModal */}
       {isAddModalOpen && (
         <AddLocationModal
           isOpen={true}
           onClose={() => setIsAddModalOpen(false)}
           onSuccess={() => {
             setIsAddModalOpen(false);
+            fetchLocations();
+          }}
+        />
+      )}
+
+      {/* Conditionally render the new EditLocationModal */}
+      {editingLocation && (
+        <EditLocationModal
+          isOpen={true}
+          location={editingLocation}
+          onClose={() => setEditingLocation(null)}
+          onSuccess={() => {
+            setEditingLocation(null);
             fetchLocations(); // Refresh the list on success
           }}
         />
