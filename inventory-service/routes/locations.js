@@ -1,6 +1,7 @@
-// In inventory-service/routes/locations.js (Updated)
+// In inventory-service/routes/locations.js (Corrected)
 const express = require('express');
-const { body } = require('express-validator');
+// CORRECTED: Added 'param' to the import below
+const { body, param } = require('express-validator');
 const ctrl = require('../controllers/locationsController');
 const { handleValidation } = require('shared-auth');
 
@@ -16,7 +17,6 @@ router.post(
   ctrl.createLocation,
 );
 
-// ADD THIS NEW ROUTE
 router.delete(
   '/:id',
   param('id').isInt().withMessage('A valid location ID is required'),
