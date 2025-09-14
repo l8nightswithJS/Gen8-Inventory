@@ -1,17 +1,19 @@
-// In frontend/src/pages/LocationsPage.jsx (Updated with Delete functionality)
+// In frontend/src/pages/LocationsPage.jsx
 import { useState, useEffect, useCallback } from 'react';
 import api from '../utils/axiosConfig';
 import Button from '../components/ui/Button';
-import ConfirmModal from '../components/ConfirmModal'; // <-- Import ConfirmModal
+import ConfirmModal from '../components/ConfirmModal';
+import AddLocationModal from '../components/AddLocationModal'; // <-- Import the new modal
 import { FiEdit2, FiTrash2 } from 'react-icons/fi';
 
 export default function LocationsPage() {
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-
-  // New state to manage the delete confirmation modal
   const [deletingLocation, setDeletingLocation] = useState(null);
+
+  // New state to manage the "Add Location" modal
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   const fetchLocations = useCallback(async () => {
     try {
@@ -30,18 +32,16 @@ export default function LocationsPage() {
     fetchLocations();
   }, [fetchLocations]);
 
-  // New function to handle the actual deletion after confirmation
   const handleDeleteLocation = async () => {
     if (!deletingLocation) return;
     try {
       await api.delete(`/api/locations/${deletingLocation.id}`);
-      setDeletingLocation(null); // Close the modal on success
-      fetchLocations(); // Refresh the list of locations
+      setDeletingLocation(null);
+      fetchLocations();
     } catch (err) {
       console.error('Failed to delete location:', err);
-      // Display error message from server if available
       setError(err.response?.data?.message || 'Failed to delete location.');
-      setDeletingLocation(null); // Close the modal on error
+      setDeletingLocation(null);
     }
   };
 
@@ -56,7 +56,10 @@ export default function LocationsPage() {
             Add, edit, or remove warehouse locations.
           </p>
         </div>
-        <Button variant="secondary">+ Add Location</Button>
+        {/* Updated button to open the modal */}
+        <Button variant="secondary" onClick={() => setIsAddModalOpen(true)}>
+          + Add Location
+        </Button>
       </div>
 
       {loading && <p className="text-slate-500">Loading locations...</p>}
@@ -95,7 +98,6 @@ export default function LocationsPage() {
                       <Button variant="ghost" size="sm" title="Edit">
                         <FiEdit2 />
                       </Button>
-                      {/* Updated onClick to open the confirmation modal */}
                       <Button
                         variant="ghost"
                         size="sm"
@@ -114,7 +116,6 @@ export default function LocationsPage() {
         </div>
       )}
 
-      {/* Conditionally render the confirmation modal */}
       {deletingLocation && (
         <ConfirmModal
           isOpen={true}
@@ -123,6 +124,18 @@ export default function LocationsPage() {
           variant="danger"
           onCancel={() => setDeletingLocation(null)}
           onConfirm={handleDeleteLocation}
+        />
+      )}
+
+      {/* Conditionally render the new AddLocationModal */}
+      {isAddModalOpen && (
+        <AddLocationModal
+          isOpen={true}
+          onClose={() => setIsAddModalOpen(false)}
+          onSuccess={() => {
+            setIsAddModalOpen(false);
+            fetchLocations(); // Refresh the list on success
+          }}
         />
       )}
     </div>
