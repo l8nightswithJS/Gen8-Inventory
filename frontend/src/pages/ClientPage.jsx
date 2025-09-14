@@ -183,6 +183,8 @@ export default function ClientPage() {
     return sortedItems.slice(start, start + rowsPerPage);
   }, [sortedItems, page, rowsPerPage]);
 
+  // In frontend/src/pages/ClientPage.jsx
+
   const columns = useMemo(() => {
     if (schema.length > 0) return schema;
     if (items.length === 0)
@@ -191,27 +193,39 @@ export default function ClientPage() {
         'name',
         'description',
         'lot_number',
-        'barcode',
         'total_quantity',
       ];
 
-    // ✅ MODIFIED: The default set of columns now includes all important core fields.
-    const defaultCoreFields = [
+    // ✅ MODIFIED: Create a much more logical default order
+    const preferredOrder = [
       'part_number',
       'name',
       'description',
       'lot_number',
-      'barcode',
       'total_quantity',
+      'reorder_level',
+      'low_stock_threshold',
+      'barcode',
     ];
-    const keys = new Set(defaultCoreFields);
 
-    // Add any extra custom fields from the attributes blob
-    items.forEach((it) =>
-      Object.keys(it.attributes || {}).forEach((key) => keys.add(key)),
-    );
+    const allKeys = new Set(preferredOrder);
+    items.forEach((it) => {
+      if (it.attributes) {
+        Object.keys(it.attributes).forEach((key) => allKeys.add(key));
+      }
+    });
 
-    return Array.from(keys);
+    const sortedKeys = Array.from(allKeys);
+    sortedKeys.sort((a, b) => {
+      const indexA = preferredOrder.indexOf(a);
+      const indexB = preferredOrder.indexOf(b);
+      if (indexA > -1 && indexB > -1) return indexA - indexB; // Both are in preferred order
+      if (indexA > -1) return -1; // A is preferred, B is not
+      if (indexB > -1) return 1; // B is preferred, A is not
+      return a.localeCompare(b); // Neither are preferred, sort alphabetically
+    });
+
+    return sortedKeys;
   }, [items, schema]);
 
   return (
