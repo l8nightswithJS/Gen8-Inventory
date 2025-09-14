@@ -1,14 +1,23 @@
-// frontend/src/components/ColumnSetupModal.jsx (Upgraded)
+// frontend/src/components/ColumnSetupModal.jsx (Corrected)
 import { useState } from 'react';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
 import { getCanonicalKey, normalizeKey } from '../utils/columnMapper';
 
 // --- Drag and Drop Imports ---
-import { DndContext, closestCenter } from '@dnd-kit/core';
+// ✅ MODIFIED: Import sensors and hooks
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
 import {
   arrayMove,
   SortableContext,
+  sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { SortableItem } from './ui/SortableItem';
@@ -33,6 +42,14 @@ export default function ColumnSetupModal({
   );
   const [input, setInput] = useState('');
 
+  // ✅ MODIFIED: Setup the sensors for pointer (mouse/touch) and keyboard
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
   const addCol = () => {
     const k = getCanonicalKey(input);
     if (!k || cols.includes(k)) {
@@ -56,7 +73,6 @@ export default function ColumnSetupModal({
     onSave(cols.map(normalizeKey).filter(Boolean));
   };
 
-  // ✅ New handler for when a drag operation ends
   const handleDragEnd = (event) => {
     const { active, over } = event;
     if (active.id !== over.id) {
@@ -100,14 +116,14 @@ export default function ColumnSetupModal({
           </Button>
         </div>
 
-        {/* ✅ Wrap the list in DndContext and SortableContext */}
+        {/* ✅ MODIFIED: Pass the configured sensors to the context */}
         <DndContext
-          sensors={[]}
+          sensors={sensors}
           collisionDetection={closestCenter}
           onDragEnd={handleDragEnd}
         >
           <SortableContext items={cols} strategy={verticalListSortingStrategy}>
-            <div className="flex flex-col gap-2 p-2 rounded-md border min-h-[12rem]">
+            <div className="flex flex-col gap-2 p-2 rounded-md border min-h-[12rem] max-h-96 overflow-y-auto">
               {cols.map((c) => (
                 <SortableItem key={c} id={c}>
                   <span className="inline-flex items-center gap-2 bg-gray-100 px-2 py-1 rounded text-sm font-medium w-full">
