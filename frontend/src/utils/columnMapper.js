@@ -17,7 +17,7 @@ const ALIAS_MAP = {
   lot_number: ['lot', 'lot_number', 'lot #', 'lot#', 'batch', 'batch_number'],
   description: ['desc', 'description', 'item_description'],
   name: ['name', 'item_name', 'product_name'],
-  barcode: ['barcode', 'bar code', 'upc'],
+  barcode: ['barcode', 'bar code', 'upc', 'barcodes'],
   total_quantity: [
     'quantity',
     'on_hand',
