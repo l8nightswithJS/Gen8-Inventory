@@ -1,66 +1,70 @@
-// inventory-service/controllers/_stockLogic.js
+// inventory-service/controllers/_stockLogic.js (Final Intelligent Mapper Version)
 
-const BAD_STRINGS = new Set(['undefined', 'null', 'nan']);
+const CORE_FIELDS = new Set([
+  'part_number',
+  'lot_number',
+  'name',
+  'description',
+  'barcode',
+  'reorder_level',
+  'low_stock_threshold',
+  'alert_enabled',
+  'alert_acknowledged_at',
+]);
 
-// Return number or null
-function num(v) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
+// The Intelligent Alias Map
+const ALIAS_MAP = {
+  part_number: ['part', 'part_number', 'part #', 'part#', 'pn', 'p/n', 'sku'],
+  lot_number: ['lot', 'lot_number', 'lot #', 'lot#', 'batch', 'batch_number'],
+  description: ['desc', 'description', 'item_description'],
+  reorder_level: ['reorder_level', 'reorder point', 'reorder_lvl', 'min_stock'],
+  // Add any other aliases you can think of for your core fields
+};
 
-// Pull quantity value from a flexible attributes record
-function qtyFrom(attrs = {}) {
-  return (
-    num(attrs.quantity) ??
-    num(attrs.on_hand) ??
-    num(attrs.qty_in_stock) ??
-    num(attrs.stock)
-  );
-}
-
-// Normalize threshold fields
-function thresholdsFrom(attrs = {}) {
-  const lowStock = num(attrs.low_stock_threshold);
-  const reorder = num(
-    attrs.reorder_level ?? attrs.reorder_point ?? attrs.safety_stock,
-  );
-  return { lowStock, reorder };
-}
-
-// Treat missing or explicit false as disabled
-function alertOn(attrs = {}) {
-  return attrs.alert_enabled === false ? false : true;
-}
-
-// Single source of truth for LOW state across the backend
-function computeLowState(attrs = {}) {
-  const qty = qtyFrom(attrs);
-  const { lowStock, reorder } = thresholdsFrom(attrs);
-  const enabled = alertOn(attrs);
-
-  if (!enabled || qty == null) {
-    return { low: false, reason: null, threshold: null, qty };
+// Create a reverse map for quick lookups. From 'part#' -> 'part_number'
+const REVERSE_ALIAS_MAP = new Map();
+for (const canonicalKey in ALIAS_MAP) {
+  for (const alias of ALIAS_MAP[canonicalKey]) {
+    REVERSE_ALIAS_MAP.set(normalizeKey(alias), canonicalKey);
   }
+}
 
+function computeLowState(item, total_quantity) {
+  // ... (this function does not need to change)
+  const { alert_enabled, low_stock_threshold, reorder_level } = item;
+  const qty = total_quantity;
+  if (alert_enabled === false)
+    return { low: false, reason: null, threshold: null, qty };
   let reason = null,
     threshold = null;
-  if (lowStock != null && reorder != null) {
-    threshold = Math.min(lowStock, reorder);
-    reason = threshold === lowStock ? 'low_stock_threshold' : 'reorder_level';
-  } else if (lowStock != null) {
-    threshold = lowStock;
-    reason = 'low_stock_threshold';
-  } else if (reorder != null) {
-    threshold = reorder;
+  if (low_stock_threshold != null && reorder_level != null) {
+    threshold = Math.min(low_stock_threshold, reorder_level);
+    reason =
+      threshold === low_stock_threshold
+        ? 'low_stock_threshold'
+        : 'reorder_level';
+  } else if (low_stock_threshold != null) {
+    threshold = low_stock_threshold;
+  } else if (reorder_level != null) {
+    threshold = reorder_level;
     reason = 'reorder_level';
   }
-
   if (threshold == null)
     return { low: false, reason: null, threshold: null, qty };
   return { low: qty <= threshold, reason, threshold, qty };
 }
 
-// snake_case keys and keep a-z0-9_
+function cleanAttributes(input = {}) {
+  // ... (this function does not need to change)
+  const out = {};
+  for (const key in input) {
+    if (CORE_FIELDS.has(key)) continue;
+    const val = input[key];
+    if (val != null && val !== '') out[key] = val;
+  }
+  return out;
+}
+
 function normalizeKey(k) {
   if (k == null) return null;
   return String(k)
@@ -71,45 +75,10 @@ function normalizeKey(k) {
     .replace(/_+/g, '_');
 }
 
-// Clean up an attributes map (drop empty/null, coerce booleans, numbers)
-function cleanAttributes(input = {}) {
-  const out = {};
-  for (const rawKey of Object.keys(input)) {
-    const key = normalizeKey(rawKey);
-    if (!key) continue;
-
-    const rawVal = input[rawKey];
-    if (rawVal == null) continue;
-    if (
-      typeof rawVal === 'string' &&
-      BAD_STRINGS.has(rawVal.trim().toLowerCase())
-    )
-      continue;
-
-    if (typeof rawVal === 'boolean') {
-      out[key] = rawVal;
-      continue;
-    }
-
-    const maybeNum = num(rawVal);
-    if (maybeNum != null) {
-      out[key] = maybeNum;
-      continue;
-    }
-
-    out[key] = String(rawVal).trim();
-  }
-  delete out.undefined;
-  delete out.null;
-  return out;
-}
-
 module.exports = {
-  num,
-  qtyFrom,
-  thresholdsFrom,
-  alertOn,
   computeLowState,
-  normalizeKey,
   cleanAttributes,
+  CORE_FIELDS,
+  normalizeKey,
+  REVERSE_ALIAS_MAP, // Export the new map
 };
