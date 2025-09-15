@@ -47,16 +47,21 @@ const proxyRequest = (targetUrl) => async (req, res) => {
   try {
     const target = new URL(req.originalUrl, targetUrl);
     const headers = { ...req.headers };
+
+    // Let the fetch client set the correct host based on the target URL.
     delete headers.host;
 
-    // ✅ FINAL FIX: Build the options for the fetch request separately.
+    // ✅ FINAL FIX: Delete the original content-length header.
+    // This forces fetch to recalculate it based on the new stringified body, preventing mismatches.
+    delete headers['content-length'];
+
     const options = {
       method: req.method,
       headers,
     };
 
-    // ✅ Only add a 'body' to the request if the method is NOT GET or HEAD.
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
+    // Only add a 'body' to the request if it's not GET or HEAD.
+    if (req.method !== 'GET' && req.method !== 'HEAD' && req.body) {
       options.body = JSON.stringify(req.body);
     }
 
