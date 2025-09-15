@@ -1,23 +1,18 @@
-// client-service/controllers/clientsController.js
+// client-service/controllers/clientsController.js (Corrected & Secured)
 const fs = require('fs');
 const path = require('path');
-const pool = require('../db/pool'); // <-- PostgreSQL connection (pg Pool)
+const pool = require('../db/pool');
 
-// Helper: Upload logos to local /uploads (removed Supabase storage dependency)
+// This local upload helper is fine, no changes needed.
 async function uploadLogo(localPath, fileName) {
   try {
     const uploadDir = path.join(__dirname, '..', 'uploads');
     if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-
     const destPath = path.join(uploadDir, fileName);
     fs.copyFileSync(localPath, destPath);
-
-    // Clean up temp file
     try {
       fs.unlinkSync(localPath);
     } catch {}
-
-    // Return a relative URL (static server must expose /uploads)
     return `/uploads/${fileName}`;
   } catch (e) {
     console.warn('⚠️ Upload failed, using local file path', e.message);
@@ -28,7 +23,15 @@ async function uploadLogo(localPath, fileName) {
 // GET /api/clients
 exports.getAllClients = async (req, res, next) => {
   try {
-    const result = await pool.query('SELECT * FROM clients ORDER BY id ASC');
+    // ✅ SECURITY FIX: Only select clients that belong to the logged-in user.
+    const userId = req.user?.id;
+    if (!userId)
+      return res.status(401).json({ message: 'Authentication error' });
+
+    const result = await pool.query(
+      'SELECT * FROM clients WHERE user_id = $1 ORDER BY name ASC',
+      [userId],
+    );
     res.json(result.rows || []);
   } catch (err) {
     next(err);
@@ -41,9 +44,15 @@ exports.getClientById = async (req, res, next) => {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ message: 'Invalid id' });
 
-    const result = await pool.query('SELECT * FROM clients WHERE id = $1', [
-      id,
-    ]);
+    // ✅ SECURITY FIX: Ensure the client belongs to the logged-in user.
+    const userId = req.user?.id;
+    if (!userId)
+      return res.status(401).json({ message: 'Authentication error' });
+
+    const result = await pool.query(
+      'SELECT * FROM clients WHERE id = $1 AND user_id = $2',
+      [id, userId],
+    );
     if (result.rows.length === 0)
       return res.status(404).json({ message: 'Not found' });
 
@@ -59,6 +68,13 @@ exports.createClient = async (req, res, next) => {
     const name = (req.body.name || '').trim();
     if (!name) return res.status(400).json({ message: 'name is required' });
 
+    // ✅ FIX: Get the user's ID securely from the auth middleware.
+    const userId = req.user?.id;
+    if (!userId)
+      return res
+        .status(401)
+        .json({ message: 'Authentication error: User ID not found.' });
+
     let barcode =
       typeof req.body.barcode === 'string' ? req.body.barcode.trim() : null;
     if (barcode === '') barcode = null;
@@ -66,27 +82,25 @@ exports.createClient = async (req, res, next) => {
     let logoUrl = req.body.logo_url || null;
     if (req.file) {
       const fileName = `${Date.now()}_${req.file.originalname}`;
-      const localPath = req.file.path;
-      logoUrl = await uploadLogo(localPath, fileName);
+      logoUrl = await uploadLogo(req.file.path, fileName);
     }
 
-    const insertObj = { name, logo_url: logoUrl, barcode };
-
+    // ✅ FIX: Include user_id in the INSERT statement.
     const result = await pool.query(
-      `INSERT INTO clients (name, logo_url, barcode)
-       VALUES ($1, $2, $3)
+      `INSERT INTO clients (name, logo_url, barcode, user_id)
+       VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [insertObj.name, insertObj.logo_url, insertObj.barcode],
+      [name, logoUrl, barcode, userId],
     );
 
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    // Handle unique constraint violation (duplicate barcode)
-    if (
-      err.code === '23505' ||
-      /duplicate key value/i.test(err.message || '')
-    ) {
-      return res.status(409).json({ message: 'Barcode already in use' });
+    if (err.code === '23505') {
+      return res
+        .status(409)
+        .json({
+          message: 'A client with this name or barcode already exists.',
+        });
     }
     next(err);
   }
@@ -98,24 +112,26 @@ exports.updateClient = async (req, res, next) => {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ message: 'Invalid id' });
 
+    // ✅ SECURITY FIX: Get user ID to ensure ownership.
+    const userId = req.user?.id;
+    if (!userId)
+      return res.status(401).json({ message: 'Authentication error' });
+
     const fields = {};
     if (typeof req.body.name === 'string') fields.name = req.body.name.trim();
-
     if (Object.prototype.hasOwnProperty.call(req.body, 'barcode')) {
-      if (typeof req.body.barcode === 'string') {
-        const v = req.body.barcode.trim();
-        fields.barcode = v === '' ? null : v;
-      } else if (req.body.barcode == null) {
-        fields.barcode = null;
-      }
+      fields.barcode = req.body.barcode?.trim() || null;
     }
 
     if (req.file) {
       const fileName = `${Date.now()}_${req.file.originalname}`;
-      const localPath = req.file.path;
-      fields.logo_url = await uploadLogo(localPath, fileName);
+      fields.logo_url = await uploadLogo(req.file.path, fileName);
     } else if (typeof req.body.logo_url === 'string') {
       fields.logo_url = req.body.logo_url;
+    }
+
+    if (Object.keys(fields).length === 0) {
+      return res.status(400).json({ message: 'No fields to update' });
     }
 
     const setClauses = Object.keys(fields)
@@ -123,27 +139,30 @@ exports.updateClient = async (req, res, next) => {
       .join(', ');
     const values = Object.values(fields);
 
-    if (setClauses.length === 0) {
-      return res.status(400).json({ message: 'No fields to update' });
-    }
-
+    // ✅ SECURITY FIX: Add "AND user_id" to the WHERE clause.
     const result = await pool.query(
       `UPDATE clients SET ${setClauses} WHERE id = $${
         values.length + 1
-      } RETURNING *`,
-      [...values, id],
+      } AND user_id = $${values.length + 2} RETURNING *`,
+      [...values, id, userId],
     );
 
     if (result.rows.length === 0)
-      return res.status(404).json({ message: 'Not found' });
+      return res
+        .status(404)
+        .json({
+          message:
+            'Not found or you do not have permission to edit this client.',
+        });
 
     res.json(result.rows[0]);
   } catch (err) {
-    if (
-      err.code === '23505' ||
-      /duplicate key value/i.test(err.message || '')
-    ) {
-      return res.status(409).json({ message: 'Barcode already in use' });
+    if (err.code === '23505') {
+      return res
+        .status(409)
+        .json({
+          message: 'A client with this name or barcode already exists.',
+        });
     }
     next(err);
   }
@@ -155,13 +174,24 @@ exports.deleteClient = async (req, res, next) => {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ message: 'Invalid id' });
 
+    // ✅ SECURITY FIX: Get user ID to ensure ownership.
+    const userId = req.user?.id;
+    if (!userId)
+      return res.status(401).json({ message: 'Authentication error' });
+
+    // ✅ SECURITY FIX: Add "AND user_id" to the WHERE clause.
     const result = await pool.query(
-      'DELETE FROM clients WHERE id = $1 RETURNING *',
-      [id],
+      'DELETE FROM clients WHERE id = $1 AND user_id = $2 RETURNING *',
+      [id, userId],
     );
 
     if (result.rows.length === 0)
-      return res.status(404).json({ message: 'Not found' });
+      return res
+        .status(404)
+        .json({
+          message:
+            'Not found or you do not have permission to delete this client.',
+        });
 
     res.json({ message: 'Client deleted' });
   } catch (err) {
