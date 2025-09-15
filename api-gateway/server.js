@@ -1,7 +1,7 @@
 import express from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
-import { Readable } from 'stream';
+import { Readable } from 'stream'; // Import Readable for streaming
 
 const {
   PORT: RENDER_PORT,
@@ -11,17 +11,6 @@ const {
   CLIENT_URL,
   BARCODE_URL,
 } = process.env;
-
-// ✅ Best Practice: Validate required environment variables on startup.
-// This prevents the server from starting in a broken state.
-const requiredUrls = { AUTH_URL, INVENTORY_URL, CLIENT_URL, BARCODE_URL };
-for (const [key, value] of Object.entries(requiredUrls)) {
-  if (!value) {
-    console.error(`[GW] FATAL: Missing required environment variable ${key}`);
-    process.exit(1);
-  }
-}
-
 const PORT = Number(RENDER_PORT) || 8080;
 
 const app = express();
@@ -49,17 +38,17 @@ app.use(morgan('tiny'));
 const proxyRequest = (targetUrl) => async (req, res) => {
   try {
     const target = new URL(req.originalUrl, targetUrl);
-    const headers = { ...req.headers };
 
-    // ✅ FIX 1: Delete the original 'host' header.
-    // Let the fetch client set the correct host based on the target URL. This is standard practice for proxying.
-    delete headers.host;
+    const headers = { ...req.headers };
+    headers.host = target.host;
 
     const response = await fetch(target, {
       method: req.method,
       headers,
-      // ✅ FIX 2: Simplified and safe body handling.
-      body: req.body ? JSON.stringify(req.body) : undefined,
+      body:
+        req.method !== 'GET' && req.method !== 'HEAD'
+          ? JSON.stringify(req.body)
+          : undefined,
     });
 
     // Forward the status code and headers from the service back to the client
@@ -68,16 +57,11 @@ const proxyRequest = (targetUrl) => async (req, res) => {
       res.setHeader(name, value);
     });
 
-    // ✅ FIX 3: Safely pipe the response body only if it exists.
-    // This prevents a crash if the downstream service returns a response with no body (e.g., 204 No Content).
-    if (response.body) {
-      Readable.fromWeb(response.body).pipe(res);
-    } else {
-      res.end();
-    }
+    // Correctly stream the response body back to the client
+    Readable.fromWeb(response.body).pipe(res);
   } catch (error) {
     console.error('[PROXY] Error forwarding request:', error);
-    res.status(502).json({ error: 'Bad Gateway', details: error.message });
+    res.status(502).json({ error: 'Bad Gateway' });
   }
 };
 
@@ -88,7 +72,6 @@ app.use('/api/items', proxyRequest(INVENTORY_URL));
 app.use('/api/inventory', proxyRequest(INVENTORY_URL));
 app.use('/api/locations', proxyRequest(INVENTORY_URL));
 app.use('/api/clients', proxyRequest(CLIENT_URL));
-// You have two routes pointing to BARCODE_URL, which is fine. Just confirming this is intended.
 app.use('/api/barcodes', proxyRequest(BARCODE_URL));
 app.use('/api/scan', proxyRequest(BARCODE_URL));
 
