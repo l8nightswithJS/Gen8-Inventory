@@ -6,7 +6,7 @@ const { createClient } = require('@supabase/supabase-js');
 // --- Supabase Setup ---
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
 );
 // ✅ FIX: Updated to match your bucket name
 const LOGO_BUCKET = 'client-logos';
@@ -97,11 +97,9 @@ exports.createClient = async (req, res, next) => {
   } catch (err) {
     await dbClient.query('ROLLBACK');
     if (err.code === '23505')
-      return res
-        .status(409)
-        .json({
-          message: 'A client with this name or barcode already exists.',
-        });
+      return res.status(409).json({
+        message: 'A client with this name or barcode already exists.',
+      });
     console.error('Create client error:', err);
     next(err);
   } finally {
@@ -150,20 +148,15 @@ exports.updateClient = async (req, res, next) => {
     );
 
     if (result.rows.length === 0)
-      return res
-        .status(404)
-        .json({
-          message:
-            'Not found or you do not have permission to edit this client.',
-        });
+      return res.status(404).json({
+        message: 'Not found or you do not have permission to edit this client.',
+      });
     res.json(result.rows[0]);
   } catch (err) {
     if (err.code === '23505')
-      return res
-        .status(409)
-        .json({
-          message: 'A client with this name or barcode already exists.',
-        });
+      return res.status(409).json({
+        message: 'A client with this name or barcode already exists.',
+      });
     console.error('Update client error:', err);
     next(err);
   }
@@ -200,12 +193,10 @@ exports.deleteClient = async (req, res, next) => {
       [id, userId],
     );
     if (result.rows.length === 0)
-      return res
-        .status(404)
-        .json({
-          message:
-            'Not found or you do not have permission to delete this client.',
-        });
+      return res.status(404).json({
+        message:
+          'Not found or you do not have permission to delete this client.',
+      });
     res.json({ message: 'Client deleted' });
   } catch (err) {
     next(err);
