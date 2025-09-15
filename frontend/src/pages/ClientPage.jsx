@@ -183,8 +183,6 @@ export default function ClientPage() {
     return sortedItems.slice(start, start + rowsPerPage);
   }, [sortedItems, page, rowsPerPage]);
 
-  // In frontend/src/pages/ClientPage.jsx
-
   const columns = useMemo(() => {
     if (schema.length > 0) return schema;
     if (items.length === 0)
@@ -193,10 +191,10 @@ export default function ClientPage() {
         'name',
         'description',
         'lot_number',
+        'barcode',
         'total_quantity',
       ];
 
-    // ✅ MODIFIED: Create a much more logical default order
     const preferredOrder = [
       'part_number',
       'name',
@@ -219,10 +217,10 @@ export default function ClientPage() {
     sortedKeys.sort((a, b) => {
       const indexA = preferredOrder.indexOf(a);
       const indexB = preferredOrder.indexOf(b);
-      if (indexA > -1 && indexB > -1) return indexA - indexB; // Both are in preferred order
-      if (indexA > -1) return -1; // A is preferred, B is not
-      if (indexB > -1) return 1; // B is preferred, A is not
-      return a.localeCompare(b); // Neither are preferred, sort alphabetically
+      if (indexA > -1 && indexB > -1) return indexA - indexB;
+      if (indexA > -1) return -1;
+      if (indexB > -1) return 1;
+      return a.localeCompare(b);
     });
 
     return sortedKeys;
@@ -244,22 +242,28 @@ export default function ClientPage() {
         </div>
       </div>
 
+      {/* ✅ MODIFIED: This entire action bar is updated for conditional rendering */}
       <div className="flex flex-col md:flex-row md:items-center gap-4 mb-4">
-        <div className="flex-grow flex flex-col sm:flex-row gap-4">
+        <div className="flex-grow">
           <SearchBar onSearch={setQuery} />
-          <div className="sm:w-64 flex-shrink-0">
-            <UsbScannerInput onScan={handleUsbScan} />
-          </div>
         </div>
         <div className="flex items-center flex-wrap gap-2 justify-start md:justify-end">
-          <Button
-            onClick={() => handleModal('scan', true)}
-            variant="secondary"
-            title="Scan"
-          >
-            <FiCamera className="sm:mr-2" />
-            <span className="hidden sm:inline">Scan</span>
-          </Button>
+          {/* Show USB scanner for desktop, Camera button for mobile */}
+          {viewMode === 'desktop' ? (
+            <div className="sm:w-64 flex-shrink-0">
+              <UsbScannerInput onScan={handleUsbScan} />
+            </div>
+          ) : (
+            <Button
+              onClick={() => handleModal('scan', true)}
+              variant="secondary"
+              title="Scan"
+            >
+              <FiCamera className="mr-2" />
+              Scan
+            </Button>
+          )}
+
           {isAdmin && (
             <>
               <Button
