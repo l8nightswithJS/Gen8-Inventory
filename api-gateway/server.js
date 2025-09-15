@@ -12,7 +12,6 @@ const {
   BARCODE_URL,
 } = process.env;
 
-// Best Practice: Validate required environment variables on startup.
 const requiredUrls = { AUTH_URL, INVENTORY_URL, CLIENT_URL, BARCODE_URL };
 for (const [key, value] of Object.entries(requiredUrls)) {
   if (!value) {
@@ -39,6 +38,7 @@ app.use(
   }),
 );
 
+// We still use express.json() for requests that ARE json
 app.use(express.json());
 app.use(morgan('tiny'));
 
@@ -47,27 +47,33 @@ const proxyRequest = (targetUrl) => async (req, res) => {
   try {
     const target = new URL(req.originalUrl, targetUrl);
     const headers = { ...req.headers };
-
-    // Let the fetch client set the correct host based on the target URL.
     delete headers.host;
-
-    // ✅ FINAL FIX: Delete the original content-length header.
-    // This forces fetch to recalculate it based on the new stringified body, preventing mismatches.
-    delete headers['content-length'];
 
     const options = {
       method: req.method,
       headers,
+      // ✅ This is required by Node's fetch to properly handle streamed request bodies
+      duplex: 'half',
     };
 
-    // Only add a 'body' to the request if it's not GET or HEAD.
-    if (req.method !== 'GET' && req.method !== 'HEAD' && req.body) {
-      options.body = JSON.stringify(req.body);
+    const isJsonRequest =
+      req.headers['content-type']?.includes('application/json');
+
+    // ✅ FINAL FIX: Handle JSON and other body types (like file uploads) differently
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      if (isJsonRequest) {
+        // For JSON, we stringify the body that express.json() parsed for us
+        options.body = JSON.stringify(req.body);
+        // Since we created a new body, we must remove the original content-length header
+        delete headers['content-length'];
+      } else {
+        // For all other types (like multipart/form-data), we stream the raw request
+        options.body = req;
+      }
     }
 
     const response = await fetch(target, options);
 
-    // Forward the response back to the original client
     res.statusCode = response.status;
     response.headers.forEach((value, name) => {
       res.setHeader(name, value);
