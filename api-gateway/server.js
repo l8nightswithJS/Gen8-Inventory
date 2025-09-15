@@ -1,7 +1,7 @@
 import express from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
-import { Readable } from 'stream'; // Import Readable for streaming
+import { Readable } from 'stream';
 
 const {
   PORT: RENDER_PORT,
@@ -11,10 +11,18 @@ const {
   CLIENT_URL,
   BARCODE_URL,
 } = process.env;
+
+// Best Practice: Validate required environment variables on startup.
+const requiredUrls = { AUTH_URL, INVENTORY_URL, CLIENT_URL, BARCODE_URL };
+for (const [key, value] of Object.entries(requiredUrls)) {
+  if (!value) {
+    console.error(`[GW] FATAL: Missing required environment variable ${key}`);
+    process.exit(1);
+  }
+}
+
 const PORT = Number(RENDER_PORT) || 8080;
-
 const app = express();
-
 const allowlist = CORS_ORIGIN.split(',')
   .map((s) => s.trim())
   .filter(Boolean);
@@ -38,30 +46,36 @@ app.use(morgan('tiny'));
 const proxyRequest = (targetUrl) => async (req, res) => {
   try {
     const target = new URL(req.originalUrl, targetUrl);
-
     const headers = { ...req.headers };
-    headers.host = target.host;
+    delete headers.host;
 
-    const response = await fetch(target, {
+    // ✅ FINAL FIX: Build the options for the fetch request separately.
+    const options = {
       method: req.method,
       headers,
-      body:
-        req.method !== 'GET' && req.method !== 'HEAD'
-          ? JSON.stringify(req.body)
-          : undefined,
-    });
+    };
 
-    // Forward the status code and headers from the service back to the client
+    // ✅ Only add a 'body' to the request if the method is NOT GET or HEAD.
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      options.body = JSON.stringify(req.body);
+    }
+
+    const response = await fetch(target, options);
+
+    // Forward the response back to the original client
     res.statusCode = response.status;
     response.headers.forEach((value, name) => {
       res.setHeader(name, value);
     });
 
-    // Correctly stream the response body back to the client
-    Readable.fromWeb(response.body).pipe(res);
+    if (response.body) {
+      Readable.fromWeb(response.body).pipe(res);
+    } else {
+      res.end();
+    }
   } catch (error) {
     console.error('[PROXY] Error forwarding request:', error);
-    res.status(502).json({ error: 'Bad Gateway' });
+    res.status(502).json({ error: 'Bad Gateway', details: error.message });
   }
 };
 
