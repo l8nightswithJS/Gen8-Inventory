@@ -47,8 +47,6 @@ const proxyRequest = (targetUrl) => async (req, res) => {
   try {
     const target = new URL(req.originalUrl, targetUrl);
     const headers = { ...req.headers };
-
-    // Let the fetch client set the correct host based on the target URL.
     delete headers.host;
 
     const options = {
