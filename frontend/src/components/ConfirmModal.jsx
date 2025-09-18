@@ -1,4 +1,3 @@
-//frontend/src/components/ConfirmModal.jsx
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
 import PropTypes from 'prop-types';
@@ -26,7 +25,7 @@ export default function ConfirmModal({
 
   return (
     <BaseModal isOpen={true} onClose={onCancel} title={title} footer={Footer}>
-      <p className="text-gray-700">{message}</p>
+      <p className="text-gray-700 dark:text-slate-300">{message}</p>
     </BaseModal>
   );
 }

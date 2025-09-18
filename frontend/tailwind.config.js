@@ -1,13 +1,13 @@
 // frontend/tailwind.config.js
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: 'class', // Enable dark mode using the class strategy
   content: ['./src/**/*.{js,jsx,ts,tsx}'],
   theme: {
     extend: {
       animation: {
         'fade-in-up': 'fadeInUp 0.8s ease-out forwards',
         'fade-in': 'fadeIn 0.8s ease-out forwards',
-        // Add this new animation for the background
         'gradient-xy': 'gradient-xy 15s ease infinite',
       },
       keyframes: {
@@ -19,7 +19,6 @@ module.exports = {
           '0%': { opacity: '0' },
           '100%': { opacity: '1' },
         },
-        // Add the keyframes for the new background animation
         'gradient-xy': {
           '0%, 100%': {
             'background-size': '400% 400%',

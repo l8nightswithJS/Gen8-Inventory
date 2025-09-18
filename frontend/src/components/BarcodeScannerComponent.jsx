@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { Scanner } from '@yudiel/react-qr-scanner';
+import Button from './ui/Button'; // Import the themed Button
 
 export default function BarcodeScannerComponent({
   onDetected,
@@ -20,7 +21,6 @@ export default function BarcodeScannerComponent({
         first?.format || first?.symbology || first?.type || null;
 
       if (text && onDetected) {
-        // ✅ Pass both code and symbology
         onDetected(String(text), symbology);
       }
     },
@@ -41,18 +41,14 @@ export default function BarcodeScannerComponent({
         formats={formats}
         styles={{
           container: { width: '100%', ...style },
-          video: { borderRadius: '0.75rem', width: '100%' },
+          video: { borderRadius: '0.5rem', width: '100%' }, // Standardized border radius
         }}
       />
       {onClose && (
         <div className="flex justify-end">
-          <button
-            type="button"
-            className="px-3 py-1.5 rounded-md border bg-white hover:bg-gray-50"
-            onClick={onClose}
-          >
+          <Button type="button" variant="secondary" onClick={onClose}>
             Close
-          </button>
+          </Button>
         </div>
       )}
     </div>

@@ -1,11 +1,10 @@
-// frontend/src/pages/Login.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/axiosConfig';
 import logoSvg from '../assets/logo.svg';
 import SignupModal from '../components/SignupModal';
 import { FiMail, FiLock } from 'react-icons/fi';
-import { clearToken } from '../utils/auth'; // ✅ centralize token clearing
+import { clearToken } from '../utils/auth';
 
 function isTokenValid(token) {
   if (!token) return false;
@@ -29,7 +28,7 @@ export default function Login() {
     if (isTokenValid(token)) {
       navigate('/dashboard', { replace: true });
     } else {
-      clearToken(); // ✅ now consistent with Navbar, LogoutButton, IdleLogout, PrivateRoute
+      clearToken();
     }
   }, [navigate]);
 
@@ -71,17 +70,17 @@ export default function Login() {
         </div>
 
         {/* Right Panel */}
-        <div className="w-full md:w-1/2 lg:w-3/5 bg-slate-50 flex flex-col items-center justify-center p-4">
+        <div className="w-full md:w-1/2 lg:w-3/5 bg-slate-50 dark:bg-slate-900 flex flex-col items-center justify-center p-4">
           <div className="w-full max-w-sm">
-            <h2 className="text-3xl font-extrabold text-slate-900 text-center">
+            <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white text-center">
               Welcome Back
             </h2>
-            <p className="text-center text-slate-500 mt-2">
+            <p className="text-center text-slate-500 dark:text-slate-400 mt-2">
               Sign in to continue
             </p>
 
             {error && (
-              <div className="bg-red-100 border border-red-300 text-red-800 px-4 py-3 rounded-lg my-6 text-center text-sm">
+              <div className="bg-red-100 border border-red-300 text-red-800 px-4 py-3 rounded-lg my-6 text-center text-sm dark:bg-red-900/20 dark:border-red-500/30 dark:text-red-400">
                 {error}
               </div>
             )}
@@ -97,7 +96,7 @@ export default function Login() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full border border-gray-300 pl-10 pr-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white pl-10 pr-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Email address"
                 />
               </div>
@@ -112,7 +111,7 @@ export default function Login() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full border border-gray-300 pl-10 pr-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white pl-10 pr-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Password"
                 />
               </div>
@@ -120,7 +119,7 @@ export default function Login() {
               <div className="text-sm text-right">
                 <button
                   type="button"
-                  className="font-medium text-blue-600 hover:text-blue-500"
+                  className="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
                 >
                   Forgot password?
                 </button>
@@ -133,11 +132,11 @@ export default function Login() {
                 Sign In
               </button>
             </form>
-            <p className="mt-6 text-center text-sm text-slate-600">
+            <p className="mt-6 text-center text-sm text-slate-600 dark:text-slate-400">
               Don&apos;t have an account?{' '}
               <button
                 onClick={() => setShowSignup(true)}
-                className="font-medium text-blue-600 hover:text-blue-500"
+                className="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
               >
                 Request Access
               </button>

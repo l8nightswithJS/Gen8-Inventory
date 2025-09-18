@@ -1,4 +1,3 @@
-// frontend/src/pages/UsersPage.jsx
 import { useState, useEffect, useCallback } from 'react';
 import api from '../utils/axiosConfig';
 import ConfirmModal from '../components/ConfirmModal';
@@ -8,25 +7,29 @@ import { FiEdit2, FiTrash2 } from 'react-icons/fi';
 
 const normalizeUser = (u) => ({
   ...u,
-  email: u.email || u.username, // fallback for legacy data
+  email: u.email || u.username,
 });
 
 const UserCard = ({ user, onApprove, onDeny, onEdit, onDelete, isPending }) => (
   <div
-    className={`rounded-lg border bg-white shadow-md p-4 mb-4 ${
-      isPending ? 'border-amber-300' : 'border-slate-200'
+    className={`rounded-lg border bg-white dark:bg-slate-900 shadow-md p-4 mb-4 ${
+      isPending
+        ? 'border-amber-300 dark:border-amber-500/30'
+        : 'border-slate-200 dark:border-slate-800'
     }`}
   >
     <div className="flex items-start justify-between">
       <div>
-        <p className="font-bold text-lg text-slate-800">{user.email}</p>
-        <p className="text-sm font-medium bg-slate-100 text-slate-600 inline-block px-2 py-0.5 rounded-full mt-1 capitalize">
+        <p className="font-bold text-lg text-slate-800 dark:text-white">
+          {user.email}
+        </p>
+        <p className="text-sm font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 inline-block px-2 py-0.5 rounded-full mt-1 capitalize">
           {user.role}
         </p>
       </div>
       {isPending ? (
         <div className="flex items-center gap-2">
-          <Button onClick={() => onApprove(user)} size="sm" variant="success">
+          <Button onClick={() => onApprove(user)} size="sm" variant="primary">
             Approve
           </Button>
           <Button onClick={() => onDeny(user)} size="sm" variant="danger">
@@ -134,17 +137,17 @@ export default function UsersPage() {
   };
 
   const UserTable = () => (
-    <div className="overflow-x-auto bg-white shadow-md rounded-lg">
+    <div className="overflow-x-auto bg-white dark:bg-slate-900 shadow-md rounded-lg border border-slate-200 dark:border-slate-800">
       <table className="min-w-full text-sm border-collapse">
-        <thead className="bg-slate-50 border-b">
+        <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-800">
           <tr>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-600">
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-600 dark:text-slate-300">
               Email
             </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-600">
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-600 dark:text-slate-300">
               Role
             </th>
-            <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-slate-600">
+            <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-slate-600 dark:text-slate-300">
               Actions
             </th>
           </tr>
@@ -153,19 +156,23 @@ export default function UsersPage() {
           {pendingUsers.map((u) => (
             <tr
               key={`p-${u.id}`}
-              className="border-b last:border-b-0 bg-amber-50"
+              className="border-b border-slate-100 dark:border-slate-800 last:border-b-0 bg-amber-50 dark:bg-amber-900/10"
             >
-              <td className="px-4 py-3 font-medium text-slate-800">
+              <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">
                 {u.email}{' '}
-                <span className="text-amber-600 font-normal">(Pending)</span>
+                <span className="text-amber-600 dark:text-amber-400 font-normal">
+                  (Pending)
+                </span>
               </td>
-              <td className="px-4 py-3 capitalize text-slate-600">{u.role}</td>
+              <td className="px-4 py-3 capitalize text-slate-600 dark:text-slate-400">
+                {u.role}
+              </td>
               <td className="px-4 py-3 text-center">
                 <div className="flex items-center justify-center gap-2">
                   <Button
                     onClick={() => openConfirm('approve', u)}
                     size="sm"
-                    variant="success"
+                    variant="primary"
                   >
                     Approve
                   </Button>
@@ -183,12 +190,14 @@ export default function UsersPage() {
           {users.map((u) => (
             <tr
               key={u.id}
-              className="border-b last:border-b-0 hover:bg-slate-50"
+              className="border-b border-slate-100 dark:border-slate-800 last:border-b-0 hover:bg-slate-50 dark:hover:bg-slate-800/50"
             >
-              <td className="px-4 py-3 font-medium text-slate-800">
+              <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">
                 {u.email}
               </td>
-              <td className="px-4 py-3 capitalize text-slate-600">{u.role}</td>
+              <td className="px-4 py-3 capitalize text-slate-600 dark:text-slate-400">
+                {u.role}
+              </td>
               <td className="px-4 py-3 text-center">
                 <div className="flex items-center justify-center gap-1">
                   <Button onClick={() => openForm(u)} variant="ghost" size="sm">
@@ -214,7 +223,7 @@ export default function UsersPage() {
   return (
     <div className="max-w-4xl mx-auto">
       <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
-        <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight">
+        <h1 className="text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">
           Manage Users
         </h1>
         <Button variant="secondary" onClick={() => openForm(null)}>
@@ -263,7 +272,7 @@ export default function UsersPage() {
             confirm.type.charAt(0).toUpperCase() + confirm.type.slice(1)
           } User`}
           message={`Are you sure you want to ${confirm.type} "${confirm.email}"?`}
-          variant={confirm.type === 'approve' ? 'success' : 'danger'}
+          variant={confirm.type === 'approve' ? 'primary' : 'danger'}
           onCancel={closeConfirm}
           onConfirm={handleConfirm}
           loading={confirm.loading}

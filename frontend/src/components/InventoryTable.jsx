@@ -1,4 +1,4 @@
-// frontend/src/components/InventoryTable.jsx (Corrected)
+// frontend/src/components/InventoryTable.jsx
 import { useMemo } from 'react';
 import { FiEdit2, FiTrash2, FiChevronUp, FiChevronDown } from 'react-icons/fi';
 import Button from './ui/Button';
@@ -22,30 +22,33 @@ const humanLabel = (k) =>
   k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
 function MobileCard({ item, onEdit, onDelete }) {
-  // ✅ MODIFIED: Read directly from the item object.
   const part = item.part_number || item.name || '—';
   const onHand = item.total_quantity ?? '—';
   const isLow = item.total_quantity <= item.reorder_level && item.alert_enabled;
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white shadow-md p-4 mb-4">
-      <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-3">
+    <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-md p-4 mb-4">
+      <div className="flex items-start justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-3">
         <div>
-          <p className="font-bold text-lg text-slate-800">{part}</p>
+          <p className="font-bold text-lg text-slate-800 dark:text-white">
+            {part}
+          </p>
           {item.lot_number && (
-            <p className="text-sm font-mono text-slate-500">
+            <p className="text-sm font-mono text-slate-500 dark:text-slate-400">
               Lot: {item.lot_number}
             </p>
           )}
           {item.description && (
-            <p className="text-sm text-slate-500 mt-1 line-clamp-2">
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
               {item.description}
             </p>
           )}
         </div>
         <div className="text-right flex-shrink-0">
-          <p className="text-xs font-medium text-slate-500">On Hand</p>
-          <p className="font-bold text-2xl text-slate-800 tabular-nums">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            On Hand
+          </p>
+          <p className="font-bold text-2xl text-slate-800 dark:text-white tabular-nums">
             {onHand}
           </p>
         </div>
@@ -55,19 +58,22 @@ function MobileCard({ item, onEdit, onDelete }) {
         {[
           ['Reorder Lvl', item.reorder_level],
           ['Barcode', item.barcode],
-          // ✅ MODIFIED: Display custom attributes from the attributes object
           ...Object.entries(item.attributes || {}),
         ]
           .filter(([, v]) => v != null && v !== '')
           .map(([k, v]) => (
             <div key={k}>
-              <p className="text-slate-500">{humanLabel(k)}</p>
-              <p className="font-medium text-slate-700">{String(v)}</p>
+              <p className="text-slate-500 dark:text-slate-400">
+                {humanLabel(k)}
+              </p>
+              <p className="font-medium text-slate-700 dark:text-slate-300">
+                {String(v)}
+              </p>
             </div>
           ))}
       </div>
 
-      <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-end gap-2">
+      <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
         {isLow && (
           <span className="text-xs font-bold text-red-600 mr-auto tracking-wider">
             LOW STOCK
@@ -94,7 +100,6 @@ function MobileCard({ item, onEdit, onDelete }) {
   );
 }
 
-// ... (SortableHeader component does not need changes)
 const SortableHeader = ({
   children,
   sortKey,
@@ -144,15 +149,15 @@ export default function InventoryTable({
   const safeItems = useMemo(() => (Array.isArray(items) ? items : []), [items]);
 
   const ResponsiveTable = () => (
-    <div className="overflow-x-auto bg-white shadow-md rounded-lg">
+    <div className="overflow-x-auto bg-white dark:bg-slate-900 shadow-md rounded-lg">
       <table className="w-full table-auto border-collapse text-sm">
-        <thead className="bg-white border-b border-slate-200">
+        <thead className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
           <tr>
             {columns.map((key) => (
               <th
                 key={key}
                 scope="col"
-                className={`px-4 py-3 text-[12px] font-semibold uppercase text-slate-600 ${
+                className={`px-4 py-3 text-[12px] font-semibold uppercase text-slate-600 dark:text-slate-400 ${
                   isNumericLike(key) ? 'text-right' : 'text-left'
                 }`}
               >
@@ -169,7 +174,7 @@ export default function InventoryTable({
             {role === 'admin' && (
               <th
                 scope="col"
-                className="px-4 py-3 text-center text-[12px] font-semibold uppercase text-slate-600 w-28"
+                className="px-4 py-3 text-center text-[12px] font-semibold uppercase text-slate-600 dark:text-slate-400 w-28"
               >
                 Actions
               </th>
@@ -181,23 +186,21 @@ export default function InventoryTable({
             <tr>
               <td
                 colSpan={columns.length + (role === 'admin' ? 1 : 0)}
-                className="px-6 py-5 text-center text-gray-500 italic"
+                className="px-6 py-5 text-center text-gray-500 dark:text-gray-400 italic"
               >
                 No items to display.
               </td>
             </tr>
           ) : (
             safeItems.map((item) => {
-              // ✅ MODIFIED: Check for low stock directly on item properties
               const isLow =
                 item.total_quantity <= item.reorder_level && item.alert_enabled;
               return (
                 <tr
                   key={item.id}
-                  className="border-b last:border-b-0 hover:bg-slate-50 transition-colors"
+                  className="border-b last:border-b-0 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                 >
                   {columns.map((key) => {
-                    // ✅ MODIFIED: Look for the value on the top-level item first, then fall back to attributes for custom fields.
                     const value = item[key] ?? item.attributes?.[key];
                     const isNumeric = isNumericLike(key);
 
@@ -205,13 +208,15 @@ export default function InventoryTable({
                       value != null && value !== '' ? (
                         String(value)
                       ) : (
-                        <span className="text-gray-400">—</span>
+                        <span className="text-gray-400 dark:text-gray-500">
+                          —
+                        </span>
                       );
 
                     return (
                       <td
                         key={key}
-                        className={`px-4 py-3 align-top text-sm ${
+                        className={`px-4 py-3 align-top text-sm text-slate-700 dark:text-slate-300 ${
                           isNumeric ? 'text-right tabular-nums' : 'text-left'
                         }`}
                       >
@@ -270,7 +275,7 @@ export default function InventoryTable({
   const MobileCards = () => (
     <div>
       {safeItems.length === 0 ? (
-        <p className="text-center text-gray-500 italic mt-4">
+        <p className="text-center text-gray-500 dark:text-gray-400 italic mt-4">
           No items to display.
         </p>
       ) : (
@@ -287,17 +292,17 @@ export default function InventoryTable({
   );
 
   const Pager = () => (
-    <div className="my-4 flex flex-col sm:flex-row items-center sm:justify-between gap-3 text-sm text-gray-700">
+    <div className="my-4 flex flex-col sm:flex-row items-center sm:justify-between gap-3 text-sm text-gray-700 dark:text-gray-300">
       <div className="font-medium">
         Total items: <span className="font-bold">{totalItems}</span>
       </div>
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <span className="text-gray-600">Rows:</span>
+          <span className="text-gray-600 dark:text-gray-400">Rows:</span>
           <select
             value={rowsPerPage}
             onChange={(e) => onRowsPerPageChange?.(Number(e.target.value))}
-            className="h-8 border rounded px-2 bg-white"
+            className="h-8 border rounded px-2 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700"
           >
             {[15, 25, 50, 100].map((n) => (
               <option key={n} value={n}>
@@ -310,7 +315,7 @@ export default function InventoryTable({
           <button
             disabled={page <= 1}
             onClick={() => onPage(page - 1)}
-            className="px-3 py-1.5 border rounded disabled:opacity-50 bg-white hover:bg-gray-50"
+            className="px-3 py-1.5 border rounded disabled:opacity-50 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 border-slate-300 dark:border-slate-700"
           >
             Prev
           </button>
@@ -320,7 +325,7 @@ export default function InventoryTable({
           <button
             disabled={page >= totalPages}
             onClick={() => onPage(page + 1)}
-            className="px-3 py-1.5 border rounded disabled:opacity-50 bg-white hover:bg-gray-50"
+            className="px-3 py-1.5 border rounded disabled:opacity-50 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 border-slate-300 dark:border-slate-700"
           >
             Next
           </button>

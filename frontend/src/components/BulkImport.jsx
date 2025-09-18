@@ -1,4 +1,3 @@
-// frontend/src/components/BulkImport.jsx (Final Corrected Version)
 import { useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import Button from './ui/Button';
@@ -31,7 +30,7 @@ export default function BulkImport({ clientId, refresh, onClose }) {
         setRawRows(rows);
       } catch (parseError) {
         setError(
-          "Could not parse the file. Please ensure it's a valid .xlsx or .csv file.",
+          'Failed to parse the file. Please ensure it is a valid Excel or CSV file.',
         );
       }
     };
@@ -39,89 +38,83 @@ export default function BulkImport({ clientId, refresh, onClose }) {
   };
 
   const handleImport = async () => {
-    if (rawRows.length === 0) {
-      setError('No data found in the file to import.');
-      return;
-    }
+    setSubmitting(true);
     setError('');
     setSuccess('');
-    setSubmitting(true);
     try {
-      const resp = await api.post('/api/items/bulk', {
-        client_id: parseInt(clientId, 10),
-        items: rawRows,
-      });
-      setSuccess(`${resp.data.successCount} items imported successfully.`);
-      await refresh?.();
-      setTimeout(() => onClose?.(), 1500);
-    } catch (err) {
-      setError(err.response?.data?.message || 'Bulk import failed');
+      await api.post(`/api/clients/${clientId}/import`, { items: rawRows });
+      setSuccess(`${rawRows.length} items imported successfully!`);
+      refresh?.();
+      setTimeout(() => {
+        onClose?.();
+      }, 1500);
+    } catch (e) {
+      setError(e?.response?.data?.message || 'Failed to import data.');
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-4xl space-y-4">
-      <div className="flex justify-between items-start">
-        <h3 className="text-xl font-semibold text-gray-800">
-          Import Items in Bulk
-        </h3>
-        <button
-          onClick={onClose}
-          className="text-gray-500 hover:text-gray-700 text-2xl"
-          disabled={submitting}
-        >
-          &times;
-        </button>
-      </div>
-      <p className="text-sm text-gray-500 -mt-2">
-        The backend will automatically map common columns like &apos;Part
-        Number&apos;, &apos;Lot #&apos;, &apos;Description&apos;, etc.
-      </p>
-
-      <label
-        htmlFor="file-upload"
-        className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100"
+    <div className="p-4 bg-white dark:bg-slate-900 rounded-lg shadow-lg max-w-4xl mx-auto my-8 border border-slate-200 dark:border-slate-800">
+      <div
+        className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-lg p-6 text-center cursor-pointer hover:border-blue-500 dark:hover:border-blue-500 transition-colors"
+        onClick={() => fileRef.current.click()}
       >
-        <FiUploadCloud className="w-8 h-8 mb-2 text-gray-500" />
-        <p className="mb-2 text-sm text-gray-500">
-          <span className="font-semibold">Click to upload</span> or drag and
-          drop
+        <FiUploadCloud className="mx-auto h-12 w-12 text-slate-400 dark:text-slate-500" />
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+          <span className="font-semibold text-blue-600 dark:text-blue-400">
+            Click to upload
+          </span>{' '}
+          or drag and drop.
         </p>
-        <p className="text-xs text-gray-500">{fileName || 'CSV or XLSX'}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
+          Excel (XLSX) or CSV files
+        </p>
         <input
           ref={fileRef}
-          id="file-upload"
           type="file"
           className="hidden"
-          accept=".csv, .xlsx, .xls"
           onChange={handleFileChange}
+          accept=".xlsx, .xls, .csv"
         />
-      </label>
+        {fileName && (
+          <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mt-3">
+            {fileName}
+          </p>
+        )}
+      </div>
 
       {rawRows.length > 0 && (
-        <>
-          <h4 className="font-medium">File Preview</h4>
-          <div className="overflow-x-auto border rounded">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-100">
+        <div className="mt-4">
+          <h3 className="font-semibold text-lg text-slate-800 dark:text-white mb-2">
+            Preview (First 5 Rows)
+          </h3>
+          <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-lg">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 dark:bg-slate-800">
                 <tr className="text-left">
                   {headers.map((h) => (
-                    <th key={h} className="px-3 py-2 font-semibold">
+                    <th
+                      key={h}
+                      className="px-3 py-2 font-semibold text-slate-600 dark:text-slate-300"
+                    >
                       {h}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="bg-white dark:bg-slate-900">
                 {rawRows.slice(0, 5).map((row, i) => (
                   <tr
                     key={i}
-                    className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
+                    className="border-b border-slate-100 dark:border-slate-800 last:border-b-0"
                   >
                     {headers.map((h) => (
-                      <td key={h} className="px-3 py-2 truncate max-w-xs">
+                      <td
+                        key={h}
+                        className="px-3 py-2 truncate max-w-xs text-slate-700 dark:text-slate-300"
+                      >
                         {String(row[h])}
                       </td>
                     ))}
@@ -130,12 +123,16 @@ export default function BulkImport({ clientId, refresh, onClose }) {
               </tbody>
             </table>
           </div>
-          <div className="flex justify-end items-center gap-4 pt-2">
+          <div className="flex justify-end items-center gap-4 pt-4">
             {error && (
-              <p className="text-red-600 text-sm font-medium">{error}</p>
+              <p className="text-red-600 dark:text-red-400 text-sm font-medium">
+                {error}
+              </p>
             )}
             {success && (
-              <p className="text-green-600 text-sm font-medium">{success}</p>
+              <p className="text-green-600 dark:text-green-400 text-sm font-medium">
+                {success}
+              </p>
             )}
             <Button
               onClick={handleImport}
@@ -146,7 +143,7 @@ export default function BulkImport({ clientId, refresh, onClose }) {
               {submitting ? 'Importing…' : `Import ${rawRows.length} Items`}
             </Button>
           </div>
-        </>
+        </div>
       )}
     </div>
   );

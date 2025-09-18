@@ -1,6 +1,5 @@
-// frontend/src/components/SearchBar.jsx
 import { useState } from 'react';
-import Button from './ui/Button'; // Import our standard Button component
+import Button from './ui/Button';
 
 export default function SearchBar({ onSearch }) {
   const [q, setQ] = useState('');
@@ -21,14 +20,10 @@ export default function SearchBar({ onSearch }) {
         value={q}
         onChange={(e) => setQ(e.target.value)}
         onKeyDown={onKey}
-        className="h-10 w-64 max-w-full rounded-md border border-gray-300 px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+        className="h-10 w-64 max-w-full rounded-md border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-500/50"
         aria-label="Search name or part number"
       />
-      <Button
-        onClick={submit}
-        variant="secondary" // Use the secondary (white) style to match the toolbar
-        size="md"
-      >
+      <Button onClick={submit} variant="secondary" size="md">
         Search
       </Button>
     </div>

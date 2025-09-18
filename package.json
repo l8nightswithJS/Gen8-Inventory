@@ -1,6 +1,7 @@
 {
   "private": true,
   "workspaces": [
+    "frontend",
     "api-gateway",
     "auth-service",
     "inventory-service",
@@ -10,5 +11,11 @@
   ],
   "engines": {
     "node": "18.x"
+  },
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w frontend\" \"npm run dev -w api-gateway\" \"npm run dev -w auth-service\" \"npm run dev -w inventory-service\" \"npm run dev -w client-service\" \"npm run dev -w barcode-service\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }

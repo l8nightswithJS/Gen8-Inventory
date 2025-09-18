@@ -1,6 +1,5 @@
-// frontend/src/components/ScanModal.jsx
 import { useState } from 'react';
-import api from '../utils/axiosConfig'; // ✅ use shared API instance
+import api from '../utils/axiosConfig';
 import BarcodeScannerComponent from './BarcodeScannerComponent';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
@@ -16,7 +15,6 @@ export default function ScanModal({ client, onClose, onScanSuccess }) {
     setError('');
 
     try {
-      // ✅ goes through gateway → /api/scan
       const { data: result } = await api.post('/api/scan', {
         barcode: barcode,
         client_id: client.id,
@@ -39,29 +37,39 @@ export default function ScanModal({ client, onClose, onScanSuccess }) {
     }
   };
 
-  const Footer = (
-    <Button variant="secondary" onClick={onClose}>
-      Cancel
-    </Button>
-  );
-
   return (
     <BaseModal
       isOpen={true}
       onClose={onClose}
       title={`Scanning for: ${client.name}`}
-      footer={Footer}
+      footer={
+        <Button variant="secondary" onClick={onClose}>
+          Cancel
+        </Button>
+      }
     >
       <div className="text-center">
-        {loading && <p className="text-blue-600">Processing barcode...</p>}
-        {error && <p className="text-red-600 mb-4">{error}</p>}
+        {loading && (
+          <p className="text-blue-600 dark:text-blue-400">
+            Processing barcode...
+          </p>
+        )}
+        {error && (
+          <p className="text-red-600 dark:text-red-400 mb-4">{error}</p>
+        )}
         <div
           className={`rounded-lg overflow-hidden border-4 ${
-            error ? 'border-red-500' : 'border-gray-300'
+            error ? 'border-red-500' : 'border-slate-300 dark:border-slate-700'
           }`}
         >
-          <BarcodeScannerComponent onDetected={handleScanResult} />
+          <BarcodeScannerComponent
+            onScan={handleScanResult}
+            isActive={!loading}
+          />
         </div>
+        <p className="mt-2 text-sm text-gray-500 dark:text-slate-400">
+          Place a barcode inside the frame to scan it.
+        </p>
       </div>
     </BaseModal>
   );

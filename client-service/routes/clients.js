@@ -1,4 +1,3 @@
-// client-service/routes/clients.js
 const express = require('express');
 const multer = require('multer');
 const { body, param } = require('express-validator');
@@ -6,7 +5,10 @@ const controller = require('../controllers/clientsController');
 const { handleValidation } = require('shared-auth');
 
 const router = express.Router();
-const upload = multer({ dest: 'uploads/' });
+
+// ✅ FIX: Configure multer to store files in memory as buffers
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
 
 router.get('/', controller.getAllClients);
 

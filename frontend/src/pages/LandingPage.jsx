@@ -1,4 +1,3 @@
-// frontend/src/pages/LandingPage.jsx
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import SignupModal from '../components/SignupModal';
@@ -10,7 +9,7 @@ export default function LandingPage() {
   const [showSignup, setShowSignup] = useState(false);
 
   return (
-    <div className="bg-slate-50">
+    <div className="bg-slate-50 dark:bg-slate-900">
       <div className="relative bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 animate-gradient-xy overflow-hidden">
         <div className="container mx-auto px-6 sm:px-6 lg:px-8">
           <header className="relative py-6 flex justify-between items-center">
@@ -90,8 +89,8 @@ export default function LandingPage() {
           <svg
             viewBox="0 0 1440 100"
             preserveAspectRatio="none"
-            className="w-full h-auto"
-            fill="rgb(248 250 252)"
+            className="w-full h-auto text-slate-50 dark:text-slate-900"
+            fill="currentColor"
           >
             <path d="M0,50 C480,100 960,0 1440,50 L1440,100 L0,100 Z"></path>
           </svg>
@@ -100,11 +99,10 @@ export default function LandingPage() {
 
       <section className="py-20">
         <div className="container mx-auto text-center px-4">
-          {/* Changed App's to App&apos;s to fix the ESLint error */}
-          <h2 className="text-3xl font-bold text-slate-800">
+          <h2 className="text-3xl font-bold text-slate-800 dark:text-white">
             Your App&apos;s Best Features
           </h2>
-          <p className="text-slate-600 mt-4 max-w-2xl mx-auto">
+          <p className="text-slate-600 dark:text-slate-400 mt-4 max-w-2xl mx-auto">
             This is where you can add more sections to your landing page, like a
             list of key features, testimonials from users, or pricing
             information.

@@ -1,4 +1,3 @@
-// frontend/src/pages/ClientPage.jsx (Corrected)
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/axiosConfig';
@@ -232,105 +231,107 @@ export default function ClientPage() {
         <div>
           <button
             onClick={() => navigate('/dashboard')}
-            className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-800 mb-2 sm:mb-0"
+            className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 mb-2 sm:mb-0"
           >
             <FiChevronLeft /> All Clients
           </button>
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+          <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">
             {client?.name || 'Loading...'}
           </h1>
         </div>
       </div>
 
-      {/* ✅ MODIFIED: This entire action bar is updated for conditional rendering */}
-      <div className="flex flex-col md:flex-row md:items-center gap-4 mb-4">
-        <div className="flex-grow">
-          <SearchBar onSearch={setQuery} />
-        </div>
-        <div className="flex items-center flex-wrap gap-2 justify-start md:justify-end">
-          {/* Show USB scanner for desktop, Camera button for mobile */}
-          {viewMode === 'desktop' ? (
-            <div className="sm:w-64 flex-shrink-0">
-              <UsbScannerInput onScan={handleUsbScan} />
-            </div>
-          ) : (
-            <Button
-              onClick={() => handleModal('scan', true)}
-              variant="secondary"
-              title="Scan"
-            >
-              <FiCamera className="mr-2" />
-              Scan
-            </Button>
-          )}
+      <div className="bg-white dark:bg-slate-900 shadow-md rounded-lg p-4 border border-slate-200 dark:border-slate-800">
+        <div className="flex flex-col md:flex-row md:items-center gap-4 mb-4">
+          <div className="flex-grow">
+            <SearchBar onSearch={setQuery} />
+          </div>
+          <div className="flex items-center flex-wrap gap-2 justify-start md:justify-end">
+            {viewMode === 'desktop' ? (
+              <div className="sm:w-64 flex-shrink-0">
+                <UsbScannerInput onScan={handleUsbScan} />
+              </div>
+            ) : (
+              <Button
+                onClick={() => handleModal('scan', true)}
+                variant="secondary"
+                title="Scan"
+                leftIcon={FiCamera}
+              >
+                Scan
+              </Button>
+            )}
 
-          {isAdmin && (
-            <>
-              <Button
-                onClick={() => handleModal('addItem', true)}
-                variant="secondary"
-                title="Add Item"
-              >
-                <FiPlus className="sm:mr-2" />
-                <span className="hidden sm:inline">Add</span>
-              </Button>
-              <Button
-                onClick={() => handleModal('import', true)}
-                variant="secondary"
-                title="Bulk Import"
-              >
-                <FiLayers className="sm:mr-2" />
-                <span className="hidden sm:inline">Bulk</span>
-              </Button>
-              <Button
-                as="a"
-                href={`${process.env.REACT_APP_API_BASE_URL}/api/items/export?client_id=${clientId}`}
-                variant="secondary"
-                title="Export Data"
-              >
-                <FiDownload className="sm:mr-2" />
-                <span className="hidden sm:inline">Export</span>
-              </Button>
-              <Button
-                onClick={() => handleModal('columnSetup', true)}
-                variant="secondary"
-                title="Edit Columns"
-              >
-                <FiColumns className="sm:mr-2" />
-                <span className="hidden sm:inline">Columns</span>
-              </Button>
-            </>
-          )}
+            {isAdmin && (
+              <>
+                <Button
+                  onClick={() => handleModal('addItem', true)}
+                  variant="secondary"
+                  title="Add Item"
+                >
+                  <FiPlus className="sm:mr-2" />
+                  <span className="hidden sm:inline">Add</span>
+                </Button>
+                <Button
+                  onClick={() => handleModal('import', true)}
+                  variant="secondary"
+                  title="Bulk Import"
+                >
+                  <FiLayers className="sm:mr-2" />
+                  <span className="hidden sm:inline">Bulk</span>
+                </Button>
+                <Button
+                  as="a"
+                  href={`${process.env.REACT_APP_API_BASE_URL}/api/items/export?client_id=${clientId}`}
+                  variant="secondary"
+                  title="Export Data"
+                >
+                  <FiDownload className="sm:mr-2" />
+                  <span className="hidden sm:inline">Export</span>
+                </Button>
+                <Button
+                  onClick={() => handleModal('columnSetup', true)}
+                  variant="secondary"
+                  title="Edit Columns"
+                >
+                  <FiColumns className="sm:mr-2" />
+                  <span className="hidden sm:inline">Columns</span>
+                </Button>
+              </>
+            )}
+          </div>
         </div>
+
+        {error && (
+          <p className="text-red-600 dark:text-red-400 my-3">{error}</p>
+        )}
+
+        <InventoryTable
+          items={pageItems}
+          totalItems={sortedItems.length}
+          columns={columns}
+          onSort={(key) =>
+            setSortConfig((sc) =>
+              sc.key === key && sc.direction === 'ascending'
+                ? { key, direction: 'descending' }
+                : { key, direction: 'ascending' },
+            )
+          }
+          sortConfig={sortConfig}
+          onPage={setPage}
+          page={page}
+          totalPages={Math.max(1, Math.ceil(sortedItems.length / rowsPerPage))}
+          onEdit={(item) => handleModal('editItem', item)}
+          onDelete={(item) => handleModal('deleteItem', item)}
+          role={isAdmin ? 'admin' : 'viewer'}
+          rowsPerPage={rowsPerPage}
+          onRowsPerPageChange={(n) => {
+            setRowsPerPage(n);
+            setPage(1);
+          }}
+          viewMode={viewMode}
+        />
       </div>
-
-      {error && <p className="text-red-600 my-3">{error}</p>}
-
-      <InventoryTable
-        items={pageItems}
-        totalItems={sortedItems.length}
-        columns={columns}
-        onSort={(key) =>
-          setSortConfig((sc) =>
-            sc.key === key && sc.direction === 'ascending'
-              ? { key, direction: 'descending' }
-              : { key, direction: 'ascending' },
-          )
-        }
-        sortConfig={sortConfig}
-        onPage={setPage}
-        page={page}
-        totalPages={Math.max(1, Math.ceil(sortedItems.length / rowsPerPage))}
-        onEdit={(item) => handleModal('editItem', item)}
-        onDelete={(item) => handleModal('deleteItem', item)}
-        role={isAdmin ? 'admin' : 'viewer'}
-        rowsPerPage={rowsPerPage}
-        onRowsPerPageChange={(n) => {
-          setRowsPerPage(n);
-          setPage(1);
-        }}
-        viewMode={viewMode}
-      />
 
       {/* --- Modals --- */}
       {modalState.columnSetup && (

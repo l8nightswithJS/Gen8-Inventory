@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
@@ -26,23 +27,24 @@ const allowlist = CORS_ORIGIN.split(',')
   .map((s) => s.trim())
   .filter(Boolean);
 
-app.use(
-  cors({
-    origin(origin, cb) {
-      if (!origin || allowlist.length === 0 || allowlist.includes(origin)) {
-        return cb(null, true);
-      }
-      return cb(new Error('Not allowed by CORS'));
-    },
-    credentials: true,
-  }),
-);
+// ✅ FIX: Update the CORS options to be more explicit
+const corsOptions = {
+  origin(origin, cb) {
+    if (!origin || allowlist.length === 0 || allowlist.includes(origin)) {
+      return cb(null, true);
+    }
+    return cb(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization'], // Explicitly allow the Authorization header
+};
 
-// We still use express.json() for requests that ARE json
+app.use(cors(corsOptions));
+
 app.use(express.json());
 app.use(morgan('tiny'));
 
-// --- PROXY FUNCTION ---
+// ... The rest of your server file (proxyRequest function, routes, etc.) remains the same ...
 const proxyRequest = (targetUrl) => async (req, res) => {
   try {
     const target = new URL(req.originalUrl, targetUrl);
@@ -52,22 +54,17 @@ const proxyRequest = (targetUrl) => async (req, res) => {
     const options = {
       method: req.method,
       headers,
-      // ✅ This is required by Node's fetch to properly handle streamed request bodies
       duplex: 'half',
     };
 
     const isJsonRequest =
       req.headers['content-type']?.includes('application/json');
 
-    // ✅ FINAL FIX: Handle JSON and other body types (like file uploads) differently
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       if (isJsonRequest) {
-        // For JSON, we stringify the body that express.json() parsed for us
         options.body = JSON.stringify(req.body);
-        // Since we created a new body, we must remove the original content-length header
         delete headers['content-length'];
       } else {
-        // For all other types (like multipart/form-data), we stream the raw request
         options.body = req;
       }
     }
@@ -89,8 +86,6 @@ const proxyRequest = (targetUrl) => async (req, res) => {
     res.status(502).json({ error: 'Bad Gateway', details: error.message });
   }
 };
-
-// --- Routes ---
 app.use('/api/auth', proxyRequest(AUTH_URL));
 app.use('/api/users', proxyRequest(AUTH_URL));
 app.use('/api/items', proxyRequest(INVENTORY_URL));
@@ -99,8 +94,6 @@ app.use('/api/locations', proxyRequest(INVENTORY_URL));
 app.use('/api/clients', proxyRequest(CLIENT_URL));
 app.use('/api/barcodes', proxyRequest(BARCODE_URL));
 app.use('/api/scan', proxyRequest(BARCODE_URL));
-
-// --- Health check & 404 ---
 app.get('/healthz', (_req, res) => res.json({ ok: true }));
 app.use((_req, res) => res.status(404).json({ error: 'Not Found' }));
 

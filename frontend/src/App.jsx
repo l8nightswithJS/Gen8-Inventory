@@ -1,4 +1,3 @@
-// frontend/src/App.jsx
 import {
   BrowserRouter as Router,
   Routes,
@@ -6,6 +5,7 @@ import {
   Navigate,
 } from 'react-router-dom';
 
+import { useTheme } from './hooks/useTheme'; // Import the theme hook
 import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -20,6 +20,8 @@ import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 
 export default function App() {
+  useTheme(); // Call the hook to activate theme management
+
   return (
     <Router>
       <Routes>
@@ -43,7 +45,7 @@ export default function App() {
 
 function PrivateLayout() {
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50">
+    <div className="flex flex-col min-h-screen bg-slate-50 dark:bg-slate-900">
       <Navbar />
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
         <Routes>

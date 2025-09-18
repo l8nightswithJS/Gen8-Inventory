@@ -1,6 +1,5 @@
-// frontend/src/components/BarcodeAssignModal.jsx
 import { useEffect, useId, useState } from 'react';
-import api from '../utils/axiosConfig'; // ✅ unified gateway instance
+import api from '../utils/axiosConfig';
 import BarcodeScannerComponent from './BarcodeScannerComponent';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
@@ -24,7 +23,6 @@ export default function BarcodeAssignModal({
     let isMounted = true;
     (async () => {
       try {
-        // ✅ fetch via gateway: /api/barcodes/items/:itemId
         const { data } = await api.get(`/api/barcodes/items/${item.id}`);
         if (isMounted) setList(data || []);
       } catch (e) {
@@ -37,143 +35,122 @@ export default function BarcodeAssignModal({
     };
   }, [isOpen, item?.id]);
 
-  if (!isOpen || !item) return null;
-
-  const doAssign = async () => {
-    if (!scanned.code) return;
+  const doSave = async () => {
     setBusy(true);
     setMsg('');
     try {
-      // ✅ assign via gateway: POST /api/barcodes
-      await api.post('/api/barcodes', {
-        client_id: item.client_id,
+      const { data } = await api.post('/api/barcodes', {
         item_id: item.id,
         barcode: scanned.code,
-        symbology: scanned.symbology || null,
+        symbology: scanned.symbology,
       });
-
-      setMsg('Barcode assigned ✓');
+      setList((prev) => [data, ...prev]);
       setScanned({ code: '', symbology: '' });
-
-      // refresh list
-      const { data } = await api.get(`/api/barcodes/items/${item.id}`);
-      setList(data || []);
-      onAssigned?.();
+      onAssigned?.(data);
     } catch (e) {
-      setMsg(e?.response?.data?.message || e.message || 'Failed to assign');
+      setMsg(e?.response?.data?.message || 'Failed to assign barcode.');
     } finally {
       setBusy(false);
     }
   };
 
-  const doDelete = async (id) => {
-    if (
-      !window.confirm(
-        'Are you sure you want to remove this barcode from the item?',
-      )
-    )
-      return;
+  const doDelete = async (barcodeId) => {
+    if (!window.confirm('Remove this barcode?')) return;
     try {
-      // ✅ delete via gateway: /api/barcodes/:id
-      await api.delete(`/api/barcodes/${id}`);
-      setList((prev) => prev.filter((b) => b.id !== id));
-      setMsg('Barcode removed ✓');
+      await api.delete(`/api/barcodes/${barcodeId}`);
+      setList((prev) => prev.filter((b) => b.id !== barcodeId));
     } catch (e) {
-      setMsg('Failed to remove barcode.');
+      setMsg(e?.response?.data?.message || 'Failed to remove barcode.');
     }
   };
 
-  const Footer = (
-    <Button variant="secondary" onClick={onClose}>
-      Done
-    </Button>
-  );
+  const inputStyles =
+    'w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm';
 
   return (
     <BaseModal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Assign Barcodes to ${item.attributes?.name || `Item ${item.id}`}`}
-      footer={Footer}
+      title={`Assign Barcode: ${item?.name || 'Item'}`}
+      size="max-w-4xl"
     >
-      <div className="grid md:grid-cols-2 gap-4">
-        {/* Scanner and Assignment Form */}
-        <div className="border rounded-lg overflow-hidden">
-          <BarcodeScannerComponent
-            onDetected={(code, sym) =>
-              setScanned({ code, symbology: sym || '' })
-            }
-          />
-          <div className="p-3 border-t bg-gray-50 space-y-2">
-            <div>
-              <label
-                htmlFor={codeId}
-                className="block text-xs text-gray-600 mb-1"
-              >
-                Detected or Manual Entry
-              </label>
-              <input
-                id={codeId}
-                className="w-full border rounded px-2 py-1.5 border-gray-300"
-                placeholder="Scan or paste code…"
-                value={scanned.code}
-                onChange={(e) =>
-                  setScanned((s) => ({ ...s, code: e.target.value }))
-                }
-              />
-            </div>
-            <div className="flex items-end gap-2">
-              <div className="flex-1">
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* Left: Scanner & Form */}
+        <div className="space-y-4">
+          <div className="bg-slate-800 rounded-lg overflow-hidden aspect-video">
+            <BarcodeScannerComponent
+              onScan={(code, symbology) => setScanned({ code, symbology })}
+              isActive={isOpen}
+            />
+          </div>
+          <div className="space-y-3 p-4 border dark:border-slate-700 rounded-lg">
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div>
+                <label
+                  htmlFor={codeId}
+                  className="text-sm font-medium text-gray-700 dark:text-slate-300"
+                >
+                  Scanned Code
+                </label>
+                <input
+                  id={codeId}
+                  value={scanned.code}
+                  readOnly
+                  className={`${inputStyles} mt-1`}
+                />
+              </div>
+              <div>
                 <label
                   htmlFor={symId}
-                  className="block text-xs text-gray-600 mb-1"
+                  className="text-sm font-medium text-gray-700 dark:text-slate-300"
                 >
-                  Symbology (optional)
+                  Symbology
                 </label>
                 <input
                   id={symId}
-                  className="w-full border rounded px-2 py-1.5 border-gray-300"
-                  placeholder="e.g., Code128"
                   value={scanned.symbology}
-                  onChange={(e) =>
-                    setScanned((s) => ({ ...s, symbology: e.target.value }))
-                  }
+                  readOnly
+                  className={`${inputStyles} mt-1`}
                 />
               </div>
-              <Button
-                disabled={!scanned.code || busy}
-                onClick={doAssign}
-                variant="primary"
-                size="md"
-              >
+            </div>
+            <div className="text-right">
+              <Button onClick={doSave} disabled={busy || !scanned.code}>
                 {busy ? 'Saving…' : 'Assign'}
               </Button>
             </div>
             {msg && (
-              <p className="text-sm pt-1" aria-live="polite">
+              <p
+                className="text-sm pt-1 text-red-600 dark:text-red-400"
+                aria-live="polite"
+              >
                 {msg}
               </p>
             )}
           </div>
         </div>
 
-        {/* Existing Barcodes List */}
-        <div className="border rounded-lg p-3 space-y-2">
-          <h3 className="font-semibold text-gray-800">Existing Barcodes</h3>
+        {/* Right: Existing Barcodes List */}
+        <div className="border dark:border-slate-700 rounded-lg p-3 space-y-2">
+          <h3 className="font-semibold text-gray-800 dark:text-white">
+            Existing Barcodes
+          </h3>
           {list.length === 0 ? (
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500 dark:text-slate-400">
               No barcodes assigned to this item yet.
             </p>
           ) : (
-            <ul className="space-y-2">
+            <ul className="space-y-2 max-h-[60vh] overflow-y-auto">
               {list.map((b) => (
                 <li
                   key={b.id}
-                  className="flex items-center justify-between border rounded px-2 py-1 bg-white"
+                  className="flex items-center justify-between border border-slate-200 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-800"
                 >
                   <div>
-                    <div className="font-mono font-medium">{b.barcode}</div>
-                    <div className="text-xs text-gray-500">
+                    <div className="font-mono font-medium text-slate-800 dark:text-slate-200">
+                      {b.barcode}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-slate-400">
                       {b.symbology || 'N/A'}
                     </div>
                   </div>

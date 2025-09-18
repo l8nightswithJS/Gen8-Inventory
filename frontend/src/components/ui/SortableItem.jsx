@@ -1,4 +1,3 @@
-// frontend/src/components/ui/SortableItem.jsx (New File)
 import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -21,7 +20,10 @@ export function SortableItem({ id, children }) {
       {...listeners}
       className="flex items-center"
     >
-      <span className="cursor-grab p-1 text-gray-400" title="Drag to reorder">
+      <span
+        className="cursor-grab p-1 text-gray-400 dark:text-slate-500 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-full"
+        title="Drag to reorder"
+      >
         <FiGrid />
       </span>
       {children}

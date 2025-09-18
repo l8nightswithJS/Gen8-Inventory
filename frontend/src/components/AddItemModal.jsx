@@ -1,8 +1,20 @@
-// frontend/src/components/AddItemModal.jsx (Corrected)
 import { useState } from 'react';
 import api from '../utils/axiosConfig';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
+
+// Helper component for form fields
+const FormField = ({ label, id, children }) => (
+  <div>
+    <label
+      htmlFor={id}
+      className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+    >
+      {label}
+    </label>
+    {children}
+  </div>
+);
 
 export default function AddItemModal({
   clientId,
@@ -42,104 +54,109 @@ export default function AddItemModal({
       const payload = { ...form, client_id: parseInt(clientId, 10) };
       await api.post('/api/items', payload);
       onCreated?.();
-      onClose();
+      onClose?.();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to create item.');
+      setError(err?.response?.data?.message || 'Failed to add item.');
     } finally {
       setSubmitting(false);
     }
   };
 
   const customSchema = schema.filter(isCustomField);
+  const inputStyles =
+    'w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500';
 
   return (
-    <BaseModal isOpen={true} onClose={onClose} title="Add New Item">
+    <BaseModal
+      isOpen={true}
+      onClose={onClose}
+      title="Add New Inventory Item"
+      size="max-w-2xl"
+      footer={
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="secondary" onClick={onClose} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="add-item-form"
+            variant="primary"
+            disabled={submitting}
+          >
+            {submitting ? 'Saving…' : 'Add Item'}
+          </Button>
+        </div>
+      }
+    >
+      {error && (
+        <p className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/20 dark:border-red-500/30 dark:text-red-400 mb-4">
+          {error}
+        </p>
+      )}
       <form id="add-item-form" onSubmit={handleSubmit} className="space-y-4">
-        {error && <p className="text-red-600 text-sm">{error}</p>}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Core Fields */}
-          <div>
-            <label
-              htmlFor="add-part_number"
-              className="mb-1 text-sm font-medium"
-            >
-              Part Number
-            </label>
+          <FormField label="Part Number" id="add-part_number">
             <input
               id="add-part_number"
               name="part_number"
               value={form.part_number ?? ''}
               onChange={handleChange}
-              className="rounded border px-3 py-2 w-full"
-              required
+              className={inputStyles}
             />
-          </div>
-          <div>
-            <label
-              htmlFor="add-lot_number"
-              className="mb-1 text-sm font-medium"
-            >
-              Lot Number
-            </label>
+          </FormField>
+          <FormField label="Lot Number" id="add-lot_number">
             <input
               id="add-lot_number"
               name="lot_number"
               value={form.lot_number ?? ''}
               onChange={handleChange}
-              className="rounded border px-3 py-2 w-full"
+              className={inputStyles}
             />
+          </FormField>
+          <div className="sm:col-span-2">
+            <FormField label="Name" id="add-name">
+              <input
+                id="add-name"
+                name="name"
+                value={form.name ?? ''}
+                onChange={handleChange}
+                className={inputStyles}
+              />
+            </FormField>
           </div>
           <div className="sm:col-span-2">
-            <label htmlFor="add-name" className="mb-1 text-sm font-medium">
-              Name
-            </label>
-            <input
-              id="add-name"
-              name="name"
-              value={form.name ?? ''}
-              onChange={handleChange}
-              className="rounded border px-3 py-2 w-full"
-            />
+            <FormField label="Description" id="add-description">
+              <textarea
+                id="add-description"
+                name="description"
+                value={form.description ?? ''}
+                onChange={handleChange}
+                className={inputStyles}
+                rows="2"
+              />
+            </FormField>
           </div>
-          <div className="sm:col-span-2">
-            <label
-              htmlFor="add-description"
-              className="mb-1 text-sm font-medium"
-            >
-              Description
-            </label>
-            <textarea
-              id="add-description"
-              name="description"
-              value={form.description ?? ''}
-              onChange={handleChange}
-              className="rounded border px-3 py-2 w-full"
-              rows="2"
-            />
-          </div>
-
-          {/* Custom Fields */}
           {customSchema.map((key) => (
-            <div key={key}>
-              <label
-                htmlFor={`add-${key}`}
-                className="mb-1 text-sm font-medium"
-              >
-                {key.replace(/_/g, ' ')}
-              </label>
+            <FormField
+              label={key.replace(/_/g, ' ')}
+              id={`add-${key}`}
+              key={key}
+            >
               <input
                 id={`add-${key}`}
                 name={key}
                 value={form[key] ?? ''}
                 onChange={handleChange}
-                className="rounded border px-3 py-2 w-full"
+                className={inputStyles}
               />
-            </div>
+            </FormField>
           ))}
         </div>
 
-        <div className="pt-4 mt-4 border-t space-y-4">
-          <h4 className="text-base font-semibold text-gray-800">Alerts</h4>
+        <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-4">
+          <h4 className="text-base font-semibold text-gray-800 dark:text-white">
+            Alerts
+          </h4>
           <div className="flex items-center space-x-2">
             <input
               id="add-alert_enabled"
@@ -147,24 +164,18 @@ export default function AddItemModal({
               name="alert_enabled"
               checked={!!form.alert_enabled}
               onChange={handleChange}
-              className="h-4 w-4 rounded"
+              className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-blue-600 focus:ring-blue-500"
             />
             <label
               htmlFor="add-alert_enabled"
-              className="text-sm text-gray-700"
+              className="text-sm text-gray-700 dark:text-slate-300"
             >
               Enable Low-Stock Alert
             </label>
           </div>
           {form.alert_enabled && (
             <div className="pl-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label
-                  htmlFor="add-reorder_level"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Reorder Level
-                </label>
+              <FormField label="Reorder Level" id="add-reorder_level">
                 <input
                   id="add-reorder_level"
                   name="reorder_level"
@@ -172,16 +183,13 @@ export default function AddItemModal({
                   min="0"
                   value={form.reorder_level ?? ''}
                   onChange={handleChange}
-                  className="w-full border px-3 py-2 rounded"
+                  className={inputStyles}
                 />
-              </div>
-              <div>
-                <label
-                  htmlFor="add-low_stock_threshold"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Low-Stock Threshold
-                </label>
+              </FormField>
+              <FormField
+                label="Low-Stock Threshold"
+                id="add-low_stock_threshold"
+              >
                 <input
                   id="add-low_stock_threshold"
                   name="low_stock_threshold"
@@ -189,26 +197,13 @@ export default function AddItemModal({
                   min="0"
                   value={form.low_stock_threshold ?? ''}
                   onChange={handleChange}
-                  className="w-full border px-3 py-2 rounded"
+                  className={inputStyles}
                 />
-              </div>
+              </FormField>
             </div>
           )}
         </div>
       </form>
-      <div className="mt-5 flex items-center justify-end gap-2">
-        <Button variant="secondary" onClick={onClose} disabled={submitting}>
-          Cancel
-        </Button>
-        <Button
-          type="submit"
-          form="add-item-form"
-          variant="primary"
-          disabled={submitting}
-        >
-          {submitting ? 'Saving…' : 'Add Item'}
-        </Button>
-      </div>
     </BaseModal>
   );
 }

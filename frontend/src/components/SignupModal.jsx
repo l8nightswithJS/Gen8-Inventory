@@ -1,7 +1,7 @@
-// frontend/src/components/SignupModal.jsx
 import { useState } from 'react';
 import api from '../utils/axiosConfig';
 import Button from './ui/Button';
+import BaseModal from './ui/BaseModal';
 
 export default function SignupModal({ onClose }) {
   const [form, setForm] = useState({
@@ -39,18 +39,40 @@ export default function SignupModal({ onClose }) {
   const getMsgClasses = () => {
     if (!msg) return '';
     return msg.startsWith('ERROR')
-      ? 'bg-red-50 text-red-600'
-      : 'bg-green-50 text-green-700';
+      ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'
+      : 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400';
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <form
-        onSubmit={submit}
-        className="w-full max-w-md bg-white p-6 sm:p-8 rounded-lg shadow-xl space-y-4"
-      >
-        <h2 className="text-xl font-semibold text-center">Request Access</h2>
+  const inputStyles =
+    'w-full border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
 
+  return (
+    <BaseModal
+      isOpen={true}
+      onClose={onClose}
+      title="Request Access"
+      footer={
+        <div className="flex justify-end gap-3">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={onClose}
+            disabled={loading}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="signup-form"
+            variant="primary"
+            disabled={loading}
+          >
+            {loading ? 'Submitting...' : 'Submit Request'}
+          </Button>
+        </div>
+      }
+    >
+      <form id="signup-form" onSubmit={submit} className="space-y-4">
         {msg && (
           <div
             className={`text-center text-sm font-medium p-3 rounded-md ${getMsgClasses()}`}
@@ -66,7 +88,7 @@ export default function SignupModal({ onClose }) {
           required
           value={form.email}
           onChange={handleChange}
-          className="w-full border border-gray-300 px-3 py-2 rounded text-sm"
+          className={inputStyles}
           disabled={loading}
         />
         <input
@@ -76,7 +98,7 @@ export default function SignupModal({ onClose }) {
           required
           value={form.password}
           onChange={handleChange}
-          className="w-full border border-gray-300 px-3 py-2 rounded text-sm"
+          className={inputStyles}
           autoComplete="new-password"
           disabled={loading}
         />
@@ -84,27 +106,13 @@ export default function SignupModal({ onClose }) {
           name="role"
           value={form.role}
           onChange={handleChange}
-          className="w-full border border-gray-300 px-3 py-2 rounded text-sm bg-white"
+          className={inputStyles}
           disabled={loading}
         >
           <option value="staff">Staff</option>
           <option value="admin">Admin</option>
         </select>
-
-        <div className="flex justify-end gap-3 pt-2">
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={onClose}
-            disabled={loading}
-          >
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" disabled={loading}>
-            {loading ? 'Submitting...' : 'Submit Request'}
-          </Button>
-        </div>
       </form>
-    </div>
+    </BaseModal>
   );
 }

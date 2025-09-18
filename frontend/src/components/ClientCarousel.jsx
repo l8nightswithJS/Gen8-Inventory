@@ -1,4 +1,3 @@
-// frontend/src/components/ClientCarousel.jsx
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import EditClientModal from './EditClientModal';
@@ -18,7 +17,6 @@ export default function ClientCarousel({
     if (!path) return '';
     if (path.startsWith('http')) return path;
 
-    // Always point to the API gateway
     const base = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080';
     return `${base}${path}`;
   };
@@ -35,15 +33,14 @@ export default function ClientCarousel({
 
   return (
     <div>
-      {/* Changed xl:grid-cols-5 to xl:grid-cols-4 to make cards bigger on large screens */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
         {clients.map((c) => (
           <Link
             key={c.id}
             to={`/clients/${c.id}`}
-            className="aspect-[4/3] bg-white border rounded-lg shadow-sm p-4 grid grid-rows-[1fr_auto] group transition hover:shadow-xl hover:border-blue-500 hover:-translate-y-1"
+            className="aspect-[4/3] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-4 grid grid-rows-[1fr_auto] group transition hover:shadow-xl dark:hover:shadow-lg dark:hover:shadow-blue-500/10 hover:border-blue-500 dark:hover:border-blue-500 hover:-translate-y-1"
           >
-            <div className="flex items-center justify-center bg-gray-50 rounded-md overflow-hidden p-2">
+            <div className="flex items-center justify-center bg-gray-50 dark:bg-slate-900/50 rounded-md overflow-hidden p-2">
               {c.logo_url ? (
                 <img
                   src={resolveLogo(c.logo_url)}
@@ -51,12 +48,14 @@ export default function ClientCarousel({
                   className="max-h-full max-w-full object-contain"
                 />
               ) : (
-                <span className="text-gray-400 text-sm">No Logo</span>
+                <span className="text-gray-400 dark:text-slate-500 text-sm">
+                  No Logo
+                </span>
               )}
             </div>
 
             <div className="flex items-start justify-between pt-3">
-              <h3 className="font-bold text-lg text-slate-800 line-clamp-2">
+              <h3 className="font-bold text-lg text-slate-800 dark:text-white line-clamp-2">
                 {c.name}
               </h3>
               <div className="flex items-center gap-1 transition-opacity flex-shrink-0 opacity-100 md:opacity-0 group-hover:opacity-100">

@@ -1,4 +1,3 @@
-// frontend/src/components/UserFormModal.jsx
 import { useState, useEffect } from 'react';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
@@ -21,7 +20,6 @@ export default function UserFormModal({
   useEffect(() => {
     if (isOpen) {
       setLoading(true);
-      // Reset form state when modal opens
       setPassword('');
       setFeedback({ type: '', message: '' });
 
@@ -33,31 +31,26 @@ export default function UserFormModal({
         setRole('staff');
       }
 
-      // Fetch all clients for the dropdown, and the user's currently assigned clients
       const fetchInitialData = async () => {
         try {
           const clientsPromise = api.get('/api/clients');
-          const userClientsPromise = userToEdit
+          const assignmentsPromise = userToEdit
             ? api.get(`/api/users/${userToEdit.id}/clients`)
             : Promise.resolve({ data: [] });
 
-          const [clientsResponse, userClientsResponse] = await Promise.all([
+          const [clientsRes, assignmentsRes] = await Promise.all([
             clientsPromise,
-            userClientsPromise,
+            assignmentsPromise,
           ]);
 
-          setAllClients(clientsResponse.data || []);
-
-          // Create a Set of assigned client IDs for efficient lookup
-          const assignedIds = new Set(
-            userClientsResponse.data.map((c) => c.client_id),
+          setAllClients(clientsRes.data || []);
+          setAssignedClientIDs(
+            new Set((assignmentsRes.data || []).map((c) => c.client_id)),
           );
-          setAssignedClientIDs(assignedIds);
-        } catch (err) {
-          console.error('Failed to load modal data', err);
+        } catch (error) {
           setFeedback({
             type: 'error',
-            message: 'Could not load client data.',
+            message: 'Failed to load initial data.',
           });
         } finally {
           setLoading(false);
@@ -82,157 +75,129 @@ export default function UserFormModal({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
     setFeedback({ type: '', message: '' });
 
-    if (!email.trim() || (!userToEdit && !password.trim())) {
-      setFeedback({
-        type: 'error',
-        message: 'Email and password are required.',
-      });
-      return;
+    const userData = {
+      email,
+      role,
+      assigned_clients: Array.from(assignedClientIDs),
+    };
+    if (password) {
+      userData.password = password;
     }
 
-    setLoading(true);
     try {
       if (userToEdit) {
-        // When editing, save both role and client assignments in parallel.
-        const roleUpdatePromise = api.put(`/api/users/${userToEdit.id}`, {
-          role,
-        });
-
-        const clientsUpdatePromise = api.put(
-          `/api/users/${userToEdit.id}/clients`,
-          {
-            // Convert the Set of selected client IDs into an array for the API
-            client_ids: Array.from(assignedClientIDs),
-          },
-        );
-
-        await Promise.all([roleUpdatePromise, clientsUpdatePromise]);
-
-        setFeedback({ type: 'success', message: 'User updated successfully!' });
+        await api.put(`/api/users/${userToEdit.id}`, userData);
       } else {
-        // Creating a new user remains the same.
-        await api.post('/api/auth/register', {
-          email: email.trim(),
-          role,
-          password: password.trim(),
-        });
-        setFeedback({ type: 'success', message: 'User created successfully!' });
+        await api.post('/api/users', userData);
       }
-
-      onSuccess?.();
-      setTimeout(onClose, 2000); // auto-close after success
+      onSuccess();
     } catch (err) {
       setFeedback({
         type: 'error',
-        message:
-          err.response?.data?.message ||
-          err.message ||
-          'Failed to submit user.',
+        message: err.response?.data?.message || 'An error occurred.',
       });
     } finally {
       setLoading(false);
     }
   };
 
-  const FeedbackBanner = () =>
-    feedback.message && (
-      <div
-        className={`p-2 rounded text-sm mb-2 ${
-          feedback.type === 'error'
-            ? 'bg-red-50 text-red-600'
-            : 'bg-green-50 text-green-700'
-        }`}
-      >
-        {feedback.message}
-      </div>
-    );
-
-  const Footer = (
-    <>
-      <Button
-        type="button"
-        variant="secondary"
-        onClick={onClose}
-        disabled={loading}
-      >
-        Cancel
-      </Button>
-      <Button
-        type="submit"
-        form="user-form"
-        variant="primary"
-        disabled={loading}
-      >
-        {loading ? 'Saving...' : userToEdit ? 'Update' : 'Add User'}
-      </Button>
-    </>
-  );
+  const isCreating = !userToEdit;
+  const inputStyles =
+    'w-full border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+  const title = isCreating
+    ? 'Create New User'
+    : `Edit User: ${userToEdit?.email}`;
 
   return (
     <BaseModal
       isOpen={isOpen}
       onClose={onClose}
-      title={userToEdit ? 'Edit User' : 'Add New User'}
-      footer={Footer}
+      title={title}
+      size="max-w-lg"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={loading}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="user-form"
+            variant="primary"
+            disabled={loading}
+          >
+            {loading
+              ? 'Saving...'
+              : isCreating
+              ? 'Create User'
+              : 'Save Changes'}
+          </Button>
+        </>
+      }
     >
       <form id="user-form" onSubmit={handleSubmit} className="space-y-4">
-        <FeedbackBanner />
-
+        {feedback.message && (
+          <p
+            className={`rounded p-3 text-sm ${
+              feedback.type === 'error'
+                ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'
+                : 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+            }`}
+          >
+            {feedback.message}
+          </p>
+        )}
         <div>
           <label
-            htmlFor="email-input"
-            className="block text-sm font-medium text-gray-700 mb-1"
+            htmlFor="email"
+            className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
           >
             Email
           </label>
           <input
-            id="email-input"
+            id="email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full border border-gray-300 px-3 py-2 rounded"
+            className={inputStyles}
             required
-            disabled={loading || userToEdit}
+            disabled={loading}
           />
         </div>
-
-        {!userToEdit && (
-          <div>
-            <label
-              htmlFor="password-input"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Password
-            </label>
-            <input
-              id="password-input"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
-              className="w-full border border-gray-300 px-3 py-2 rounded"
-              required
-              autoComplete="new-password"
-              disabled={loading}
-            />
-            <p className="text-xs text-gray-500 mt-1">Min 6 characters.</p>
-          </div>
-        )}
-
         <div>
           <label
-            htmlFor="role-select"
-            className="block text-sm font-medium text-gray-700 mb-1"
+            htmlFor="password"
+            className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+          >
+            Password
+          </label>
+          <input
+            id="password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className={inputStyles}
+            placeholder={
+              isCreating ? 'Required' : 'Optional: Leave blank to keep current'
+            }
+            required={isCreating}
+            disabled={loading}
+          />
+        </div>
+        <div>
+          <label
+            htmlFor="role"
+            className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
           >
             Role
           </label>
           <select
-            id="role-select"
+            id="role"
             value={role}
             onChange={(e) => setRole(e.target.value)}
-            className="w-full border border-gray-300 px-3 py-2 rounded bg-white"
+            className={inputStyles}
             disabled={loading}
           >
             <option value="admin">Admin</option>
@@ -240,17 +205,17 @@ export default function UserFormModal({
           </select>
         </div>
         <fieldset>
-          <legend className="block text-sm font-medium text-gray-700 mb-1">
+          <legend className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
             Assign to Clients
           </legend>
-          <div className="max-h-40 overflow-y-auto border rounded-md p-2 space-y-1">
+          <div className="max-h-40 overflow-y-auto border border-slate-300 dark:border-slate-700 rounded-md p-2 space-y-1">
             {allClients.length > 0 ? (
               allClients.map((client) => (
                 <div key={client.id} className="flex items-center">
                   <input
                     id={`client-${client.id}`}
                     type="checkbox"
-                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    className="h-4 w-4 rounded border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-blue-600 focus:ring-blue-500"
                     checked={assignedClientIDs.has(client.id)}
                     onChange={(e) =>
                       handleClientCheckboxChange(client.id, e.target.checked)
@@ -259,14 +224,16 @@ export default function UserFormModal({
                   />
                   <label
                     htmlFor={`client-${client.id}`}
-                    className="ml-2 text-sm text-gray-700"
+                    className="ml-2 text-sm text-gray-700 dark:text-slate-300"
                   >
                     {client.name}
                   </label>
                 </div>
               ))
             ) : (
-              <p className="text-sm text-gray-500">No clients to display.</p>
+              <p className="text-sm text-gray-500 dark:text-slate-400">
+                No clients to display.
+              </p>
             )}
           </div>
         </fieldset>

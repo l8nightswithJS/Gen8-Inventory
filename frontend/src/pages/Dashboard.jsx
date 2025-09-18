@@ -1,9 +1,9 @@
 // frontend/src/pages/Dashboard.jsx
 import { useState, useEffect, useCallback } from 'react';
-import api from '../utils/axiosConfig'; // ✅ correct path from /pages
-import ClientCarousel from '../components/ClientCarousel'; // ✅ correct path from /pages
-import AddClientModal from '../components/AddClientModal'; // ✅ correct path from /pages
-import Button from '../components/ui/Button'; // ✅ correct path from /pages
+import api from '../utils/axiosConfig';
+import ClientCarousel from '../components/ClientCarousel';
+import AddClientModal from '../components/AddClientModal';
+import Button from '../components/ui/Button';
 
 export default function Dashboard() {
   const [clients, setClients] = useState([]);
@@ -14,18 +14,17 @@ export default function Dashboard() {
     if (Array.isArray(payload)) return payload;
     if (Array.isArray(payload?.data)) return payload.data;
     if (Array.isArray(payload?.clients)) return payload.clients;
-    return []; // safest fallback
+    return [];
   };
 
   const fetchClients = useCallback(async () => {
     try {
-      // call through the API Gateway; axiosConfig already sets the baseURL + token
       const res = await api.get('/api/clients', { meta: { silent: true } });
       setClients(normalizeToArray(res.data));
       setError('');
     } catch {
       setError('Could not load clients.');
-      setClients([]); // ensure array to keep UI stable
+      setClients([]);
     }
   }, []);
 
@@ -46,7 +45,7 @@ export default function Dashboard() {
   return (
     <div className="max-w-7xl mx-auto">
       <div className="flex justify-between items-center mb-6 px-4 sm:px-0">
-        <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+        <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
           Clients
         </h1>
         <Button variant="secondary" onClick={() => setShowAddModal(true)}>

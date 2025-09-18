@@ -1,4 +1,3 @@
-// In frontend/src/components/QuantityAdjustModal.jsx (a new file)
 import { useState } from 'react';
 import api from '../utils/axiosConfig';
 import BaseModal from './ui/BaseModal';
@@ -21,13 +20,12 @@ export default function QuantityAdjustModal({
     setLoading(true);
     setError('');
     try {
-      // This calls the atomic update endpoint we built
       await api.post('/api/inventory/adjust', {
         item_id: item.id,
         location_id: location.id,
         change_quantity: Number(quantity),
       });
-      onSuccess(); // This will trigger a data refresh on the main page
+      onSuccess();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to adjust inventory.');
     } finally {
@@ -61,14 +59,19 @@ export default function QuantityAdjustModal({
       footer={Footer}
     >
       <form id="adjust-qty-form" onSubmit={handleSubmit} className="space-y-4">
-        {error && <p className="text-red-600 text-sm">{error}</p>}
-        <p className="text-sm text-gray-600">
-          At Location: <span className="font-semibold">{location.code}</span>
+        {error && (
+          <p className="text-red-600 dark:text-red-400 text-sm">{error}</p>
+        )}
+        <p className="text-sm text-gray-600 dark:text-slate-400">
+          At Location:{' '}
+          <span className="font-semibold text-gray-800 dark:text-white">
+            {location.code}
+          </span>
         </p>
         <div>
           <label
             htmlFor="quantity"
-            className="block text-sm font-medium text-gray-700 mb-1"
+            className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
           >
             Quantity to Add / Remove
           </label>
@@ -77,12 +80,11 @@ export default function QuantityAdjustModal({
             type="number"
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
-            className="w-full border border-gray-300 px-3 py-2 rounded"
+            className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             required
           />
-          <p className="text-xs text-gray-500 mt-1">
-            Use a positive number (e.g., 5) to add stock, or a negative number
-            (e.g., -1) to remove stock.
+          <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+            Use a negative number to remove stock (e.g., -5).
           </p>
         </div>
       </form>

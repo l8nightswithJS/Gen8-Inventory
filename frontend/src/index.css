@@ -16,6 +16,14 @@ html, body, #root {
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 
+/* Add these styles for smooth theme transitions */
+@layer base {
+  body {
+    @apply bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200;
+    @apply transition-colors duration-300 ease-in-out;
+  }
+}
+
 /* If you use a vertical client carousel in portrait */
 @media (orientation: portrait) {
   .client-carousel {

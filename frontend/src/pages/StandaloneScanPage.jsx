@@ -1,7 +1,8 @@
-// frontend/src/pages/StandaloneScanPage.jsx
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Scanner } from '@yudiel/react-qr-scanner';
+import Button from '../components/ui/Button'; // Import our themed Button
+import { FiArrowLeft } from 'react-icons/fi'; // Import a suitable icon
 
 export default function StandaloneScanPage() {
   const navigate = useNavigate();
@@ -10,45 +11,43 @@ export default function StandaloneScanPage() {
 
   const handleDecode = useCallback(
     (val) => {
-      // val is usually a string; normalize just in case
       const text =
         typeof val === 'string'
           ? val
           : String(val?.text ?? val?.rawValue ?? '');
       if (text) setLastDecoded(text);
-      // Optional: auto-navigate (tell me the route if you want this wired)
-      // navigate(`/search?q=${encodeURIComponent(text)}`);
     },
     [setLastDecoded],
   );
 
   const handleError = useCallback((err) => {
-    // Camera init can throw transiently; keep it calm
     const msg = err?.message || String(err) || 'Camera error';
     setError(msg);
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex flex-col">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-white/90 border-b">
+      <div className="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 backdrop-blur-sm">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
-          <button
+          <Button
             onClick={() => navigate(-1)}
-            className="inline-flex items-center gap-2 rounded-2xl border px-3 py-1.5 text-sm font-medium hover:bg-gray-50"
+            variant="secondary"
+            size="sm"
+            leftIcon={FiArrowLeft}
           >
-            <span aria-hidden>←</span>
             Back
-          </button>
-          <h1 className="text-lg font-semibold">Standalone Scanner</h1>
+          </Button>
+          <h1 className="text-lg font-semibold text-slate-800 dark:text-white">
+            Standalone Scanner
+          </h1>
         </div>
       </div>
 
       {/* Body */}
       <div className="max-w-6xl mx-auto w-full px-4 py-6 grid gap-6">
-        <div className="rounded-2xl border bg-white shadow-sm p-4">
-          <div className="aspect-[3/4] w-full max-w-lg mx-auto overflow-hidden rounded-xl border">
-            {/* NOTE: this package exports { Scanner } */}
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-4">
+          <div className="aspect-[3/4] w-full max-w-lg mx-auto overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
             <Scanner
               onDecode={handleDecode}
               onError={handleError}
@@ -60,17 +59,21 @@ export default function StandaloneScanPage() {
           {/* Status */}
           <div className="mt-4 grid gap-2">
             {lastDecoded ? (
-              <div className="rounded-xl bg-green-50 border border-green-200 px-3 py-2 text-sm">
-                <div className="font-medium text-green-800">Decoded</div>
-                <div className="text-green-900 break-all">{lastDecoded}</div>
+              <div className="rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-500/30 px-3 py-2 text-sm">
+                <div className="font-medium text-green-800 dark:text-green-300">
+                  Decoded
+                </div>
+                <div className="text-green-900 dark:text-green-200 break-all">
+                  {lastDecoded}
+                </div>
               </div>
             ) : (
-              <div className="rounded-xl bg-gray-50 border px-3 py-2 text-sm text-gray-600">
+              <div className="rounded-xl bg-gray-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm text-gray-600 dark:text-slate-400">
                 Point the camera at a code to scan.
               </div>
             )}
             {error && (
-              <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
+              <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-500/30 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
                 {error}
               </div>
             )}
@@ -78,24 +81,24 @@ export default function StandaloneScanPage() {
 
           {/* Actions */}
           <div className="mt-4 flex flex-wrap gap-2">
-            <button
+            <Button
               type="button"
               onClick={() => setLastDecoded('')}
-              className="inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-medium hover:bg-gray-50"
+              variant="secondary"
             >
               Clear
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={() => navigate('/')}
-              className="inline-flex items-center gap-2 rounded-2xl bg-black text-white px-3 py-2 text-sm font-medium hover:opacity-90"
+              variant="primary"
             >
               Home
-            </button>
+            </Button>
           </div>
         </div>
 
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-gray-500 dark:text-slate-500">
           Tip: If the camera doesn’t appear, grant camera permission in your
           browser settings.
         </p>
