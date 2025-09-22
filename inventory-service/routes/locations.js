@@ -28,13 +28,6 @@ router.put(
 
 router.delete(
   '/:id',
-  // ... (existing DELETE route)
-);
-
-module.exports = router;
-
-router.delete(
-  '/:id',
   param('id').isInt().withMessage('A valid location ID is required'),
   handleValidation,
   ctrl.deleteLocation,

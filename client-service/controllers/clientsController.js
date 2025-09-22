@@ -51,53 +51,25 @@ exports.getAllClients = async (req, res, next) => {
 };
 
 // POST /api/clients
-exports.createClient = async (req, res, next) => {
-  const dbClient = await pool.connect();
+exports.createClient = async (req, res) => {
+  // 1. Get user_id from the authenticated user, not the request body
+  const userId = req.user.id;
+  const { name } = req.body;
+
+  const logo_url = req.file ? `/uploads/${req.file.filename}` : null;
+
   try {
-    const name = (req.body.name || '').trim();
-    if (!name) return res.status(400).json({ message: 'name is required' });
-    const userId = req.user?.id;
-    if (!userId)
-      return res
-        .status(401)
-        .json({ message: 'Authentication error: User ID not found.' });
-
-    let barcode = req.body.barcode?.trim() || null;
-    let logoUrl = req.body.logo_url || null;
-
-    if (req.file) {
-      logoUrl = await uploadLogoToSupabase(
-        req.file.buffer, // ✅ FIX: Use req.file.buffer
-        req.file.originalname,
-        req.file.mimetype,
-      );
-    }
-
-    await dbClient.query('BEGIN');
-
-    const createClientResult = await dbClient.query(
-      `INSERT INTO clients (name, logo_url, barcode) VALUES ($1, $2, $3) RETURNING *`, // Removed user_id from here
-      [name, logoUrl, barcode],
+    const { rows } = await pool.query(
+      'INSERT INTO clients (name, logo_url, user_id) VALUES ($1, $2, $3) RETURNING *',
+      // 2. Use the authenticated userId in the query
+      [name, logo_url, userId],
     );
-    const newClient = createClientResult.rows[0];
-
-    await dbClient.query(
-      `INSERT INTO user_clients (user_id, client_id) VALUES ($1, $2)`,
-      [userId, newClient.id],
-    );
-
-    await dbClient.query('COMMIT');
-    res.status(201).json(newClient);
-  } catch (err) {
-    await dbClient.query('ROLLBACK');
-    if (err.code === '23505')
-      return res.status(409).json({
-        message: 'A client with this name or barcode already exists.',
-      });
-    console.error('Create client error:', err);
-    next(err);
-  } finally {
-    dbClient.release();
+    res.status(201).json(rows[0]);
+  } catch (error) {
+    console.error('Create client error:', error);
+    res
+      .status(500)
+      .json({ message: 'Error creating client', error: error.message });
   }
 };
 

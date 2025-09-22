@@ -1,11 +1,8 @@
+import 'dotenv/config';
 import express from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
 import { Readable } from 'stream';
-
-if (process.env.NODE_ENV !== 'production') {
-  require('dotenv').config();
-}
 
 const {
   PORT: RENDER_PORT,
