@@ -2,37 +2,59 @@ const pool = require('../db/pool');
 const { createClient } = require('@supabase/supabase-js');
 
 // --- Supabase Setup ---
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-);
-const LOGO_BUCKET = 'client-logos';
+exports.createClient = async (req, res) => {
+  const { name } = req.body;
+  const userId = req.user.id;
+  let logo_url = null; // Initialize logo_url as null
 
-async function uploadLogoToSupabase(fileBuffer, originalName, fileType) {
+  const dbClient = await pool.connect();
+
   try {
-    const fileName = `${Date.now()}_${originalName}`;
-    const { data, error } = await supabase.storage
-      .from(LOGO_BUCKET)
-      .upload(fileName, fileBuffer, {
-        cacheControl: '3600',
-        upsert: false,
-        contentType: fileType,
-      });
-
-    if (error) {
-      throw error;
+    // Check if a file was uploaded with the request
+    if (req.file) {
+      // If a file exists, upload it to Supabase and get the public URL
+      logo_url = await uploadLogoToSupabase(
+        req.file.buffer,
+        req.file.originalname,
+        req.file.mimetype,
+      );
     }
 
-    const { data: urlData } = supabase.storage
-      .from(LOGO_BUCKET)
-      .getPublicUrl(data.path);
+    await dbClient.query('BEGIN');
 
-    return urlData.publicUrl;
-  } catch (err) {
-    console.error('Error uploading to Supabase:', err.message);
-    throw new Error('Failed to upload logo to cloud storage.');
+    // Step 1: Insert the new client with the correct logo_url
+    const clientInsertQuery =
+      'INSERT INTO clients (name, logo_url, user_id) VALUES ($1, $2, $3) RETURNING id';
+    const clientResult = await dbClient.query(clientInsertQuery, [
+      name,
+      logo_url, // This will now be either null or the Supabase URL
+      userId,
+    ]);
+    const newClientId = clientResult.rows[0].id;
+
+    // Step 2: Link the user to the new client (this part is already correct)
+    const userClientInsertQuery =
+      'INSERT INTO user_clients (user_id, client_id) VALUES ($1, $2)';
+    await dbClient.query(userClientInsertQuery, [userId, newClientId]);
+
+    await dbClient.query('COMMIT');
+
+    const newClient = await dbClient.query(
+      'SELECT * FROM clients WHERE id = $1',
+      [newClientId],
+    );
+
+    res.status(201).json(newClient.rows[0]);
+  } catch (error) {
+    await dbClient.query('ROLLBACK');
+    console.error('Create client transaction error:', error);
+    res
+      .status(500)
+      .json({ message: 'Error creating client', error: error.message });
+  } finally {
+    dbClient.release();
   }
-}
+};
 
 // GET /api/clients
 exports.getAllClients = async (req, res, next) => {
@@ -52,24 +74,47 @@ exports.getAllClients = async (req, res, next) => {
 
 // POST /api/clients
 exports.createClient = async (req, res) => {
-  // 1. Get user_id from the authenticated user, not the request body
-  const userId = req.user.id;
   const { name } = req.body;
+  const userId = req.user.id; // Get user ID from authenticated user
+  const logo_url = req.file ? req.file.path : null; // This will be changed in the next step
 
-  const logo_url = req.file ? `/uploads/${req.file.filename}` : null;
+  const dbClient = await pool.connect();
 
   try {
-    const { rows } = await pool.query(
-      'INSERT INTO clients (name, logo_url, user_id) VALUES ($1, $2, $3) RETURNING *',
-      // 2. Use the authenticated userId in the query
-      [name, logo_url, userId],
+    await dbClient.query('BEGIN');
+
+    // Step 1: Insert the new client and get its ID
+    const clientInsertQuery =
+      'INSERT INTO clients (name, logo_url, user_id) VALUES ($1, $2, $3) RETURNING id';
+    const clientResult = await dbClient.query(clientInsertQuery, [
+      name,
+      logo_url,
+      userId,
+    ]);
+    const newClientId = clientResult.rows[0].id;
+
+    // Step 2: Link the user to the new client in the user_clients table
+    const userClientInsertQuery =
+      'INSERT INTO user_clients (user_id, client_id) VALUES ($1, $2)';
+    await dbClient.query(userClientInsertQuery, [userId, newClientId]);
+
+    await dbClient.query('COMMIT');
+
+    // Fetch the full new client object to return
+    const newClient = await dbClient.query(
+      'SELECT * FROM clients WHERE id = $1',
+      [newClientId],
     );
-    res.status(201).json(rows[0]);
+
+    res.status(201).json(newClient.rows[0]);
   } catch (error) {
-    console.error('Create client error:', error);
+    await dbClient.query('ROLLBACK');
+    console.error('Create client transaction error:', error);
     res
       .status(500)
       .json({ message: 'Error creating client', error: error.message });
+  } finally {
+    dbClient.release();
   }
 };
 
