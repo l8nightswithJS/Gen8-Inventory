@@ -1,7 +1,8 @@
-// inventory-service/controllers/inventoryController.js (Final Version)
+// inventory-service/controllers/inventoryController.js
 const pool = require('../db/pool');
-const format = require('pg-format'); // A robust library for dynamic SQL
+const format = require('pg-format');
 const {
+  calculateStockLevels,
   computeLowState,
   CORE_FIELDS,
   normalizeKey,
@@ -32,18 +33,16 @@ exports.bulkImportItems = async (req, res, next) => {
       });
     }
 
-    // --- Start of Intelligent Mapping Logic ---
     const processedRows = items.map((rawItem) => {
       const mappedItem = {};
       for (const rawKey in rawItem) {
         const normalized = normalizeKey(rawKey);
         const canonicalKey = REVERSE_ALIAS_MAP.get(normalized);
-        const keyToUse = canonicalKey || rawKey; // Use canonical key if found, otherwise original
+        const keyToUse = canonicalKey || rawKey;
         mappedItem[keyToUse] = rawItem[rawKey];
       }
       return mappedItem;
     });
-    // --- End of Intelligent Mapping Logic ---
 
     const finalRows = processedRows.map((item) => separateItemData(item));
 
@@ -75,7 +74,6 @@ exports.bulkImportItems = async (req, res, next) => {
     });
   } catch (err) {
     if (err.code === '23505') {
-      // unique_violation
       return res.status(409).json({
         message:
           'Import failed. One or more items contained a part_number and lot_number combination that already exists.',
@@ -163,14 +161,14 @@ exports.getMasterInventoryByLocation = async (req, res, next) => {
       LEFT JOIN inventory inv ON l.id = inv.location_id
       LEFT JOIN items i ON inv.item_id = i.id
       LEFT JOIN clients c ON i.client_id = c.id
-      GROUP BY l.id, l.code, l.description -- ✅ CORRECTED THIS LINE
+      GROUP BY l.id, l.code, l.description
       ORDER BY l.code;
     `;
 
     const result = await pool.query(query);
     res.json(result.rows);
   } catch (err) {
-    console.error('Error fetching master inventory:', err); // Good practice to log the actual error
+    console.error('Error fetching master inventory:', err);
     next(err);
   }
 };
@@ -179,6 +177,7 @@ exports.getMasterInventoryByLocation = async (req, res, next) => {
 exports.getActiveAlerts = async (req, res, next) => {
   try {
     const clientId = Number(req.query.client_id);
+
     const result = await pool.query(
       `SELECT i.*, COALESCE(SUM(inv.quantity), 0)::int AS total_quantity
        FROM items i
@@ -187,13 +186,14 @@ exports.getActiveAlerts = async (req, res, next) => {
        GROUP BY i.id`,
       [clientId],
     );
+
     const alerts = result.rows.flatMap((item) => {
       const { low, reason, threshold, qty } = computeLowState(
         item,
         item.total_quantity,
       );
       if (!low) return [];
-      return [{ id: item.id, item: item, reason, threshold, qty }];
+      return [{ item, reason, threshold, qty }];
     });
     res.json(alerts);
   } catch (err) {
@@ -286,6 +286,8 @@ exports.updateItem = async (req, res, next) => {
 exports.listItems = async (req, res, next) => {
   try {
     const clientId = Number(req.query.client_id);
+
+    // ✅ FIX: Correctly SUM the quantities from the inventory table and GROUP BY the item id.
     const result = await pool.query(
       `SELECT i.*, COALESCE(SUM(inv.quantity), 0)::int AS total_quantity
        FROM items i
@@ -295,7 +297,11 @@ exports.listItems = async (req, res, next) => {
        ORDER BY i.name ASC, i.part_number ASC`,
       [clientId],
     );
-    res.json(result.rows);
+
+    // The calculateStockLevels function will now receive items with an accurate `total_quantity`.
+    const itemsWithStatus = calculateStockLevels(result.rows);
+
+    res.json(itemsWithStatus);
   } catch (err) {
     next(err);
   }

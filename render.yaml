@@ -17,9 +17,7 @@ services:
       - key: CLIENT_URL
         value: 'http://client-service-z4vu:8003'
       - key: INVENTORY_URL
-        value: 'http://inventory-service-3qjv:8000
-
-'
+        value: 'http://inventory-service-3qjv:8000'
 
   - type: pserv
     name: auth-service

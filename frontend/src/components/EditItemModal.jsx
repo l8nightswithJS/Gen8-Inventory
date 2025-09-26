@@ -18,7 +18,7 @@ const FormField = ({ label, id, children }) => (
 
 export default function EditItemModal({
   item,
-  schema = [],
+  schema = [], // schema is passed but not used, can be removed if not needed elsewhere
   onClose,
   onUpdated,
 }) {
@@ -26,7 +26,10 @@ export default function EditItemModal({
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // ✅ FIX: Expanded CORE_FIELDS to include all non-custom, top-level properties from the API item object.
   const CORE_FIELDS = new Set([
+    'id',
+    'client_id',
     'part_number',
     'lot_number',
     'name',
@@ -35,12 +38,19 @@ export default function EditItemModal({
     'reorder_level',
     'low_stock_threshold',
     'alert_enabled',
+    'alert_acknowledged_at',
+    'created_at',
+    'last_updated',
+    'attributes', // The attributes object itself is a core field
+    'total_quantity', // Read-only data from the API
+    'status', // Read-only data from the API
   ]);
-  const isCustomField = (key) => !CORE_FIELDS.has(key);
 
   useEffect(() => {
     if (item) {
-      setForm({ ...item.attributes, ...item });
+      // Initialize form state by combining the top-level item and its attributes.
+      // This ensures all fields are populated correctly.
+      setForm({ ...item, ...(item.attributes || {}) });
     }
   }, [item]);
 
@@ -52,23 +62,39 @@ export default function EditItemModal({
     }));
   };
 
-  const onSave = async () => {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     setError('');
     setSubmitting(true);
     try {
-      await api.put(`/api/items/${item.id}`, form);
+      const payload = { ...form };
+
+      // Ensure numeric fields are sent as numbers
+      if (payload.reorder_level != null && payload.reorder_level !== '') {
+        payload.reorder_level = parseFloat(payload.reorder_level);
+      }
+      if (
+        payload.low_stock_threshold != null &&
+        payload.low_stock_threshold !== ''
+      ) {
+        payload.low_stock_threshold = parseFloat(payload.low_stock_threshold);
+      }
+
+      await api.put(`/api/items/${item.id}`, payload);
       onUpdated?.();
       onClose?.();
-    } catch (e) {
-      setError(e?.response?.data?.message || 'Failed to save item.');
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Failed to update item.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const customSchema = schema.filter(isCustomField);
+  // ✅ FIX: Calculate which keys are true custom fields by filtering out the core fields.
+  const customAttributeKeys = item
+    ? Object.keys(item.attributes || {}).filter((key) => !CORE_FIELDS.has(key))
+    : [];
 
-  // Common input styles
   const inputStyles =
     'w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500';
 
@@ -76,14 +102,19 @@ export default function EditItemModal({
     <BaseModal
       isOpen={!!item}
       onClose={onClose}
-      title="Edit Inventory Item"
-      size="max-w-2xl" // Slightly larger for better layout
+      title={`Edit: ${item?.name ?? 'Item'}`}
+      size="max-w-2xl"
       footer={
         <div className="flex items-center justify-end gap-2">
           <Button variant="secondary" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={onSave} disabled={submitting}>
+          <Button
+            type="submit"
+            form="edit-item-form"
+            variant="primary"
+            disabled={submitting}
+          >
             {submitting ? 'Saving…' : 'Save Changes'}
           </Button>
         </div>
@@ -94,9 +125,9 @@ export default function EditItemModal({
           {error}
         </p>
       )}
-      <div className="space-y-4">
+      <form id="edit-item-form" onSubmit={handleSubmit} className="space-y-4">
+        {/* Core Fields Section */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Core Fields */}
           <FormField label="Part Number" id="edit-part_number">
             <input
               id="edit-part_number"
@@ -138,25 +169,35 @@ export default function EditItemModal({
               />
             </FormField>
           </div>
-
-          {/* Custom Fields */}
-          {customSchema.map((key) => (
-            <FormField
-              label={key.replace(/_/g, ' ')}
-              id={`edit-${key}`}
-              key={key}
-            >
-              <input
-                id={`edit-${key}`}
-                name={key}
-                value={form[key] ?? ''}
-                onChange={handleChange}
-                className={inputStyles}
-              />
-            </FormField>
-          ))}
         </div>
 
+        {/* Custom Attributes Section - Only renders if there are custom fields */}
+        {customAttributeKeys.length > 0 && (
+          <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
+            <h4 className="text-base font-semibold text-gray-800 dark:text-white mb-4">
+              Custom Attributes
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {customAttributeKeys.map((key) => (
+                <FormField
+                  label={key.replace(/_/g, ' ')}
+                  id={`edit-${key}`}
+                  key={key}
+                >
+                  <input
+                    id={`edit-${key}`}
+                    name={key}
+                    value={form[key] ?? ''}
+                    onChange={handleChange}
+                    className={inputStyles}
+                  />
+                </FormField>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Alerts Section */}
         <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-4">
           <h4 className="text-base font-semibold text-gray-800 dark:text-white">
             Alerts
@@ -207,7 +248,7 @@ export default function EditItemModal({
             </div>
           )}
         </div>
-      </div>
+      </form>
     </BaseModal>
   );
 }

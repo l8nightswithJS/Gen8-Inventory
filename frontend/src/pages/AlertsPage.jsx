@@ -11,10 +11,9 @@ const THRESHOLD_LABELS = {
 const ROWS_PER_PAGE = 12;
 
 const AlertCard = ({ alert, onAcknowledge }) => {
+  // ✅ FIX: Access name and part_number directly from the nested item object
   const name =
-    alert.item?.attributes?.name ??
-    alert.item?.attributes?.part_number ??
-    `Item ${alert.id}`;
+    alert.item?.name ?? alert.item?.part_number ?? `Item ${alert.item.id}`;
 
   return (
     <div className="rounded-lg border border-red-200 dark:border-red-500/30 bg-white dark:bg-slate-800/50 shadow-md p-4 mb-4">
@@ -47,8 +46,9 @@ const AlertCard = ({ alert, onAcknowledge }) => {
         </div>
       </div>
       <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700 flex justify-end">
+        {/* ✅ FIX: Pass the correct nested ID */}
         <Button
-          onClick={() => onAcknowledge(alert.id)}
+          onClick={() => onAcknowledge(alert.item.id)}
           size="sm"
           variant="primary"
         >
@@ -71,12 +71,15 @@ export default function AlertsPage() {
 
   const fetchAlerts = useCallback(async () => {
     try {
-      const { data } = await api.get(
-        `/api/clients/${clientId}/alerts?page=${page}&limit=${ROWS_PER_PAGE}`,
-      );
-      setAlerts(data.alerts || []);
-      setTotal(data.total || 0);
-      setClient(data.client || null);
+      const { data } = await api.get('/api/items/alerts', {
+        params: {
+          client_id: clientId,
+          page: page,
+          limit: ROWS_PER_PAGE,
+        },
+      });
+      setAlerts(data || []);
+      setTotal(data.length || 0);
     } catch (e) {
       console.error('Failed to fetch alerts', e);
     }
@@ -86,9 +89,9 @@ export default function AlertsPage() {
     fetchAlerts();
   }, [fetchAlerts]);
 
-  const acknowledge = async (alertId) => {
+  const acknowledge = async (itemId) => {
     try {
-      await api.post(`/api/alerts/${alertId}/ack`);
+      await api.post(`/api/items/alerts/${itemId}/acknowledge`);
       fetchAlerts(); // Re-fetch after acknowledging
     } catch (e) {
       console.error('Failed to acknowledge alert', e);
@@ -119,9 +122,22 @@ export default function AlertsPage() {
       setViewMode(window.innerWidth < 768 ? 'mobile' : 'desktop');
     };
     window.addEventListener('resize', handleResize);
-    handleResize(); // Initial check
+    handleResize();
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    const fetchClient = async () => {
+      if (!clientId) return;
+      try {
+        const { data } = await api.get(`/api/clients/${clientId}`);
+        setClient(data);
+      } catch (error) {
+        console.error('Failed to fetch client details', error);
+      }
+    };
+    fetchClient();
+  }, [clientId]);
 
   return (
     <div>
@@ -141,7 +157,8 @@ export default function AlertsPage() {
         <div>
           {alerts.map((alert) => (
             <AlertCard
-              key={alert.id}
+              // ✅ FIX: Use the nested item ID for the key
+              key={alert.item.id}
               alert={alert}
               onAcknowledge={acknowledge}
             />
@@ -174,15 +191,16 @@ export default function AlertsPage() {
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {alerts.map((alert) => (
-                <tr key={alert.id}>
+                // ✅ FIX: Use the nested item ID for the key
+                <tr key={alert.item.id}>
                   <td className="px-4 py-2">
                     <div className="flex items-center gap-2">
                       <span className="rounded-full bg-red-100 dark:bg-red-500/20 px-2 py-0.5 text-xs font-semibold text-red-700 dark:text-red-300">
                         Low
                       </span>
                       <span className="break-words text-slate-800 dark:text-slate-200">
-                        {alert.item?.attributes?.name ??
-                          alert.item?.attributes?.part_number}
+                        {/* ✅ FIX: Access name and part_number from the item object */}
+                        {alert.item?.name ?? alert.item?.part_number}
                       </span>
                     </div>
                   </td>
@@ -202,7 +220,8 @@ export default function AlertsPage() {
                   </td>
                   <td className="px-4 py-2 text-center">
                     <Button
-                      onClick={() => acknowledge(alert.id)}
+                      // ✅ FIX: Pass the correct nested ID
+                      onClick={() => acknowledge(alert.item.id)}
                       size="sm"
                       variant="primary"
                     >

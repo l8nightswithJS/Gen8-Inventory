@@ -51,7 +51,23 @@ export default function AddItemModal({
     setError('');
     setSubmitting(true);
     try {
+      // ✅ FIX: Create a mutable copy of the form data to modify
       const payload = { ...form, client_id: parseInt(clientId, 10) };
+
+      // ✅ FIX: Convert specific fields from string to number for API validation
+      // If the field exists and is not an empty string, parse it, otherwise send null.
+      if (payload.reorder_level && payload.reorder_level !== '') {
+        payload.reorder_level = parseFloat(payload.reorder_level);
+      } else {
+        delete payload.reorder_level; // Or set to null if your API prefers
+      }
+
+      if (payload.low_stock_threshold && payload.low_stock_threshold !== '') {
+        payload.low_stock_threshold = parseFloat(payload.low_stock_threshold);
+      } else {
+        delete payload.low_stock_threshold; // Or set to null
+      }
+
       await api.post('/api/items', payload);
       onCreated?.();
       onClose?.();
