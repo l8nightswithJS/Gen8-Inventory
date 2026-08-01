@@ -19,70 +19,16 @@ function getBearer(req) {
   return scheme === 'Bearer' && token ? token : null;
 }
 
-// Ensure there's always a profile row in public.users
-async function ensureUserProfile(authUser, defaults = {}) {
-  const id = authUser?.id;
-  if (!id) throw new Error('ensureUserProfile: missing authUser.id');
-
-  const meta = authUser.user_metadata || authUser.raw_user_meta_data || {};
-  const email = authUser.email || meta.email || '';
-  const role = meta.role || defaults.role || 'staff';
-  const approved =
-    typeof defaults.approved === 'boolean' ? defaults.approved : false;
-
-  const { data, error } = await sbAdmin
-    .from('users')
-    .upsert({ id, email, role, approved }, { onConflict: 'id' })
-    .select('id, role, approved')
-    .single();
-
-  if (error) throw error;
-  return data;
-}
-
 /**
  * POST /api/auth/register
+ *
+ * Public self-registration is intentionally disabled.
  */
-async function register(req, res) {
-  try {
-    const { email, password, role = 'staff' } = req.body || {};
-    if (!email || !password)
-      return res
-        .status(400)
-        .json({ message: 'Email and password are required' });
-
-    const normalizedEmail = String(email).trim().toLowerCase();
-
-    const { data, error } = await sbAuth.auth.signUp({
-      email: normalizedEmail,
-      password,
-      options: {
-        data: {
-          email: normalizedEmail,
-          role,
-        },
-      },
-    });
-
-    if (error) {
-      console.error('[AUTH][register] Supabase error:', error);
-      return res.status(error.status || 500).json({ message: error.message });
-    }
-    if (!data?.user) return res.status(500).json({ message: 'Sign up failed' });
-
-    // Always create a profile, default approved
-    await ensureUserProfile(data.user, { role, approved: true });
-
-    return res.status(201).json({
-      message: 'Registered successfully',
-      userId: data.user.id,
-    });
-  } catch (err) {
-    console.error('[AUTH][register] error:', err);
-    return res.status(500).json({ message: 'Registration failed' });
-  }
+async function register(_req, res) {
+  return res.status(403).json({
+    message: 'Self-registration is disabled. Contact an administrator.',
+  });
 }
-
 /**
  * POST /api/auth/login
  */
@@ -141,18 +87,18 @@ async function login(req, res) {
     console.log(`[${new Date().toISOString()}] LOGIN: Profile fetch complete.`);
 
     if (selErr || !profile) {
-      // This block will run if the user exists in Supabase Auth but not in our public 'users' table yet
-      console.log(
-        `[${new Date().toISOString()}] LOGIN: Profile not found, creating one...`,
+      console.error(
+        `[${new Date().toISOString()}] LOGIN: Application profile is missing.`,
+        selErr,
       );
-      profile = await ensureUserProfile(authUser, {
-        role: 'staff',
-        approved: true,
+
+      return res.status(403).json({
+        message:
+          'Account is not provisioned for this application. Contact an administrator.',
       });
-      console.log(`[${new Date().toISOString()}] LOGIN: Profile created.`);
     }
 
-    if (profile.approved === false) {
+    if (profile.approved !== true) {
       return res.status(403).json({ message: 'Account pending approval' });
     }
 
@@ -162,10 +108,19 @@ async function login(req, res) {
     );
 
     // Fetch all client IDs associated with this user from the new join table
-    const { data: clientLinks } = await sbAdmin
+    const { data: clientLinks, error: clientLinksError } = await sbAdmin
       .from('user_clients')
       .select('client_id')
       .eq('user_id', profile.id);
+
+    if (clientLinksError) {
+      console.error(
+        `[${new Date().toISOString()}] LOGIN: Failed to fetch client links.`,
+        clientLinksError,
+      );
+
+      return res.status(500).json({ message: 'Login failed' });
+    }
 
     // --- LOG #7 ---
     console.log(
