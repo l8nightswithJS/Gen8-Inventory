@@ -16,6 +16,7 @@
     "dev": "concurrently \"npm run dev -w frontend\" \"npm run dev -w api-gateway\" \"npm run dev -w auth-service\" \"npm run dev -w inventory-service\" \"npm run dev -w client-service\" \"npm run dev -w barcode-service\""
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "concurrently": "^9.2.1",
+    "supabase": "^2.111.0"
   }
 }
