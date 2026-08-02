@@ -1,31 +1,113 @@
-// inventory-service/__tests__/inventory.test.js
 const request = require('supertest');
 const express = require('express');
-const inventoryRoutes = require('../routes/inventory');
 
-// THIS IS THE CORRECTED MOCK
-// It now returns a function directly, perfectly mimicking the real authMiddleware.js file.
-jest.mock('../../packages/shared-auth/validationMiddleware.js', () =>
-  jest.fn((req, res, next) => {
-    // Simulate a logged-in user for the test environment
-    req.user = { id: 'mock-user-id-123', role: 'admin' };
+jest.mock('shared-auth', () => ({
+  requireRole: jest.fn(() => (_req, _res, next) => next()),
+  handleValidation: (_req, _res, next) => next(),
+}));
+
+jest.mock('../middleware/requireItemAccess', () => ({
+  requireItemAccess: jest.fn(
+    ({ source = 'params', key = 'id' } = {}) =>
+      (req, _res, next) => {
+        req.itemAccess = { source, key };
+        next();
+      },
+  ),
+  requireItemListAccess: jest.fn(() => (req, _res, next) => {
+    req.itemListAccess = true;
     next();
   }),
-);
+}));
+
+function handler(name) {
+  return (req, res) =>
+    res.json({
+      handler: name,
+      itemAccess: req.itemAccess || null,
+      itemListAccess: req.itemListAccess || false,
+    });
+}
+
+jest.mock('../controllers/inventoryController', () => ({
+  getMasterInventoryByLocation: handler('getMasterInventoryByLocation'),
+  getActiveAlerts: handler('getActiveAlerts'),
+  acknowledgeAlert: handler('acknowledgeAlert'),
+  listItems: handler('listItems'),
+  getItemById: handler('getItemById'),
+  createItem: handler('createItem'),
+  updateItem: handler('updateItem'),
+  deleteItem: handler('deleteItem'),
+  adjustInventory: handler('adjustInventory'),
+  bulkImportItems: handler('bulkImportItems'),
+  exportItems: handler('exportItems'),
+}));
+
+jest.mock('../controllers/labelsController', () => ({
+  printAllForClient: handler('printAllForClient'),
+  printSelected: handler('printSelected'),
+}));
+
+const inventoryRoutes = require('../routes/inventory');
+const labelsRoutes = require('../routes/labels');
 
 const app = express();
 app.use(express.json());
 app.use('/api/inventory', inventoryRoutes);
+app.use('/api/labels', labelsRoutes);
 
-describe('Inventory API Endpoints', () => {
-  it('GET /api/inventory - should succeed and return an array of inventory items', async () => {
-    // This test requires a client_id query parameter to pass validation
-    const response = await request(app).get('/api/inventory?client_id=1');
+describe('inventory route authorization wiring', () => {
+  test('protects item lookup by resource ID', async () => {
+    const response = await request(app).get('/api/inventory/123');
 
-    // Check for a successful HTTP status code
     expect(response.statusCode).toBe(200);
+    expect(response.body).toEqual({
+      handler: 'getItemById',
+      itemAccess: { source: 'params', key: 'id' },
+      itemListAccess: false,
+    });
+  });
 
-    // Verify that the response body is an array
-    expect(Array.isArray(response.body)).toBe(true);
+  test('protects alert acknowledgement by item ID', async () => {
+    const response = await request(app).post(
+      '/api/inventory/alerts/123/acknowledge',
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.handler).toBe('acknowledgeAlert');
+    expect(response.body.itemAccess).toEqual({
+      source: 'params',
+      key: 'id',
+    });
+  });
+
+  test('protects inventory adjustment by body item_id', async () => {
+    const response = await request(app)
+      .post('/api/inventory/adjust')
+      .send({
+        item_id: 123,
+        location_id: 5,
+        change_quantity: 10,
+      });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.handler).toBe('adjustInventory');
+    expect(response.body.itemAccess).toEqual({
+      source: 'body',
+      key: 'item_id',
+    });
+  });
+
+  test('protects selected-label printing with list ownership checks', async () => {
+    const response = await request(app)
+      .post('/api/labels/print/selected')
+      .send({ item_ids: [1, 2] });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toEqual({
+      handler: 'printSelected',
+      itemAccess: null,
+      itemListAccess: true,
+    });
   });
 });
