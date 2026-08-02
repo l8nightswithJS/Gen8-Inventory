@@ -1,12 +1,15 @@
 const pool = require('../db/pool');
 const { createClient } = require('@supabase/supabase-js');
 
-// --- Supabase Setup ---
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY,
 );
 const LOGO_BUCKET = 'client-logos';
+
+function getClientId(req) {
+  return Number(req.params?.clientId ?? req.params?.id);
+}
 
 async function uploadLogoToSupabase(fileBuffer, originalName, fileType) {
   try {
@@ -19,9 +22,7 @@ async function uploadLogoToSupabase(fileBuffer, originalName, fileType) {
         contentType: fileType,
       });
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
     const { data: urlData } = supabase.storage
       .from(LOGO_BUCKET)
@@ -38,34 +39,35 @@ async function uploadLogoToSupabase(fileBuffer, originalName, fileType) {
 exports.getAllClients = async (req, res, next) => {
   try {
     const userId = req.user?.id;
-    if (!userId)
+    if (!userId) {
       return res.status(401).json({ message: 'Authentication error' });
+    }
+
     const result = await pool.query(
-      `SELECT c.* FROM clients c JOIN user_clients uc ON c.id = uc.client_id WHERE uc.user_id = $1 ORDER BY c.name ASC`,
+      `SELECT c.*
+       FROM clients c
+       JOIN user_clients uc ON c.id = uc.client_id
+       WHERE uc.user_id = $1
+       ORDER BY c.name ASC`,
       [userId],
     );
-    res.json(result.rows || []);
+
+    return res.json(result.rows || []);
   } catch (err) {
-    next(err);
+    return next(err);
   }
 };
 
-// POST /api/clients
-// client-service/controllers/clientsController.js
-
-// ... (keep your existing Supabase setup and uploadLogoToSupabase function) ...
-
+// POST /api/clients/add
 exports.createClient = async (req, res) => {
   const { name } = req.body;
   const userId = req.user.id;
-  let logo_url = null; // Initialize logo_url as null
+  let logo_url = null;
 
   const dbClient = await pool.connect();
 
   try {
-    // Check if a file was uploaded with the request
     if (req.file) {
-      // If a file exists, upload it to Supabase and get the public URL
       logo_url = await uploadLogoToSupabase(
         req.file.buffer,
         req.file.originalname,
@@ -75,20 +77,16 @@ exports.createClient = async (req, res) => {
 
     await dbClient.query('BEGIN');
 
-    // Step 1: Insert the new client with the correct logo_url
-    const clientInsertQuery =
-      'INSERT INTO clients (name, logo_url, user_id) VALUES ($1, $2, $3) RETURNING id';
-    const clientResult = await dbClient.query(clientInsertQuery, [
-      name,
-      logo_url, // This will now be either null or the Supabase URL
-      userId,
-    ]);
+    const clientResult = await dbClient.query(
+      'INSERT INTO clients (name, logo_url, user_id) VALUES ($1, $2, $3) RETURNING id',
+      [name, logo_url, userId],
+    );
     const newClientId = clientResult.rows[0].id;
 
-    // Step 2: Link the user to the new client (this part is already correct)
-    const userClientInsertQuery =
-      'INSERT INTO user_clients (user_id, client_id) VALUES ($1, $2)';
-    await dbClient.query(userClientInsertQuery, [userId, newClientId]);
+    await dbClient.query(
+      'INSERT INTO user_clients (user_id, client_id) VALUES ($1, $2)',
+      [userId, newClientId],
+    );
 
     await dbClient.query('COMMIT');
 
@@ -97,11 +95,11 @@ exports.createClient = async (req, res) => {
       [newClientId],
     );
 
-    res.status(201).json(newClient.rows[0]);
+    return res.status(201).json(newClient.rows[0]);
   } catch (error) {
     await dbClient.query('ROLLBACK');
     console.error('Create client transaction error:', error);
-    res
+    return res
       .status(500)
       .json({ message: 'Error creating client', error: error.message });
   } finally {
@@ -109,15 +107,18 @@ exports.createClient = async (req, res) => {
   }
 };
 
-// PUT /api/clients/:id
+// PUT /api/clients/:clientId
 exports.updateClient = async (req, res, next) => {
-  console.log('Inspecting incoming file:', req.file);
   try {
-    const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) return res.status(400).json({ message: 'Invalid id' });
+    const id = getClientId(req);
+    if (!Number.isInteger(id) || id < 1) {
+      return res.status(400).json({ message: 'Invalid id' });
+    }
+
     const userId = req.user?.id;
-    if (!userId)
+    if (!userId) {
       return res.status(401).json({ message: 'Authentication error' });
+    }
 
     const permissionCheck = await pool.query(
       'SELECT client_id FROM user_clients WHERE user_id = $1 AND client_id = $2',
@@ -125,9 +126,7 @@ exports.updateClient = async (req, res, next) => {
     );
 
     if (permissionCheck.rows.length === 0) {
-      return res.status(403).json({
-        message: 'You do not have permission to edit this client.',
-      });
+      return res.status(404).json({ message: 'Client not found' });
     }
 
     const fields = {};
@@ -136,7 +135,6 @@ exports.updateClient = async (req, res, next) => {
       fields.barcode = req.body.barcode?.trim() || null;
     }
 
-    // ✅ FIX: Added missing file upload logic
     if (req.file) {
       fields.logo_url = await uploadLogoToSupabase(
         req.file.buffer,
@@ -147,8 +145,9 @@ exports.updateClient = async (req, res, next) => {
       fields.logo_url = req.body.logo_url || null;
     }
 
-    if (Object.keys(fields).length === 0)
+    if (Object.keys(fields).length === 0) {
       return res.status(400).json({ message: 'No fields to update' });
+    }
 
     const setClauses = Object.keys(fields)
       .map((key, idx) => `"${key}" = $${idx + 1}`)
@@ -165,57 +164,68 @@ exports.updateClient = async (req, res, next) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Client not found' });
     }
-    res.json(result.rows[0]);
+
+    return res.json(result.rows[0]);
   } catch (err) {
     console.error('Update client error:', err);
-    next(err);
+    return next(err);
   }
 };
 
-// GET /api/clients/:id
+// GET /api/clients/:clientId
 exports.getClientById = async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) return res.status(400).json({ message: 'Invalid id' });
+    const id = getClientId(req);
+    if (!Number.isInteger(id) || id < 1) {
+      return res.status(400).json({ message: 'Invalid id' });
+    }
 
-    // Note: You may want to add a permission check here as well
-    // For now, it allows any authenticated user to see any client by ID
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ message: 'Authentication error' });
+    }
 
-    const result = await pool.query('SELECT * FROM clients WHERE id = $1', [
-      id,
-    ]);
-    if (result.rows.length === 0)
-      return res.status(404).json({ message: 'Not found' });
-    res.json(result.rows[0]);
+    const result = await pool.query(
+      `SELECT c.*
+       FROM clients c
+       JOIN user_clients uc ON uc.client_id = c.id
+       WHERE c.id = $1 AND uc.user_id = $2
+       LIMIT 1`,
+      [id, userId],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Client not found' });
+    }
+
+    return res.json(result.rows[0]);
   } catch (err) {
-    next(err);
+    return next(err);
   }
 };
 
-// DELETE /api/clients/:id
+// DELETE /api/clients/:clientId
 exports.deleteClient = async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) return res.status(400).json({ message: 'Invalid id' });
-    const userId = req.user?.id;
-    if (!userId)
-      return res.status(401).json({ message: 'Authentication error' });
+    const id = getClientId(req);
+    if (!Number.isInteger(id) || id < 1) {
+      return res.status(400).json({ message: 'Invalid id' });
+    }
 
-    // ✅ FIX: Refactored to use the correct security model
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ message: 'Authentication error' });
+    }
+
     const permissionCheck = await pool.query(
       'SELECT client_id FROM user_clients WHERE user_id = $1 AND client_id = $2',
       [userId, id],
     );
 
     if (permissionCheck.rows.length === 0) {
-      return res.status(403).json({
-        message: 'You do not have permission to delete this client.',
-      });
+      return res.status(404).json({ message: 'Client not found' });
     }
 
-    // If you have cascade delete set up on your `clients` table's foreign keys,
-    // the following is sufficient. Otherwise, you must delete related records first.
-    // Assuming cascade delete is in place for simplicity.
     const result = await pool.query(
       'DELETE FROM clients WHERE id = $1 RETURNING *',
       [id],
@@ -225,9 +235,9 @@ exports.deleteClient = async (req, res, next) => {
       return res.status(404).json({ message: 'Client not found' });
     }
 
-    res.status(200).json({ message: 'Client deleted successfully.' });
+    return res.status(200).json({ message: 'Client deleted successfully.' });
   } catch (err) {
     console.error('Delete client error:', err);
-    next(err);
+    return next(err);
   }
 };
