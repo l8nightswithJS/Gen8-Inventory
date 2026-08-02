@@ -30,6 +30,9 @@ const READ_ONLY_FIELDS = new Set([
   'total_quantity',
   'status',
   'inventory_levels',
+  '__proto__',
+  'prototype',
+  'constructor',
 ]);
 
 class ItemContractError extends Error {
