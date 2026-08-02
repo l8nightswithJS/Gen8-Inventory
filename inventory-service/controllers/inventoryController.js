@@ -1,4 +1,3 @@
-// inventory-service/controllers/inventoryController.js
 const pool = require('../db/pool');
 const format = require('pg-format');
 const {
@@ -8,19 +7,25 @@ const {
   normalizeKey,
   REVERSE_ALIAS_MAP,
 } = require('./_stockLogic');
+const {
+  ItemContractError,
+  normalizeCreateItemPayload,
+  normalizeUpdateItemPayload,
+} = require('./_itemContract');
 
-// Helper to separate core fields from custom attributes
+function sendContractError(err, res) {
+  if (!(err instanceof ItemContractError)) return false;
+  res.status(err.status || 400).json({ message: err.message });
+  return true;
+}
+
+function quoteIdentifier(identifier) {
+  return `"${String(identifier).replace(/"/g, '""')}"`;
+}
+
 function separateItemData(body) {
-  const coreData = {};
-  const customAttributes = {};
-  for (const key in body) {
-    if (CORE_FIELDS.has(key)) {
-      coreData[key] = body[key];
-    } else {
-      customAttributes[key] = body[key];
-    }
-  }
-  return { coreData, attributes: customAttributes };
+  const { coreData, attributes } = normalizeUpdateItemPayload(body);
+  return { coreData, attributes };
 }
 
 // POST /api/items/bulk
@@ -45,8 +50,8 @@ exports.bulkImportItems = async (req, res, next) => {
     });
 
     const finalRows = processedRows.map((item) => separateItemData(item));
-
     const coreColumns = Object.keys(finalRows[0].coreData);
+
     if (!coreColumns.includes('part_number')) {
       return res.status(400).json({
         message: 'Import failed. No mappable part_number column was found.',
@@ -68,11 +73,12 @@ exports.bulkImportItems = async (req, res, next) => {
 
     const result = await pool.query(sql);
 
-    res.status(201).json({
+    return res.status(201).json({
       message: 'Bulk import successful',
       successCount: result.rows.length,
     });
   } catch (err) {
+    if (sendContractError(err, res)) return;
     if (err.code === '23505') {
       return res.status(409).json({
         message:
@@ -80,7 +86,7 @@ exports.bulkImportItems = async (req, res, next) => {
       });
     }
     console.error('Bulk import error:', err);
-    next(err);
+    return next(err);
   }
 };
 
@@ -128,14 +134,14 @@ exports.exportItems = async (req, res, next) => {
         new Date().toISOString().split('T')[0]
       }.csv"`,
     );
-    res.send(csvRows.join('\n'));
+    return res.send(csvRows.join('\n'));
   } catch (err) {
-    next(err);
+    return next(err);
   }
 };
 
 // GET /api/inventory/by-location
-exports.getMasterInventoryByLocation = async (req, res, next) => {
+exports.getMasterInventoryByLocation = async (_req, res, next) => {
   try {
     const query = `
       SELECT
@@ -166,10 +172,10 @@ exports.getMasterInventoryByLocation = async (req, res, next) => {
     `;
 
     const result = await pool.query(query);
-    res.json(result.rows);
+    return res.json(result.rows);
   } catch (err) {
     console.error('Error fetching master inventory:', err);
-    next(err);
+    return next(err);
   }
 };
 
@@ -177,7 +183,6 @@ exports.getMasterInventoryByLocation = async (req, res, next) => {
 exports.getActiveAlerts = async (req, res, next) => {
   try {
     const clientId = Number(req.query.client_id);
-
     const result = await pool.query(
       `SELECT i.*, COALESCE(SUM(inv.quantity), 0)::int AS total_quantity
        FROM items i
@@ -195,9 +200,9 @@ exports.getActiveAlerts = async (req, res, next) => {
       if (!low) return [];
       return [{ item, reason, threshold, qty }];
     });
-    res.json(alerts);
+    return res.json(alerts);
   } catch (err) {
-    next(err);
+    return next(err);
   }
 };
 
@@ -209,34 +214,40 @@ exports.acknowledgeAlert = async (req, res, next) => {
       'UPDATE items SET alert_acknowledged_at = NOW() WHERE id = $1',
       [id],
     );
-    res.json({ message: 'Acknowledged' });
+    return res.json({ message: 'Acknowledged' });
   } catch (err) {
-    next(err);
+    return next(err);
   }
 };
 
 // POST /api/items
 exports.createItem = async (req, res, next) => {
   try {
-    const { client_id, ...itemData } = req.body;
-    const { coreData, attributes } = separateItemData(itemData);
-    const columns = ['client_id', ...Object.keys(coreData), 'attributes'];
-    const values = [client_id, ...Object.values(coreData), attributes];
-    const query = format(
-      'INSERT INTO items (%I) VALUES (%L) RETURNING *',
-      columns,
-      values,
+    const { clientId, coreData, attributes } = normalizeCreateItemPayload(
+      req.body,
     );
-    const result = await pool.query(query);
-    res.status(201).json(result.rows[0]);
+    const columns = ['client_id', ...Object.keys(coreData), 'attributes'];
+    const values = [clientId, ...Object.values(coreData), JSON.stringify(attributes)];
+    const placeholders = values.map((_, index) => `$${index + 1}`);
+    placeholders[placeholders.length - 1] += '::jsonb';
+
+    const query = `
+      INSERT INTO items (${columns.map(quoteIdentifier).join(', ')})
+      VALUES (${placeholders.join(', ')})
+      RETURNING *
+    `;
+
+    const result = await pool.query(query, values);
+    return res.status(201).json(result.rows[0]);
   } catch (err) {
+    if (sendContractError(err, res)) return;
     if (err.code === '23505') {
       return res.status(409).json({
         message:
           'An item with this Part Number and Lot Number combination already exists.',
       });
     }
-    next(err);
+    return next(err);
   }
 };
 
@@ -244,41 +255,99 @@ exports.createItem = async (req, res, next) => {
 exports.updateItem = async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const { coreData, attributes } = separateItemData(req.body);
+    const { coreData, attributes, attributesProvided } =
+      normalizeUpdateItemPayload(req.body);
 
-    const stockResult = await pool.query(
-      `SELECT COALESCE(SUM(quantity), 0)::int as total_quantity FROM inventory WHERE item_id = $1`,
+    if (Object.keys(coreData).length === 0 && !attributesProvided) {
+      return res.status(400).json({ message: 'No item fields to update.' });
+    }
+
+    const currentResult = await pool.query(
+      `SELECT
+         i.reorder_level,
+         i.low_stock_threshold,
+         i.alert_enabled,
+         i.alert_acknowledged_at,
+         COALESCE(SUM(inv.quantity), 0)::int AS total_quantity
+       FROM items i
+       LEFT JOIN inventory inv ON inv.item_id = i.id
+       WHERE i.id = $1
+       GROUP BY i.id`,
       [id],
     );
-    const total_quantity = stockResult.rows[0]?.total_quantity || 0;
-    const itemWithNewThresholds = {
-      ...coreData,
-      alert_enabled: coreData.alert_enabled !== false,
-    };
-    const { low } = computeLowState(itemWithNewThresholds, total_quantity);
-    if (!low) {
-      coreData.alert_acknowledged_at = null;
+
+    const currentItem = currentResult.rows[0];
+    if (!currentItem) {
+      return res.status(404).json({ message: 'Item not found' });
     }
 
-    const setClauses = Object.keys(coreData)
-      .map((key) => format('%I = %L', key, coreData[key]))
-      .join(', ');
-    let finalQuery = `UPDATE items SET ${setClauses}, attributes = attributes || $1, last_updated = NOW() WHERE id = $2 RETURNING *`;
+    const effectiveAlertState = {
+      reorder_level: Object.prototype.hasOwnProperty.call(
+        coreData,
+        'reorder_level',
+      )
+        ? coreData.reorder_level
+        : currentItem.reorder_level,
+      low_stock_threshold: Object.prototype.hasOwnProperty.call(
+        coreData,
+        'low_stock_threshold',
+      )
+        ? coreData.low_stock_threshold
+        : currentItem.low_stock_threshold,
+      alert_enabled: Object.prototype.hasOwnProperty.call(
+        coreData,
+        'alert_enabled',
+      )
+        ? coreData.alert_enabled
+        : currentItem.alert_enabled,
+    };
 
-    const result = await pool.query(finalQuery, [attributes, id]);
+    const { low } = computeLowState(
+      effectiveAlertState,
+      currentItem.total_quantity,
+    );
+
+    const assignments = [];
+    const values = [];
+
+    for (const [field, value] of Object.entries(coreData)) {
+      values.push(value);
+      assignments.push(`${quoteIdentifier(field)} = $${values.length}`);
+    }
+
+    if (attributesProvided) {
+      values.push(JSON.stringify(attributes));
+      assignments.push(`attributes = $${values.length}::jsonb`);
+    }
+
+    if (!low) {
+      assignments.push('alert_acknowledged_at = NULL');
+    }
+
+    assignments.push('last_updated = NOW()');
+    values.push(id);
+
+    const result = await pool.query(
+      `UPDATE items
+       SET ${assignments.join(', ')}
+       WHERE id = $${values.length}
+       RETURNING *`,
+      values,
+    );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'Not found' });
+      return res.status(404).json({ message: 'Item not found' });
     }
-    res.json(result.rows[0]);
+    return res.json(result.rows[0]);
   } catch (err) {
+    if (sendContractError(err, res)) return;
     if (err.code === '23505') {
       return res.status(409).json({
         message:
           'An item with this Part Number and Lot Number combination already exists.',
       });
     }
-    next(err);
+    return next(err);
   }
 };
 
@@ -286,8 +355,6 @@ exports.updateItem = async (req, res, next) => {
 exports.listItems = async (req, res, next) => {
   try {
     const clientId = Number(req.query.client_id);
-
-    // ✅ FIX: Correctly SUM the quantities from the inventory table and GROUP BY the item id.
     const result = await pool.query(
       `SELECT i.*, COALESCE(SUM(inv.quantity), 0)::int AS total_quantity
        FROM items i
@@ -298,12 +365,9 @@ exports.listItems = async (req, res, next) => {
       [clientId],
     );
 
-    // The calculateStockLevels function will now receive items with an accurate `total_quantity`.
-    const itemsWithStatus = calculateStockLevels(result.rows);
-
-    res.json(itemsWithStatus);
+    return res.json(calculateStockLevels(result.rows));
   } catch (err) {
-    next(err);
+    return next(err);
   }
 };
 
@@ -321,11 +385,11 @@ exports.getItemById = async (req, res, next) => {
       [id],
     );
     if (itemResult.rows.length === 0) {
-      return res.status(404).json({ message: 'Not found' });
+      return res.status(404).json({ message: 'Item not found' });
     }
-    res.json(itemResult.rows[0]);
+    return res.json(itemResult.rows[0]);
   } catch (err) {
-    next(err);
+    return next(err);
   }
 };
 
@@ -334,9 +398,9 @@ exports.deleteItem = async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     await pool.query('DELETE FROM items WHERE id = $1', [id]);
-    res.status(204).send();
+    return res.status(204).send();
   } catch (err) {
-    next(err);
+    return next(err);
   }
 };
 
@@ -357,7 +421,7 @@ exports.adjustInventory = async (req, res, next) => {
         .status(404)
         .json({ message: 'Could not update inventory record.' });
     }
-    res.json({
+    return res.json({
       message: 'Inventory updated successfully',
       new_quantity: result.rows[0].quantity,
     });
@@ -367,6 +431,6 @@ exports.adjustInventory = async (req, res, next) => {
         .status(409)
         .json({ message: 'Update failed: quantity cannot be negative.' });
     }
-    next(err);
+    return next(err);
   }
 };
