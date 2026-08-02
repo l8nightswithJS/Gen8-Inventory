@@ -20,6 +20,9 @@ const RESERVED_FIELDS = new Set([
   'total_quantity',
   'status',
   'inventory_levels',
+  '__proto__',
+  'prototype',
+  'constructor',
 ]);
 
 function normalizeOptionalText(value) {
