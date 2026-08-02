@@ -1,9 +1,13 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import api from '../utils/axiosConfig';
+import {
+  buildItemPayload,
+  createItemForm,
+  getCustomAttributeKeys,
+} from '../utils/itemContract';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
 
-// Helper component for form fields
 const FormField = ({ label, id, children }) => (
   <div>
     <label
@@ -22,21 +26,14 @@ export default function AddItemModal({
   onClose,
   onCreated,
 }) {
-  const [form, setForm] = useState({ alert_enabled: true });
+  const [form, setForm] = useState(() => createItemForm());
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const CORE_FIELDS = new Set([
-    'part_number',
-    'lot_number',
-    'name',
-    'description',
-    'barcode',
-    'reorder_level',
-    'low_stock_threshold',
-    'alert_enabled',
-  ]);
-  const isCustomField = (key) => !CORE_FIELDS.has(key);
+  const customAttributeKeys = useMemo(
+    () => getCustomAttributeKeys(schema),
+    [schema],
+  );
 
   const handleChange = (e) => {
     const { name, type, checked, value } = e.target;
@@ -50,35 +47,26 @@ export default function AddItemModal({
     e.preventDefault();
     setError('');
     setSubmitting(true);
+
     try {
-      // ✅ FIX: Create a mutable copy of the form data to modify
-      const payload = { ...form, client_id: parseInt(clientId, 10) };
-
-      // ✅ FIX: Convert specific fields from string to number for API validation
-      // If the field exists and is not an empty string, parse it, otherwise send null.
-      if (payload.reorder_level && payload.reorder_level !== '') {
-        payload.reorder_level = parseFloat(payload.reorder_level);
-      } else {
-        delete payload.reorder_level; // Or set to null if your API prefers
-      }
-
-      if (payload.low_stock_threshold && payload.low_stock_threshold !== '') {
-        payload.low_stock_threshold = parseFloat(payload.low_stock_threshold);
-      } else {
-        delete payload.low_stock_threshold; // Or set to null
-      }
+      const payload = buildItemPayload({
+        form,
+        customKeys: customAttributeKeys,
+        clientId,
+      });
 
       await api.post('/api/items', payload);
       onCreated?.();
       onClose?.();
     } catch (err) {
-      setError(err?.response?.data?.message || 'Failed to add item.');
+      setError(
+        err?.response?.data?.message || err?.message || 'Failed to add item.',
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
-  const customSchema = schema.filter(isCustomField);
   const inputStyles =
     'w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500';
 
@@ -109,17 +97,20 @@ export default function AddItemModal({
           {error}
         </p>
       )}
+
       <form id="add-item-form" onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Part Number" id="add-part_number">
             <input
               id="add-part_number"
               name="part_number"
+              required
               value={form.part_number ?? ''}
               onChange={handleChange}
               className={inputStyles}
             />
           </FormField>
+
           <FormField label="Lot Number" id="add-lot_number">
             <input
               id="add-lot_number"
@@ -129,6 +120,7 @@ export default function AddItemModal({
               className={inputStyles}
             />
           </FormField>
+
           <div className="sm:col-span-2">
             <FormField label="Name" id="add-name">
               <input
@@ -140,6 +132,7 @@ export default function AddItemModal({
               />
             </FormField>
           </div>
+
           <div className="sm:col-span-2">
             <FormField label="Description" id="add-description">
               <textarea
@@ -152,27 +145,50 @@ export default function AddItemModal({
               />
             </FormField>
           </div>
-          {customSchema.map((key) => (
-            <FormField
-              label={key.replace(/_/g, ' ')}
-              id={`add-${key}`}
-              key={key}
-            >
+
+          <div className="sm:col-span-2">
+            <FormField label="Barcode" id="add-barcode">
               <input
-                id={`add-${key}`}
-                name={key}
-                value={form[key] ?? ''}
+                id="add-barcode"
+                name="barcode"
+                value={form.barcode ?? ''}
                 onChange={handleChange}
                 className={inputStyles}
               />
             </FormField>
-          ))}
+          </div>
         </div>
+
+        {customAttributeKeys.length > 0 && (
+          <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
+            <h4 className="text-base font-semibold text-gray-800 dark:text-white mb-4">
+              Custom Attributes
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {customAttributeKeys.map((key) => (
+                <FormField
+                  label={key.replace(/_/g, ' ')}
+                  id={`add-${key}`}
+                  key={key}
+                >
+                  <input
+                    id={`add-${key}`}
+                    name={key}
+                    value={form[key] ?? ''}
+                    onChange={handleChange}
+                    className={inputStyles}
+                  />
+                </FormField>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-4">
           <h4 className="text-base font-semibold text-gray-800 dark:text-white">
             Alerts
           </h4>
+
           <div className="flex items-center space-x-2">
             <input
               id="add-alert_enabled"
@@ -189,6 +205,7 @@ export default function AddItemModal({
               Enable Low-Stock Alert
             </label>
           </div>
+
           {form.alert_enabled && (
             <div className="pl-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FormField label="Reorder Level" id="add-reorder_level">
@@ -197,11 +214,13 @@ export default function AddItemModal({
                   name="reorder_level"
                   type="number"
                   min="0"
+                  step="1"
                   value={form.reorder_level ?? ''}
                   onChange={handleChange}
                   className={inputStyles}
                 />
               </FormField>
+
               <FormField
                 label="Low-Stock Threshold"
                 id="add-low_stock_threshold"
@@ -211,6 +230,7 @@ export default function AddItemModal({
                   name="low_stock_threshold"
                   type="number"
                   min="0"
+                  step="1"
                   value={form.low_stock_threshold ?? ''}
                   onChange={handleChange}
                   className={inputStyles}
