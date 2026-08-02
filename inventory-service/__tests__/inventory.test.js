@@ -20,33 +20,42 @@ jest.mock('../middleware/requireItemAccess', () => ({
   }),
 }));
 
-function handler(name) {
-  return (req, res) =>
+jest.mock('../controllers/inventoryController', () => {
+  const makeHandler = (name) => (req, res) =>
     res.json({
       handler: name,
       itemAccess: req.itemAccess || null,
       itemListAccess: req.itemListAccess || false,
     });
-}
 
-jest.mock('../controllers/inventoryController', () => ({
-  getMasterInventoryByLocation: handler('getMasterInventoryByLocation'),
-  getActiveAlerts: handler('getActiveAlerts'),
-  acknowledgeAlert: handler('acknowledgeAlert'),
-  listItems: handler('listItems'),
-  getItemById: handler('getItemById'),
-  createItem: handler('createItem'),
-  updateItem: handler('updateItem'),
-  deleteItem: handler('deleteItem'),
-  adjustInventory: handler('adjustInventory'),
-  bulkImportItems: handler('bulkImportItems'),
-  exportItems: handler('exportItems'),
-}));
+  return {
+    getMasterInventoryByLocation: makeHandler('getMasterInventoryByLocation'),
+    getActiveAlerts: makeHandler('getActiveAlerts'),
+    acknowledgeAlert: makeHandler('acknowledgeAlert'),
+    listItems: makeHandler('listItems'),
+    getItemById: makeHandler('getItemById'),
+    createItem: makeHandler('createItem'),
+    updateItem: makeHandler('updateItem'),
+    deleteItem: makeHandler('deleteItem'),
+    adjustInventory: makeHandler('adjustInventory'),
+    bulkImportItems: makeHandler('bulkImportItems'),
+    exportItems: makeHandler('exportItems'),
+  };
+});
 
-jest.mock('../controllers/labelsController', () => ({
-  printAllForClient: handler('printAllForClient'),
-  printSelected: handler('printSelected'),
-}));
+jest.mock('../controllers/labelsController', () => {
+  const makeHandler = (name) => (req, res) =>
+    res.json({
+      handler: name,
+      itemAccess: req.itemAccess || null,
+      itemListAccess: req.itemListAccess || false,
+    });
+
+  return {
+    printAllForClient: makeHandler('printAllForClient'),
+    printSelected: makeHandler('printSelected'),
+  };
+});
 
 const inventoryRoutes = require('../routes/inventory');
 const labelsRoutes = require('../routes/labels');
