@@ -1,18 +1,15 @@
 // inventory-service/routes/inventory.js
 const express = require('express');
 const { body, param, query } = require('express-validator');
-
-// Import all controller functions under the name 'inventoryController'
 const inventoryController = require('../controllers/inventoryController');
-// Import the single exported function from authMiddleware
 const { requireRole, handleValidation } = require('shared-auth');
+const { requireItemAccess } = require('../middleware/requireItemAccess');
 
 const router = express.Router();
 
-// This line will now work correctly because 'authenticate' is the function itself.
 router.get(
   '/by-location',
-  requireRole('admin'), // Only admins can access this global view
+  requireRole('admin'),
   inventoryController.getMasterInventoryByLocation,
 );
 
@@ -21,15 +18,15 @@ router.get(
   '/alerts',
   query('client_id').isInt().withMessage('client_id is required').toInt(),
   handleValidation,
-  inventoryController.getActiveAlerts, // Use the correct reference
+  inventoryController.getActiveAlerts,
 );
 
-// acknowledge a single alert (by item id)
 router.post(
   '/alerts/:id/acknowledge',
   param('id').isInt().withMessage('Invalid id').toInt(),
   handleValidation,
-  inventoryController.acknowledgeAlert, // Use the correct reference
+  requireItemAccess(),
+  inventoryController.acknowledgeAlert,
 );
 
 // ---------- Items list / CRUD ----------
@@ -37,54 +34,56 @@ router.get(
   '/',
   query('client_id').isInt().withMessage('client_id is required').toInt(),
   handleValidation,
-  inventoryController.listItems, // Use the correct reference
+  inventoryController.listItems,
 );
 
 router.get(
   '/:id',
   param('id').isInt().withMessage('Invalid id').toInt(),
   handleValidation,
-  inventoryController.getItemById, // Use the correct reference
+  requireItemAccess(),
+  inventoryController.getItemById,
 );
 
-// Allow any authenticated user to create (RLS checks ownership of client_id)
 router.post(
   '/',
   body('client_id').isInt().withMessage('client_id is required').toInt(),
   body('attributes').isObject().withMessage('attributes object is required'),
   handleValidation,
-  inventoryController.createItem, // Use the correct reference
+  inventoryController.createItem,
 );
 
-// Allow any authenticated user to update (RLS checks ownership)
 router.put(
   '/:id',
   param('id').isInt().withMessage('Invalid id').toInt(),
   body('attributes').isObject().withMessage('attributes object is required'),
   handleValidation,
-  inventoryController.updateItem, // Use the correct reference
+  requireItemAccess(),
+  inventoryController.updateItem,
 );
 
-// Allow any authenticated user to delete (RLS checks ownership)
 router.delete(
   '/:id',
   param('id').isInt().withMessage('Invalid id').toInt(),
   handleValidation,
-  inventoryController.deleteItem, // Use the correct reference
+  requireItemAccess(),
+  inventoryController.deleteItem,
 );
 
 router.post(
   '/adjust',
-  body('item_id').isInt().withMessage('item_id is required'),
-  body('location_id').isInt().withMessage('location_id is required'),
+  body('item_id').isInt().withMessage('item_id is required').toInt(),
+  body('location_id').isInt().withMessage('location_id is required').toInt(),
   body('change_quantity')
     .isInt()
-    .withMessage('change_quantity must be an integer'),
+    .withMessage('change_quantity must be an integer')
+    .toInt(),
   handleValidation,
+  requireItemAccess({ source: 'body', key: 'item_id' }),
   inventoryController.adjustInventory,
 );
 
-// ---------- Bulk import (remains admin-only) ----------
+// ---------- Bulk import ----------
 const bulkValidators = [
   body('client_id').isInt().withMessage('client_id is required').toInt(),
   body('items')
@@ -97,13 +96,14 @@ router.post(
   '/bulk',
   requireRole('admin'),
   bulkValidators,
-  inventoryController.bulkImportItems, // Use the correct reference
+  inventoryController.bulkImportItems,
 );
+
 router.post(
   '/import',
   requireRole('admin'),
   bulkValidators,
-  inventoryController.bulkImportItems, // Use the correct reference
+  inventoryController.bulkImportItems,
 );
 
 // ---------- Export (CSV) ----------
@@ -111,7 +111,7 @@ router.get(
   '/export',
   query('client_id').isInt().withMessage('client_id is required').toInt(),
   handleValidation,
-  inventoryController.exportItems, // Use the correct reference
+  inventoryController.exportItems,
 );
 
 module.exports = router;
