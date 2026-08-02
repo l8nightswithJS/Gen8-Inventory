@@ -58,6 +58,14 @@ router.post(
   inventoryController.acknowledgeAlert,
 );
 
+// Named GET routes must be declared before GET /:id.
+router.get(
+  '/export',
+  query('client_id').isInt({ min: 1 }).withMessage('client_id is required').toInt(),
+  handleValidation,
+  inventoryController.exportItems,
+);
+
 router.get(
   '/',
   query('client_id').isInt({ min: 1 }).withMessage('client_id is required').toInt(),
@@ -145,13 +153,6 @@ router.post(
   requireRole('admin'),
   bulkValidators,
   inventoryController.bulkImportItems,
-);
-
-router.get(
-  '/export',
-  query('client_id').isInt({ min: 1 }).withMessage('client_id is required').toInt(),
-  handleValidation,
-  inventoryController.exportItems,
 );
 
 module.exports = router;
