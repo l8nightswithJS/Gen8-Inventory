@@ -2,20 +2,20 @@ const express = require('express');
 const multer = require('multer');
 const { body, param } = require('express-validator');
 const controller = require('../controllers/clientsController');
-const { handleValidation } = require('shared-auth');
+const { handleValidation, requireClientMatch } = require('shared-auth');
 
 const router = express.Router();
 
-// ✅ FIX: Configure multer to store files in memory as buffers
 const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
+const upload = multer({ storage });
 
 router.get('/', controller.getAllClients);
 
 router.get(
-  '/:id',
-  param('id').isInt(),
+  '/:clientId',
+  param('clientId').isInt({ min: 1 }).toInt(),
   handleValidation,
+  requireClientMatch,
   controller.getClientById,
 );
 
@@ -28,17 +28,19 @@ router.post(
 );
 
 router.put(
-  '/:id',
+  '/:clientId',
   upload.single('logo'),
-  param('id').isInt(),
+  param('clientId').isInt({ min: 1 }).toInt(),
   handleValidation,
+  requireClientMatch,
   controller.updateClient,
 );
 
 router.delete(
-  '/:id',
-  param('id').isInt(),
+  '/:clientId',
+  param('clientId').isInt({ min: 1 }).toInt(),
   handleValidation,
+  requireClientMatch,
   controller.deleteClient,
 );
 
