@@ -3,16 +3,19 @@ const express = require('express');
 const router = express.Router();
 const ctrl = require('../controllers/labelsController');
 const { requireRole } = require('shared-auth');
+const { requireItemListAccess } = require('../middleware/requireItemAccess');
 
-// === SECURE ALL LABEL ROUTES ===
-// 1. User must be logged in.
-// 2. User must be an 'admin' or 'staff'.
 router.use(requireRole('admin', 'staff'));
 
-// Print ALL labels for a client { client_id }
+// The enclosing /api/labels mount validates the explicit client_id.
 router.post('/print/all', ctrl.printAllForClient);
 
-// Print labels for selected items { item_ids: number[] }
-router.post('/print/selected', ctrl.printSelected);
+// Selected labels do not carry a client_id, so resolve every item and ensure
+// all of them belong to a client assigned to the authenticated user.
+router.post(
+  '/print/selected',
+  requireItemListAccess(),
+  ctrl.printSelected,
+);
 
 module.exports = router;
