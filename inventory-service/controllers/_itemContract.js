@@ -77,6 +77,19 @@ function normalizeText(value, field, { required = false } = {}) {
     return null;
   }
 
+  // Spreadsheet libraries commonly return identifier-looking cells as
+  // numbers. Accept finite numeric values and normalize them to text so part
+  // numbers, lot numbers, and barcodes can be imported without weakening the
+  // contract for arrays, objects, or booleans.
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      throw new ItemContractError(`${field} must be a string.`);
+    }
+    value = String(value);
+  } else if (typeof value === 'bigint') {
+    value = String(value);
+  }
+
   if (typeof value !== 'string') {
     throw new ItemContractError(`${field} must be a string.`);
   }
