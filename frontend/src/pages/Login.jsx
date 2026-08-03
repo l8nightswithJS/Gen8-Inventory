@@ -38,10 +38,6 @@ async function warmGateway(onStatus) {
         healthUrl,
         {
           method: 'GET',
-          headers: {
-            Accept: 'application/json',
-            'Cache-Control': 'no-cache',
-          },
           cache: 'no-store',
         },
         12000,
