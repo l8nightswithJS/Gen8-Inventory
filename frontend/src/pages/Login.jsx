@@ -4,17 +4,7 @@ import api from '../utils/axiosConfig';
 import logoSvg from '../assets/logo.svg';
 import SignupModal from '../components/SignupModal';
 import { FiMail, FiLock } from 'react-icons/fi';
-import { clearToken } from '../utils/auth';
-
-function isTokenValid(token) {
-  if (!token) return false;
-  try {
-    const { exp } = JSON.parse(atob(token.split('.')[1]));
-    return typeof exp === 'number' && Date.now() < exp * 1000;
-  } catch {
-    return false;
-  }
-}
+import { clearToken, isTokenValid, setToken } from '../utils/auth';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -40,18 +30,26 @@ export default function Login() {
         email: email.trim().toLowerCase(),
         password,
       });
-      localStorage.setItem('token', data.token);
+
+      if (!isTokenValid(data?.token)) {
+        throw new Error('The server returned an invalid session token.');
+      }
+
+      setToken(data.token);
       localStorage.setItem('role', data.user?.role || '');
-      navigate('/dashboard');
+      navigate('/dashboard', { replace: true });
     } catch (err) {
-      setError(err?.response?.data?.message || 'Invalid email or password.');
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          'Invalid email or password.',
+      );
     }
   };
 
   return (
     <>
       <div className="min-h-screen flex flex-col md:flex-row">
-        {/* Left Panel */}
         <div className="hidden md:flex md:w-1/2 lg:w-2/5 bg-slate-900 text-white p-12 flex-col justify-between">
           <div>
             <div className="flex items-center gap-3">
@@ -69,7 +67,6 @@ export default function Login() {
           </p>
         </div>
 
-        {/* Right Panel */}
         <div className="w-full md:w-1/2 lg:w-3/5 bg-slate-50 dark:bg-slate-900 flex flex-col items-center justify-center p-4">
           <div className="w-full max-w-sm">
             <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white text-center">
@@ -119,7 +116,7 @@ export default function Login() {
               <div className="text-sm text-right">
                 <button
                   type="button"
-                  className="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
+                  className="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400"
                 >
                   Forgot password?
                 </button>
@@ -136,7 +133,7 @@ export default function Login() {
               Don&apos;t have an account?{' '}
               <button
                 onClick={() => setShowSignup(true)}
-                className="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
+                className="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400"
               >
                 Request Access
               </button>
