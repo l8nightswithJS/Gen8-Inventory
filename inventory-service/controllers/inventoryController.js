@@ -19,6 +19,20 @@ function sendContractError(err, res) {
   return true;
 }
 
+function sendUniqueItemConflict(err, res, action = 'Save') {
+  if (err?.code !== '23505') return false;
+
+  const constraint = String(err.constraint || '').toLowerCase();
+  const barcodeConflict = constraint.includes('barcode');
+
+  res.status(409).json({
+    message: barcodeConflict
+      ? `${action} failed. Each inventory record must have a unique barcode.`
+      : `${action} failed because another record already uses a value that must be unique.`,
+  });
+  return true;
+}
+
 function quoteIdentifier(identifier) {
   return `"${String(identifier).replace(/"/g, '""')}"`;
 }
@@ -79,12 +93,7 @@ exports.bulkImportItems = async (req, res, next) => {
     });
   } catch (err) {
     if (sendContractError(err, res)) return;
-    if (err.code === '23505') {
-      return res.status(409).json({
-        message:
-          'Import failed. One or more items contained a part_number and lot_number combination that already exists.',
-      });
-    }
+    if (sendUniqueItemConflict(err, res, 'Import')) return;
     console.error('Bulk import error:', err);
     return next(err);
   }
@@ -241,12 +250,7 @@ exports.createItem = async (req, res, next) => {
     return res.status(201).json(result.rows[0]);
   } catch (err) {
     if (sendContractError(err, res)) return;
-    if (err.code === '23505') {
-      return res.status(409).json({
-        message:
-          'An item with this Part Number and Lot Number combination already exists.',
-      });
-    }
+    if (sendUniqueItemConflict(err, res, 'Save')) return;
     return next(err);
   }
 };
@@ -341,12 +345,7 @@ exports.updateItem = async (req, res, next) => {
     return res.json(result.rows[0]);
   } catch (err) {
     if (sendContractError(err, res)) return;
-    if (err.code === '23505') {
-      return res.status(409).json({
-        message:
-          'An item with this Part Number and Lot Number combination already exists.',
-      });
-    }
+    if (sendUniqueItemConflict(err, res, 'Update')) return;
     return next(err);
   }
 };
@@ -361,7 +360,7 @@ exports.listItems = async (req, res, next) => {
        LEFT JOIN inventory inv ON i.id = inv.item_id
        WHERE i.client_id = $1
        GROUP BY i.id
-       ORDER BY i.name ASC, i.part_number ASC`,
+       ORDER BY i.name ASC, i.part_number ASC, i.lot_number ASC, i.id ASC`,
       [clientId],
     );
 
