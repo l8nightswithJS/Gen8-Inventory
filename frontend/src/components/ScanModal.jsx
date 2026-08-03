@@ -58,13 +58,11 @@ export default function ScanModal({ client, onClose, onScanSuccess }) {
           <p className="text-red-600 dark:text-red-400 mb-4">{error}</p>
         )}
         <div
-          className={`rounded-lg overflow-hidden border-4 ${
-            error ? 'border-red-500' : 'border-slate-300 dark:border-slate-700'
-          }`}
+          className={`rounded-lg overflow-hidden border-4 ${error ? 'border-red-500' : 'border-slate-300 dark:border-slate-700'
+            }`}
         >
           <BarcodeScannerComponent
-            onScan={handleScanResult}
-            isActive={!loading}
+            onDetected={handleScanResult}
           />
         </div>
         <p className="mt-2 text-sm text-gray-500 dark:text-slate-400">
