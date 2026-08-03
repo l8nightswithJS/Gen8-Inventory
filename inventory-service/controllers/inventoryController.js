@@ -22,13 +22,26 @@ function sendContractError(err, res) {
 function sendUniqueItemConflict(err, res, action = 'Save') {
   if (err?.code !== '23505') return false;
 
-  const constraint = String(err.constraint || '').toLowerCase();
-  const barcodeConflict = constraint.includes('barcode');
+  const rawConstraint = String(err.constraint || 'unknown_unique_constraint');
+  const safeConstraint = /^[a-z0-9_]+$/i.test(rawConstraint)
+    ? rawConstraint
+    : 'unknown_unique_constraint';
+  const normalizedConstraint = safeConstraint.toLowerCase();
+
+  let message = `${action} failed because another record already uses a value that must be unique.`;
+
+  if (normalizedConstraint.includes('barcode')) {
+    message = `${action} failed. Each inventory record must have a unique barcode.`;
+  } else if (normalizedConstraint === 'items_pkey') {
+    message = `${action} failed because the automatic item ID sequence is out of sync.`;
+  } else if (normalizedConstraint.includes('part_lot')) {
+    message = `${action} failed because the live database still has a unique part/lot restriction.`;
+  }
 
   res.status(409).json({
-    message: barcodeConflict
-      ? `${action} failed. Each inventory record must have a unique barcode.`
-      : `${action} failed because another record already uses a value that must be unique.`,
+    code: 'UNIQUE_CONFLICT',
+    constraint: safeConstraint,
+    message,
   });
   return true;
 }
