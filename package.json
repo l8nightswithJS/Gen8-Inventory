@@ -10,7 +10,7 @@
     "packages/*"
   ],
   "engines": {
-    "node": "18.x"
+    "node": ">=22.16.0 <23"
   },
   "scripts": {
     "dev": "concurrently \"npm run dev -w frontend\" \"npm run dev -w api-gateway\" \"npm run dev -w auth-service\" \"npm run dev -w inventory-service\" \"npm run dev -w client-service\" \"npm run dev -w barcode-service\""
