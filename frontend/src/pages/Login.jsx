@@ -11,6 +11,29 @@ import {
   setToken,
 } from '../utils/auth';
 
+async function requestLogin(email, password) {
+  const response = await fetch(`${api.defaults.baseURL}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+
+  const rawBody = await response.text();
+  let body;
+
+  try {
+    body = rawBody ? JSON.parse(rawBody) : {};
+  } catch {
+    throw new Error('The login service returned an unreadable response.');
+  }
+
+  if (!response.ok) {
+    throw new Error(body?.message || 'Invalid email or password.');
+  }
+
+  return body;
+}
+
 export default function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
@@ -30,22 +53,25 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    try {
-      const { data } = await api.post('/api/auth/login', {
-        email: email.trim().toLowerCase(),
-        password,
-      });
 
-      const tokenStatus = inspectToken(data?.token);
+    try {
+      const loginData = await requestLogin(
+        email.trim().toLowerCase(),
+        password,
+      );
+
+      const tokenStatus = inspectToken(loginData?.token);
       if (!tokenStatus.valid) {
         console.error('Session token validation failed:', {
           reason: tokenStatus.reason,
           responseKeys:
-            data && typeof data === 'object' ? Object.keys(data) : [],
-          tokenType: typeof data?.token,
+            loginData && typeof loginData === 'object'
+              ? Object.keys(loginData)
+              : [],
+          tokenType: typeof loginData?.token,
           tokenSegments:
-            typeof data?.token === 'string'
-              ? data.token.split('.').length
+            typeof loginData?.token === 'string'
+              ? loginData.token.split('.').length
               : 0,
           expiresAt: tokenStatus.expiresAt,
           now: tokenStatus.now,
@@ -53,15 +79,11 @@ export default function Login() {
         throw new Error(`Invalid session token: ${tokenStatus.reason}.`);
       }
 
-      setToken(data.token);
-      localStorage.setItem('role', data.user?.role || '');
+      setToken(loginData.token);
+      localStorage.setItem('role', loginData.user?.role || '');
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      setError(
-        err?.response?.data?.message ||
-          err?.message ||
-          'Invalid email or password.',
-      );
+      setError(err?.message || 'Invalid email or password.');
     }
   };
 
