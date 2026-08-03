@@ -1,9 +1,9 @@
-// In client-service/server.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { authMiddleware, requireClientMatch } = require('shared-auth');
+const { authMiddleware, errorHandler } = require('shared-auth');
 
+const pool = require('./db/pool');
 const clientsRouter = require('./routes/clients');
 
 const app = express();
@@ -11,18 +11,34 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// --- Public Routes ---
+// Process health: confirms the Node service is running.
 app.get('/healthz', (_req, res) => {
   res.json({ service: 'clients', ok: true });
 });
 
-// --- Security Middleware ---
-app.use(authMiddleware);
-// Note: requireClientMatch might need to be evaluated if it interferes with creating new clients,
-// but for now we assume it's configured correctly.
+// Dependency readiness: confirms Render can authenticate to PostgreSQL.
+app.get('/readyz', async (_req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    return res.json({ service: 'clients', ready: true, database: true });
+  } catch (error) {
+    console.error('Client service database readiness failed:', {
+      code: error.code,
+      message: error.message,
+    });
 
-// --- Protected Routes ---
+    return res.status(503).json({
+      service: 'clients',
+      ready: false,
+      database: false,
+      code: error.code || 'DATABASE_UNAVAILABLE',
+    });
+  }
+});
+
+app.use(authMiddleware);
 app.use('/api/clients', clientsRouter);
+app.use(errorHandler);
 
 const PORT = Number(process.env.PORT) || 8003;
 app.listen(PORT, '0.0.0.0', () => {
