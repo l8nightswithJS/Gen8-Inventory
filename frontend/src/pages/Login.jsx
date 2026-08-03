@@ -11,27 +11,122 @@ import {
   setToken,
 } from '../utils/auth';
 
-async function requestLogin(email, password) {
-  const response = await fetch(`${api.defaults.baseURL}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
+const sleep = (milliseconds) =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-  const rawBody = await response.text();
-  let body;
+async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    body = rawBody ? JSON.parse(rawBody) : {};
-  } catch {
-    throw new Error('The login service returned an unreadable response.');
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function warmGateway(onStatus) {
+  const healthUrl = `${api.defaults.baseURL}/healthz`;
+  const maxAttempts = 10;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await fetchWithTimeout(
+        healthUrl,
+        {
+          method: 'GET',
+          headers: {
+            Accept: 'application/json',
+            'Cache-Control': 'no-cache',
+          },
+          cache: 'no-store',
+        },
+        12000,
+      );
+
+      if (response.ok) {
+        await response.text().catch(() => '');
+        return;
+      }
+    } catch {
+      // Render free services can reject the first request while waking.
+    }
+
+    if (attempt === 1) {
+      onStatus?.('Starting the server. This can take about a minute…');
+    }
+
+    if (attempt < maxAttempts) {
+      await sleep(5000);
+    }
   }
 
-  if (!response.ok) {
-    throw new Error(body?.message || 'Invalid email or password.');
+  throw new Error(
+    'The server did not finish starting. Please wait a moment and try again.',
+  );
+}
+
+async function requestLogin(email, password, onStatus) {
+  await warmGateway(onStatus);
+  onStatus?.('Signing in…');
+
+  const loginUrl = `${api.defaults.baseURL}/api/auth/login`;
+  const maxAttempts = 3;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await fetchWithTimeout(
+        loginUrl,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        },
+        90000,
+      );
+
+      const rawBody = await response.text();
+      let body;
+
+      try {
+        body = rawBody ? JSON.parse(rawBody) : {};
+      } catch {
+        if (response.status >= 500 && attempt < maxAttempts) {
+          onStatus?.('The login service is still starting…');
+          await sleep(5000);
+          continue;
+        }
+        throw new Error('The login service returned an unreadable response.');
+      }
+
+      if (response.ok) return body;
+
+      if (response.status >= 500 && attempt < maxAttempts) {
+        onStatus?.('The login service is still starting…');
+        await sleep(5000);
+        continue;
+      }
+
+      throw new Error(body?.message || 'Invalid email or password.');
+    } catch (error) {
+      const retryableNetworkError =
+        error?.name === 'TypeError' || error?.name === 'AbortError';
+
+      if (retryableNetworkError && attempt < maxAttempts) {
+        onStatus?.('The login service is still starting…');
+        await warmGateway(onStatus);
+        await sleep(3000);
+        continue;
+      }
+
+      throw error;
+    }
   }
 
-  return body;
+  throw new Error('The login service is temporarily unavailable.');
 }
 
 export default function Login() {
@@ -39,6 +134,8 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [status, setStatus] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const [showSignup, setShowSignup] = useState(false);
 
   useEffect(() => {
@@ -52,12 +149,17 @@ export default function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+
     setError('');
+    setStatus('Connecting…');
+    setSubmitting(true);
 
     try {
       const loginData = await requestLogin(
         email.trim().toLowerCase(),
         password,
+        setStatus,
       );
 
       const tokenStatus = inspectToken(loginData?.token);
@@ -84,6 +186,9 @@ export default function Login() {
       navigate('/dashboard', { replace: true });
     } catch (err) {
       setError(err?.message || 'Invalid email or password.');
+    } finally {
+      setStatus('');
+      setSubmitting(false);
     }
   };
 
@@ -122,6 +227,12 @@ export default function Login() {
               </div>
             )}
 
+            {status && !error && (
+              <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg my-6 text-center text-sm dark:bg-blue-900/20 dark:border-blue-500/30 dark:text-blue-300">
+                {status}
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="mt-8 space-y-6">
               <div className="relative">
                 <FiMail className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
@@ -131,9 +242,10 @@ export default function Login() {
                   type="email"
                   autoComplete="email"
                   required
+                  disabled={submitting}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white pl-10 pr-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white pl-10 pr-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
                   placeholder="Email address"
                 />
               </div>
@@ -146,9 +258,10 @@ export default function Login() {
                   type="password"
                   autoComplete="current-password"
                   required
+                  disabled={submitting}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white pl-10 pr-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white pl-10 pr-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
                   placeholder="Password"
                 />
               </div>
@@ -164,9 +277,10 @@ export default function Login() {
 
               <button
                 type="submit"
-                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                disabled={submitting}
+                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-wait"
               >
-                Sign In
+                {submitting ? 'Connecting…' : 'Sign In'}
               </button>
             </form>
             <p className="mt-6 text-center text-sm text-slate-600 dark:text-slate-400">
