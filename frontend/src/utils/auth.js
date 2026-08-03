@@ -24,15 +24,45 @@ export function decodeJwtPayload(token) {
   try {
     const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
     const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
-    return JSON.parse(atob(padded));
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    return JSON.parse(new TextDecoder().decode(bytes));
   } catch {
     return null;
   }
 }
 
-export function isTokenValid(token) {
+export function inspectToken(token) {
+  if (typeof token !== 'string' || token.trim() === '') {
+    return { valid: false, reason: 'missing token' };
+  }
+
+  if (token.split('.').length !== 3) {
+    return { valid: false, reason: 'malformed token' };
+  }
+
   const payload = decodeJwtPayload(token);
-  return (
-    typeof payload?.exp === 'number' && Date.now() < payload.exp * 1000
-  );
+  if (!payload) {
+    return { valid: false, reason: 'unreadable token payload' };
+  }
+
+  if (typeof payload.exp !== 'number') {
+    return { valid: false, reason: 'token has no numeric expiration' };
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (payload.exp <= nowSeconds) {
+    return {
+      valid: false,
+      reason: 'token is already expired',
+      expiresAt: payload.exp,
+      now: nowSeconds,
+    };
+  }
+
+  return { valid: true, payload };
+}
+
+export function isTokenValid(token) {
+  return inspectToken(token).valid;
 }
