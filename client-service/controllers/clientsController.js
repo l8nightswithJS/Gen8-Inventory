@@ -59,14 +59,24 @@ exports.getAllClients = async (req, res, next) => {
 };
 
 // POST /api/clients/add
-exports.createClient = async (req, res) => {
-  const { name } = req.body;
-  const userId = req.user.id;
+exports.createClient = async (req, res, next) => {
+  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+  const userId = req.user?.id;
   let logo_url = null;
+  let dbClient = null;
+  let transactionStarted = false;
 
-  const dbClient = await pool.connect();
+  if (!name) {
+    return res.status(400).json({ message: 'Client name is required' });
+  }
+
+  if (!userId) {
+    return res.status(401).json({ message: 'Authentication error' });
+  }
 
   try {
+    dbClient = await pool.connect();
+
     if (req.file) {
       logo_url = await uploadLogoToSupabase(
         req.file.buffer,
@@ -76,6 +86,7 @@ exports.createClient = async (req, res) => {
     }
 
     await dbClient.query('BEGIN');
+    transactionStarted = true;
 
     const clientResult = await dbClient.query(
       'INSERT INTO clients (name, logo_url, user_id) VALUES ($1, $2, $3) RETURNING id',
@@ -84,26 +95,44 @@ exports.createClient = async (req, res) => {
     const newClientId = clientResult.rows[0].id;
 
     await dbClient.query(
-      'INSERT INTO user_clients (user_id, client_id) VALUES ($1, $2)',
+      `INSERT INTO user_clients (user_id, client_id)
+       VALUES ($1, $2)
+       ON CONFLICT DO NOTHING`,
       [userId, newClientId],
     );
-
-    await dbClient.query('COMMIT');
 
     const newClient = await dbClient.query(
       'SELECT * FROM clients WHERE id = $1',
       [newClientId],
     );
 
+    await dbClient.query('COMMIT');
+    transactionStarted = false;
+
     return res.status(201).json(newClient.rows[0]);
   } catch (error) {
-    await dbClient.query('ROLLBACK');
-    console.error('Create client transaction error:', error);
-    return res
-      .status(500)
-      .json({ message: 'Error creating client', error: error.message });
+    if (dbClient && transactionStarted) {
+      try {
+        await dbClient.query('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('Create client rollback error:', rollbackError.message);
+      }
+    }
+
+    console.error('Create client error:', {
+      code: error.code,
+      message: error.message,
+    });
+
+    if (error.code === '28P01') {
+      return res.status(503).json({
+        message: 'Client database credentials are invalid.',
+      });
+    }
+
+    return next(error);
   } finally {
-    dbClient.release();
+    if (dbClient) dbClient.release();
   }
 };
 
