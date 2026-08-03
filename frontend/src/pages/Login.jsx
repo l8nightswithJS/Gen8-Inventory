@@ -4,7 +4,12 @@ import api from '../utils/axiosConfig';
 import logoSvg from '../assets/logo.svg';
 import SignupModal from '../components/SignupModal';
 import { FiMail, FiLock } from 'react-icons/fi';
-import { clearToken, isTokenValid, setToken } from '../utils/auth';
+import {
+  clearToken,
+  inspectToken,
+  isTokenValid,
+  setToken,
+} from '../utils/auth';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -31,8 +36,21 @@ export default function Login() {
         password,
       });
 
-      if (!isTokenValid(data?.token)) {
-        throw new Error('The server returned an invalid session token.');
+      const tokenStatus = inspectToken(data?.token);
+      if (!tokenStatus.valid) {
+        console.error('Session token validation failed:', {
+          reason: tokenStatus.reason,
+          responseKeys:
+            data && typeof data === 'object' ? Object.keys(data) : [],
+          tokenType: typeof data?.token,
+          tokenSegments:
+            typeof data?.token === 'string'
+              ? data.token.split('.').length
+              : 0,
+          expiresAt: tokenStatus.expiresAt,
+          now: tokenStatus.now,
+        });
+        throw new Error(`Invalid session token: ${tokenStatus.reason}.`);
       }
 
       setToken(data.token);
