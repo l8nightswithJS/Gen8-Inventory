@@ -5,6 +5,7 @@ const { authMiddleware } = require('shared-auth');
 
 let ctrl = require('../controllers/authController');
 ctrl = ctrl && ctrl.default ? ctrl.default : ctrl;
+const refreshSession = require('../controllers/refreshController');
 
 const { login, register, verify, verifyToken, me, logout } = ctrl || {};
 
@@ -20,10 +21,8 @@ mustBeFn(register, 'register');
 mustBeFn(verifyToken || verify, 'verifyToken');
 mustBeFn(me, 'me');
 mustBeFn(logout, 'logout');
+mustBeFn(refreshSession, 'refreshSession');
 
-// ✅ Use shared-auth middleware instead of local one
-
-// 🟢 Debug logs for visibility
 router.use((req, _res, next) => {
   console.log(`[authRoutes] ${req.method} ${req.originalUrl}`);
   next();
@@ -33,13 +32,10 @@ router.use((req, _res, next) => {
 router.post('/login', login);
 router.post('/register', register);
 
-// Used by other services (legacy flow)
+// Protected identity/session routes
 router.post('/verify', authMiddleware, verifyToken || verify);
-
-// Identity route
 router.get('/me', authMiddleware, me);
-
-// Session end
+router.post('/refresh', authMiddleware, refreshSession);
 router.post('/logout', authMiddleware, logout);
 
 module.exports = router;
