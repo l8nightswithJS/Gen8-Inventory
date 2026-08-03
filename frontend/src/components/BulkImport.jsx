@@ -28,7 +28,13 @@ export default function BulkImport({ clientId, refresh, onClose }) {
         const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
         setHeaders(rows.length ? Object.keys(rows[0]) : []);
         setRawRows(rows);
-      } catch (parseError) {
+
+        if (rows.length === 0) {
+          setError('The selected file does not contain any data rows.');
+        }
+      } catch {
+        setHeaders([]);
+        setRawRows([]);
         setError(
           'Failed to parse the file. Please ensure it is a valid Excel or CSV file.',
         );
@@ -38,18 +44,50 @@ export default function BulkImport({ clientId, refresh, onClose }) {
   };
 
   const handleImport = async () => {
+    const normalizedClientId = Number(clientId);
+
+    if (!Number.isInteger(normalizedClientId) || normalizedClientId < 1) {
+      setError('A valid client is required before importing inventory.');
+      return;
+    }
+
+    if (rawRows.length === 0) {
+      setError('The selected file does not contain any data rows.');
+      return;
+    }
+
     setSubmitting(true);
     setError('');
     setSuccess('');
+
     try {
-      await api.post(`/api/clients/${clientId}/import`, { items: rawRows });
-      setSuccess(`${rawRows.length} items imported successfully!`);
-      refresh?.();
+      const { data } = await api.post('/api/items/import', {
+        client_id: normalizedClientId,
+        items: rawRows,
+      });
+
+      const importedCount = data?.successCount ?? rawRows.length;
+      setSuccess(`${importedCount} items imported successfully!`);
+      await refresh?.();
       setTimeout(() => {
         onClose?.();
       }, 1500);
-    } catch (e) {
-      setError(e?.response?.data?.message || 'Failed to import data.');
+    } catch (requestError) {
+      const responseData = requestError?.response?.data;
+      const validationMessage = Array.isArray(responseData?.errors)
+        ? responseData.errors.map((entry) => entry.msg).join(' ')
+        : '';
+
+      setError(
+        responseData?.message ||
+          responseData?.error ||
+          validationMessage ||
+          `Failed to import data${
+            requestError?.response?.status
+              ? ` (HTTP ${requestError.response.status})`
+              : ''
+          }.`,
+      );
     } finally {
       setSubmitting(false);
     }
@@ -76,7 +114,7 @@ export default function BulkImport({ clientId, refresh, onClose }) {
           type="file"
           className="hidden"
           onChange={handleFileChange}
-          accept=".xlsx, .xls, .csv"
+          accept=".xlsx,.xls,.csv"
         />
         {fileName && (
           <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mt-3">
@@ -94,28 +132,28 @@ export default function BulkImport({ clientId, refresh, onClose }) {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 dark:bg-slate-800">
                 <tr className="text-left">
-                  {headers.map((h) => (
+                  {headers.map((header) => (
                     <th
-                      key={h}
+                      key={header}
                       className="px-3 py-2 font-semibold text-slate-600 dark:text-slate-300"
                     >
-                      {h}
+                      {header}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-slate-900">
-                {rawRows.slice(0, 5).map((row, i) => (
+                {rawRows.slice(0, 5).map((row, index) => (
                   <tr
-                    key={i}
+                    key={index}
                     className="border-b border-slate-100 dark:border-slate-800 last:border-b-0"
                   >
-                    {headers.map((h) => (
+                    {headers.map((header) => (
                       <td
-                        key={h}
+                        key={header}
                         className="px-3 py-2 truncate max-w-xs text-slate-700 dark:text-slate-300"
                       >
-                        {String(row[h])}
+                        {String(row[header])}
                       </td>
                     ))}
                   </tr>
