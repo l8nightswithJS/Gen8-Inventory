@@ -20,7 +20,7 @@ jest.mock('../middleware/requireItemAccess', () => ({
   }),
 }));
 
-const makeHandler = (name) => (req, res) =>
+const mockMakeHandler = (name) => (req, res) =>
   res.json({
     handler: name,
     itemAccess: req.itemAccess || null,
@@ -28,32 +28,32 @@ const makeHandler = (name) => (req, res) =>
   });
 
 jest.mock('../controllers/inventoryController', () => ({
-  getMasterInventoryByLocation: makeHandler('getMasterInventoryByLocation'),
-  getActiveAlerts: makeHandler('getActiveAlerts'),
-  acknowledgeAlert: makeHandler('acknowledgeAlert'),
-  getItemById: makeHandler('getItemById'),
-  createItem: makeHandler('createItem'),
-  updateItem: makeHandler('updateItem'),
-  deleteItem: makeHandler('deleteItem'),
-  exportItems: makeHandler('exportItems'),
+  getMasterInventoryByLocation: mockMakeHandler('getMasterInventoryByLocation'),
+  getActiveAlerts: mockMakeHandler('getActiveAlerts'),
+  acknowledgeAlert: mockMakeHandler('acknowledgeAlert'),
+  getItemById: mockMakeHandler('getItemById'),
+  createItem: mockMakeHandler('createItem'),
+  updateItem: mockMakeHandler('updateItem'),
+  deleteItem: mockMakeHandler('deleteItem'),
+  exportItems: mockMakeHandler('exportItems'),
 }));
 
 jest.mock('../controllers/inventoryReadController', () => ({
-  listItems: makeHandler('listItems'),
+  listItems: mockMakeHandler('listItems'),
 }));
 
 jest.mock('../controllers/bulkImportController', () => ({
-  bulkImportItems: makeHandler('bulkImportItems'),
+  bulkImportItems: mockMakeHandler('bulkImportItems'),
 }));
 
 jest.mock('../controllers/inventoryAdjustmentController', () => ({
-  adjustInventory: makeHandler('adjustInventory'),
-  resolveReview: makeHandler('resolveReview'),
+  adjustInventory: mockMakeHandler('adjustInventory'),
+  resolveReview: mockMakeHandler('resolveReview'),
 }));
 
 jest.mock('../controllers/labelsController', () => ({
-  printAllForClient: makeHandler('printAllForClient'),
-  printSelected: makeHandler('printSelected'),
+  printAllForClient: mockMakeHandler('printAllForClient'),
+  printSelected: mockMakeHandler('printSelected'),
 }));
 
 const inventoryRoutes = require('../routes/inventory');
