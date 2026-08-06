@@ -20,42 +20,41 @@ jest.mock('../middleware/requireItemAccess', () => ({
   }),
 }));
 
-jest.mock('../controllers/inventoryController', () => {
-  const makeHandler = (name) => (req, res) =>
-    res.json({
-      handler: name,
-      itemAccess: req.itemAccess || null,
-      itemListAccess: req.itemListAccess || false,
-    });
+const makeHandler = (name) => (req, res) =>
+  res.json({
+    handler: name,
+    itemAccess: req.itemAccess || null,
+    itemListAccess: req.itemListAccess || false,
+  });
 
-  return {
-    getMasterInventoryByLocation: makeHandler('getMasterInventoryByLocation'),
-    getActiveAlerts: makeHandler('getActiveAlerts'),
-    acknowledgeAlert: makeHandler('acknowledgeAlert'),
-    listItems: makeHandler('listItems'),
-    getItemById: makeHandler('getItemById'),
-    createItem: makeHandler('createItem'),
-    updateItem: makeHandler('updateItem'),
-    deleteItem: makeHandler('deleteItem'),
-    adjustInventory: makeHandler('adjustInventory'),
-    bulkImportItems: makeHandler('bulkImportItems'),
-    exportItems: makeHandler('exportItems'),
-  };
-});
+jest.mock('../controllers/inventoryController', () => ({
+  getMasterInventoryByLocation: makeHandler('getMasterInventoryByLocation'),
+  getActiveAlerts: makeHandler('getActiveAlerts'),
+  acknowledgeAlert: makeHandler('acknowledgeAlert'),
+  getItemById: makeHandler('getItemById'),
+  createItem: makeHandler('createItem'),
+  updateItem: makeHandler('updateItem'),
+  deleteItem: makeHandler('deleteItem'),
+  exportItems: makeHandler('exportItems'),
+}));
 
-jest.mock('../controllers/labelsController', () => {
-  const makeHandler = (name) => (req, res) =>
-    res.json({
-      handler: name,
-      itemAccess: req.itemAccess || null,
-      itemListAccess: req.itemListAccess || false,
-    });
+jest.mock('../controllers/inventoryReadController', () => ({
+  listItems: makeHandler('listItems'),
+}));
 
-  return {
-    printAllForClient: makeHandler('printAllForClient'),
-    printSelected: makeHandler('printSelected'),
-  };
-});
+jest.mock('../controllers/bulkImportController', () => ({
+  bulkImportItems: makeHandler('bulkImportItems'),
+}));
+
+jest.mock('../controllers/inventoryAdjustmentController', () => ({
+  adjustInventory: makeHandler('adjustInventory'),
+  resolveReview: makeHandler('resolveReview'),
+}));
+
+jest.mock('../controllers/labelsController', () => ({
+  printAllForClient: makeHandler('printAllForClient'),
+  printSelected: makeHandler('printSelected'),
+}));
 
 const inventoryRoutes = require('../routes/inventory');
 const labelsRoutes = require('../routes/labels');
@@ -90,13 +89,13 @@ describe('inventory route authorization wiring', () => {
     });
   });
 
-  test('protects inventory adjustment by body item_id', async () => {
+  test('protects decimal inventory adjustment by body item_id', async () => {
     const response = await request(app)
       .post('/api/inventory/adjust')
       .send({
         item_id: 123,
         location_id: 5,
-        change_quantity: 10,
+        change_quantity: -2.5,
       });
 
     expect(response.statusCode).toBe(200);
@@ -104,6 +103,22 @@ describe('inventory route authorization wiring', () => {
     expect(response.body.itemAccess).toEqual({
       source: 'body',
       key: 'item_id',
+    });
+  });
+
+  test('protects review resolution by item ID', async () => {
+    const response = await request(app)
+      .post('/api/inventory/123/review/resolve')
+      .send({
+        uom: 'lb',
+        allocations: [{ location_id: 5, quantity: 12.5 }],
+      });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.handler).toBe('resolveReview');
+    expect(response.body.itemAccess).toEqual({
+      source: 'params',
+      key: 'id',
     });
   });
 
