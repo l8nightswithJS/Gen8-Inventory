@@ -8,7 +8,7 @@ import {
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
 
-const FormField = ({ label, id, children }) => (
+const FormField = ({ label, id, help, children }) => (
   <div>
     <label
       htmlFor={id}
@@ -17,6 +17,9 @@ const FormField = ({ label, id, children }) => (
       {label}
     </label>
     {children}
+    {help && (
+      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{help}</p>
+    )}
   </div>
 );
 
@@ -35,16 +38,16 @@ export default function AddItemModal({
     [schema],
   );
 
-  const handleChange = (e) => {
-    const { name, type, checked, value } = e.target;
-    setForm((prev) => ({
-      ...prev,
+  const handleChange = (event) => {
+    const { name, type, checked, value } = event.target;
+    setForm((previous) => ({
+      ...previous,
       [name]: type === 'checkbox' ? checked : value,
     }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     setError('');
     setSubmitting(true);
 
@@ -58,9 +61,11 @@ export default function AddItemModal({
       await api.post('/api/items', payload);
       onCreated?.();
       onClose?.();
-    } catch (err) {
+    } catch (requestError) {
       setError(
-        err?.response?.data?.message || err?.message || 'Failed to add item.',
+        requestError?.response?.data?.message ||
+          requestError?.message ||
+          'Failed to add item.',
       );
     } finally {
       setSubmitting(false);
@@ -121,17 +126,30 @@ export default function AddItemModal({
             />
           </FormField>
 
-          <div className="sm:col-span-2">
-            <FormField label="Name" id="add-name">
-              <input
-                id="add-name"
-                name="name"
-                value={form.name ?? ''}
-                onChange={handleChange}
-                className={inputStyles}
-              />
-            </FormField>
-          </div>
+          <FormField
+            label="Unit of Measure"
+            id="add-uom"
+            help="Examples: lb, kg, pieces, boxes, bags"
+          >
+            <input
+              id="add-uom"
+              name="uom"
+              value={form.uom ?? ''}
+              onChange={handleChange}
+              className={inputStyles}
+              maxLength={40}
+            />
+          </FormField>
+
+          <FormField label="Name" id="add-name">
+            <input
+              id="add-name"
+              name="name"
+              value={form.name ?? ''}
+              onChange={handleChange}
+              className={inputStyles}
+            />
+          </FormField>
 
           <div className="sm:col-span-2">
             <FormField label="Description" id="add-description">
@@ -146,17 +164,33 @@ export default function AddItemModal({
             </FormField>
           </div>
 
-          <div className="sm:col-span-2">
-            <FormField label="Barcode" id="add-barcode">
-              <input
-                id="add-barcode"
-                name="barcode"
-                value={form.barcode ?? ''}
-                onChange={handleChange}
-                className={inputStyles}
-              />
-            </FormField>
-          </div>
+          <FormField
+            label="Internal Inventory Barcode"
+            id="add-barcode"
+            help="Unique barcode used to identify one inventory or container record."
+          >
+            <input
+              id="add-barcode"
+              name="barcode"
+              value={form.barcode ?? ''}
+              onChange={handleChange}
+              className={inputStyles}
+            />
+          </FormField>
+
+          <FormField
+            label="Vendor Barcode"
+            id="add-vendor_barcode"
+            help="Manufacturer or supplier barcode; it may repeat across containers."
+          >
+            <input
+              id="add-vendor_barcode"
+              name="vendor_barcode"
+              value={form.vendor_barcode ?? ''}
+              onChange={handleChange}
+              className={inputStyles}
+            />
+          </FormField>
         </div>
 
         {customAttributeKeys.length > 0 && (
@@ -214,7 +248,7 @@ export default function AddItemModal({
                   name="reorder_level"
                   type="number"
                   min="0"
-                  step="1"
+                  step="0.001"
                   value={form.reorder_level ?? ''}
                   onChange={handleChange}
                   className={inputStyles}
@@ -230,7 +264,7 @@ export default function AddItemModal({
                   name="low_stock_threshold"
                   type="number"
                   min="0"
-                  step="1"
+                  step="0.001"
                   value={form.low_stock_threshold ?? ''}
                   onChange={handleChange}
                   className={inputStyles}
