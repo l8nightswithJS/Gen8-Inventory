@@ -148,16 +148,33 @@ export default function ClientPage() {
 
   const handleScanSuccess = (result) => {
     handleModal('scan', false);
+
     if (result.type === 'location') {
       setCurrentLocation(result.data);
       handleModal('scannedLocation', result.data);
-    } else if (result.type === 'item') {
-      if (!currentLocation) {
-        alert('No active location. Scan a location first to adjust stock.');
-        handleModal('scannedItem', result.data);
+      return;
+    }
+
+    if (result.type !== 'item') return;
+
+    const scannedItem = result.data;
+    if (scannedItem?.review_status === 'needs_review') {
+      setAdjustingItem(null);
+      if (isAdmin) {
+        handleModal('reviewItem', scannedItem);
       } else {
-        setAdjustingItem(result.data);
+        setError(
+          'This item has unresolved imported quantity or location data. An administrator must resolve it before stock can be adjusted.',
+        );
       }
+      return;
+    }
+
+    if (!currentLocation) {
+      alert('No active location. Scan a location first to adjust stock.');
+      handleModal('scannedItem', scannedItem);
+    } else {
+      setAdjustingItem(scannedItem);
     }
   };
 
