@@ -13,19 +13,19 @@ export default function BulkImport({ clientId, refresh, onClose }) {
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
+  const handleFileChange = (event) => {
+    const file = event.target.files[0];
     if (!file) return;
     setFileName(file.name);
     setError('');
     setSuccess('');
 
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = (loadEvent) => {
       try {
-        const wb = XLSX.read(evt.target.result, { type: 'binary' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+        const workbook = XLSX.read(loadEvent.target.result, { type: 'binary' });
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
         setHeaders(rows.length ? Object.keys(rows[0]) : []);
         setRawRows(rows);
 
@@ -67,15 +67,15 @@ export default function BulkImport({ clientId, refresh, onClose }) {
       });
 
       const importedCount = data?.successCount ?? rawRows.length;
-      const warningCount = Number(data?.warningCount || 0);
+      const needsReviewCount = Number(data?.needsReviewCount || 0);
       setSuccess(
-        warningCount > 0
-          ? `${importedCount} items imported. ${warningCount} On Hand value(s) need review.`
+        needsReviewCount > 0
+          ? `${importedCount} items imported. ${needsReviewCount} item(s) were placed in Needs Review for quantity or location resolution.`
           : `${importedCount} items imported successfully!`,
       );
       await refresh?.();
 
-      if (warningCount === 0) {
+      if (needsReviewCount === 0) {
         setTimeout(() => {
           onClose?.();
         }, 1500);
@@ -116,6 +116,10 @@ export default function BulkImport({ clientId, refresh, onClose }) {
         </p>
         <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
           Excel (XLSX) or CSV files
+        </p>
+        <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
+          Part, lot, name, description, quantity, location, UOM, and barcode
+          headers are matched automatically.
         </p>
         <input
           ref={fileRef}
