@@ -1,12 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import api from '../utils/axiosConfig';
-import {
-  buildItemPayload,
-  createItemForm,
-  getCustomAttributeKeys,
-} from '../utils/itemContract';
+import { buildItemPayload, createItemForm } from '../utils/itemContract';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
+import TypedAttributeFields from './TypedAttributeFields';
 
 const FormField = ({ label, id, help, children }) => (
   <div>
@@ -25,18 +22,21 @@ const FormField = ({ label, id, help, children }) => (
 
 export default function EditItemModal({
   item,
-  schema = [],
+  settings = {},
   onClose,
   onUpdated,
 }) {
+  const fieldDefinitions = useMemo(
+    () => (Array.isArray(settings.field_definitions) ? settings.field_definitions : []),
+    [settings],
+  );
+  const customAttributeKeys = useMemo(
+    () => fieldDefinitions.map((definition) => definition.key),
+    [fieldDefinitions],
+  );
   const [form, setForm] = useState(() => createItemForm(item));
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-
-  const customAttributeKeys = useMemo(
-    () => getCustomAttributeKeys(schema, item),
-    [schema, item],
-  );
 
   useEffect(() => {
     setForm(createItemForm(item));
@@ -65,7 +65,7 @@ export default function EditItemModal({
       });
 
       await api.put(`/api/items/${item.id}`, payload);
-      onUpdated?.();
+      await onUpdated?.();
       onClose?.();
     } catch (requestError) {
       setError(
@@ -89,7 +89,7 @@ export default function EditItemModal({
     <BaseModal
       isOpen={!!item}
       onClose={onClose}
-      title={`Edit: ${item?.name ?? item?.part_number ?? 'Item'}`}
+      title={`Edit: ${item?.name ?? item?.description ?? item?.part_number ?? 'Item'}`}
       size="max-w-2xl"
       footer={
         <div className="flex items-center justify-end gap-2">
@@ -221,28 +221,16 @@ export default function EditItemModal({
           </FormField>
         </div>
 
-        {customAttributeKeys.length > 0 && (
+        {fieldDefinitions.length > 0 && (
           <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
             <h4 className="text-base font-semibold text-gray-800 dark:text-white mb-4">
-              Custom Attributes
+              {settings.profile_label || 'Profile'} Fields
             </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {customAttributeKeys.map((key) => (
-                <FormField
-                  label={key.replace(/_/g, ' ')}
-                  id={`edit-${key}`}
-                  key={key}
-                >
-                  <input
-                    id={`edit-${key}`}
-                    name={key}
-                    value={form[key] ?? ''}
-                    onChange={handleChange}
-                    className={inputStyles}
-                  />
-                </FormField>
-              ))}
-            </div>
+            <TypedAttributeFields
+              definitions={fieldDefinitions}
+              form={form}
+              onChange={handleChange}
+            />
           </div>
         )}
 
