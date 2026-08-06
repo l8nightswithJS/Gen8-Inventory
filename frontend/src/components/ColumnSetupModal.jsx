@@ -19,24 +19,41 @@ import {
 } from '@dnd-kit/sortable';
 import { SortableItem } from './ui/SortableItem';
 
+const DEFAULT_COLUMNS = [
+  'part_number',
+  'name',
+  'description',
+  'lot_number',
+  'inventory_location',
+  'total_quantity',
+  'uom',
+  'status',
+];
+
+const COLUMN_LABELS = {
+  part_number: 'Part Number',
+  lot_number: 'Lot Number',
+  inventory_location: 'Location',
+  total_quantity: 'On Hand',
+  uom: 'Unit of Measure',
+  status: 'Status',
+  barcode: 'Internal Barcode',
+  vendor_barcode: 'Vendor Barcode',
+  reorder_level: 'Reorder Level',
+  low_stock_threshold: 'Low-Stock Threshold',
+};
+
+const displayColumn = (column) =>
+  COLUMN_LABELS[column] ||
+  column.replace(/_/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase());
+
 export default function ColumnSetupModal({
   isOpen,
   onClose,
   onSave,
   initial = [],
 }) {
-  const [cols, setCols] = useState(
-    initial.length
-      ? initial
-      : [
-          'part_number',
-          'name',
-          'description',
-          'lot_number',
-          'barcode',
-          'total_quantity',
-        ],
-  );
+  const [cols, setCols] = useState(initial.length ? initial : DEFAULT_COLUMNS);
   const [input, setInput] = useState('');
 
   const sensors = useSensors(
@@ -46,35 +63,36 @@ export default function ColumnSetupModal({
     }),
   );
 
-  const addCol = () => {
-    const k = getCanonicalKey(input);
-    if (!k || cols.includes(k)) {
+  const addColumn = () => {
+    const key = getCanonicalKey(input);
+    if (!key || cols.includes(key)) {
       setInput('');
       return;
     }
-    setCols((prev) => [...prev, k]);
+    setCols((previous) => [...previous, key]);
     setInput('');
   };
 
-  const remove = (key) => {
-    setCols((prev) => prev.filter((c) => c !== key));
+  const removeColumn = (key) => {
+    setCols((previous) => previous.filter((column) => column !== key));
   };
 
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter') {
-      addCol();
+  const handleKeyDown = (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      addColumn();
     }
   };
 
   const handleDragEnd = (event) => {
     const { active, over } = event;
-    if (active.id !== over.id) {
-      setCols((items) => {
-        const oldIndex = items.indexOf(active.id);
-        const newIndex = items.indexOf(over.id);
-        return arrayMove(items, oldIndex, newIndex);
-      });
-    }
+    if (!over || active.id === over.id) return;
+
+    setCols((items) => {
+      const oldIndex = items.indexOf(active.id);
+      const newIndex = items.indexOf(over.id);
+      return arrayMove(items, oldIndex, newIndex);
+    });
   };
 
   return (
@@ -94,18 +112,24 @@ export default function ColumnSetupModal({
       }
     >
       <div className="space-y-4">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(normalizeKey(e.target.value))}
-            onKeyPress={handleKeyPress}
-            placeholder="Add column..."
-            className="flex-1 border rounded px-3 py-2 border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <Button onClick={addCol} variant="primary">
-            Add
-          </Button>
+        <div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={input}
+              onChange={(event) => setInput(normalizeKey(event.target.value))}
+              onKeyDown={handleKeyDown}
+              placeholder="Add column..."
+              className="flex-1 border rounded px-3 py-2 border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <Button onClick={addColumn} variant="primary">
+              Add
+            </Button>
+          </div>
+          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+            Core fields such as Description remain available for molded parts,
+            while client-specific attributes can be added as columns.
+          </p>
         </div>
 
         <DndContext
@@ -115,14 +139,15 @@ export default function ColumnSetupModal({
         >
           <SortableContext items={cols} strategy={verticalListSortingStrategy}>
             <div className="flex flex-col gap-2 p-2 rounded-md border dark:border-slate-700 min-h-[12rem] max-h-96 overflow-y-auto">
-              {cols.map((c) => (
-                <SortableItem key={c} id={c}>
+              {cols.map((column) => (
+                <SortableItem key={column} id={column}>
                   <div className="flex items-center gap-2 bg-gray-100 dark:bg-slate-800 px-2 py-1 rounded text-sm font-medium w-full text-slate-800 dark:text-slate-200">
-                    <span>{c.replace(/_/g, ' ')}</span>
+                    <span>{displayColumn(column)}</span>
                     <button
-                      onClick={() => remove(c)}
+                      type="button"
+                      onClick={() => removeColumn(column)}
                       className="ml-auto text-red-600 hover:text-red-800 font-bold"
-                      title={`Remove ${c}`}
+                      title={`Remove ${displayColumn(column)}`}
                     >
                       &times;
                     </button>
