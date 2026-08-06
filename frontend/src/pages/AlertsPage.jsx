@@ -6,22 +6,28 @@ import Button from '../components/ui/Button';
 const THRESHOLD_LABELS = {
   low_stock_threshold: 'Low-Stock Threshold',
   reorder_level: 'Reorder Level',
+  minimum_quantity: 'Minimum Quantity',
+  out_of_stock: 'Zero Quantity',
 };
 
 const ROWS_PER_PAGE = 12;
 
 function alertStatus(alert) {
+  if (alert.status) return alert.status;
   return Number(alert.qty) <= 0 ? 'out_of_stock' : 'low_stock';
 }
 
 const STATUS_LABELS = {
   low_stock: 'Low Stock',
+  critical: 'Critical',
   out_of_stock: 'Out of Stock',
 };
 
 const STATUS_CLASSES = {
   low_stock:
     'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300',
+  critical:
+    'bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300',
   out_of_stock: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
 };
 
@@ -55,7 +61,7 @@ const AlertCard = ({ alert, onAcknowledge }) => {
         <span
           className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_CLASSES[status]}`}
         >
-          {STATUS_LABELS[status]}
+          {STATUS_LABELS[status] || status}
         </span>
       </div>
       <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700 grid grid-cols-2 gap-4 text-sm">
@@ -215,24 +221,12 @@ export default function AlertsPage() {
           <table className="w-full table-auto border-collapse text-sm">
             <thead className="bg-slate-50 dark:bg-slate-800">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold text-slate-600 dark:text-slate-300">
-                  Item
-                </th>
-                <th className="px-4 py-3 text-center font-semibold text-slate-600 dark:text-slate-300">
-                  Current Qty
-                </th>
-                <th className="px-4 py-3 text-center font-semibold text-slate-600 dark:text-slate-300">
-                  Threshold
-                </th>
-                <th className="px-4 py-3 text-left font-semibold text-slate-600 dark:text-slate-300">
-                  Reason
-                </th>
-                <th className="px-4 py-3 text-left font-semibold text-slate-600 dark:text-slate-300">
-                  Status
-                </th>
-                <th className="px-4 py-3 text-center font-semibold text-slate-600 dark:text-slate-300">
-                  Action
-                </th>
+                <th className="px-4 py-3 text-left font-semibold text-slate-600 dark:text-slate-300">Item</th>
+                <th className="px-4 py-3 text-center font-semibold text-slate-600 dark:text-slate-300">Current Qty</th>
+                <th className="px-4 py-3 text-center font-semibold text-slate-600 dark:text-slate-300">Threshold</th>
+                <th className="px-4 py-3 text-left font-semibold text-slate-600 dark:text-slate-300">Reason</th>
+                <th className="px-4 py-3 text-left font-semibold text-slate-600 dark:text-slate-300">Status</th>
+                <th className="px-4 py-3 text-center font-semibold text-slate-600 dark:text-slate-300">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -266,7 +260,7 @@ export default function AlertsPage() {
                       <span
                         className={`rounded-full px-2 py-1 text-xs font-semibold ${STATUS_CLASSES[status]}`}
                       >
-                        {STATUS_LABELS[status]}
+                        {STATUS_LABELS[status] || status}
                       </span>
                     </td>
                     <td className="px-4 py-2 text-center">
