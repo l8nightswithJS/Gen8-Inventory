@@ -3,6 +3,7 @@ const { body, param, query } = require('express-validator');
 const inventoryController = require('../controllers/inventoryController');
 const bulkImportController = require('../controllers/bulkImportController');
 const inventoryReadController = require('../controllers/inventoryReadController');
+const inventoryAdjustmentController = require('../controllers/inventoryAdjustmentController');
 const { requireRole, handleValidation } = require('shared-auth');
 const { requireItemAccess } = require('../middleware/requireItemAccess');
 
@@ -14,21 +15,29 @@ const optionalText = (field) =>
     .isString()
     .withMessage(`${field} must be a string`);
 
-const optionalNonNegativeInteger = (field) =>
+const isSupportedDecimal = (value, { signed = false } = {}) => {
+  if (value === '' || value === null || value === undefined) return true;
+  const expression = signed
+    ? /^-?\d+(?:\.\d{1,3})?$/
+    : /^\d+(?:\.\d{1,3})?$/;
+  return expression.test(String(value).trim());
+};
+
+const optionalNonNegativeDecimal = (field) =>
   body(field)
     .optional({ nullable: true, checkFalsy: false })
-    .custom((value) => value === '' || Number.isInteger(Number(value)))
-    .withMessage(`${field} must be an integer`)
-    .custom((value) => value === '' || Number(value) >= 0)
-    .withMessage(`${field} must be non-negative`);
+    .custom((value) => isSupportedDecimal(value))
+    .withMessage(`${field} must be a non-negative number with up to 3 decimals`);
 
 const commonItemValidators = [
   optionalText('lot_number'),
   optionalText('name'),
   optionalText('description'),
   optionalText('barcode'),
-  optionalNonNegativeInteger('reorder_level'),
-  optionalNonNegativeInteger('low_stock_threshold'),
+  optionalText('vendor_barcode'),
+  optionalText('uom'),
+  optionalNonNegativeDecimal('reorder_level'),
+  optionalNonNegativeDecimal('low_stock_threshold'),
   body('alert_enabled')
     .optional()
     .isBoolean()
@@ -60,7 +69,7 @@ router.post(
   inventoryController.acknowledgeAlert,
 );
 
-// Named GET routes must be declared before GET /:id.
+// Named routes must be declared before GET /:id.
 router.get(
   '/export',
   query('client_id').isInt({ min: 1 }).withMessage('client_id is required').toInt(),
@@ -73,6 +82,30 @@ router.get(
   query('client_id').isInt({ min: 1 }).withMessage('client_id is required').toInt(),
   handleValidation,
   inventoryReadController.listItems,
+);
+
+router.post(
+  '/:id/review/resolve',
+  requireRole('admin'),
+  param('id').isInt({ min: 1 }).withMessage('Invalid id').toInt(),
+  body('uom')
+    .optional({ nullable: true })
+    .isString()
+    .isLength({ max: 40 })
+    .withMessage('uom must be 40 characters or fewer'),
+  body('allocations')
+    .isArray({ min: 1 })
+    .withMessage('allocations must be a non-empty array'),
+  body('allocations.*.location_id')
+    .isInt({ min: 1 })
+    .withMessage('each allocation requires a valid location_id')
+    .toInt(),
+  body('allocations.*.quantity')
+    .custom((value) => isSupportedDecimal(value))
+    .withMessage('each allocation quantity must be non-negative with up to 3 decimals'),
+  handleValidation,
+  requireItemAccess(),
+  inventoryAdjustmentController.resolveReview,
 );
 
 router.get(
@@ -127,12 +160,11 @@ router.post(
     .withMessage('location_id is required')
     .toInt(),
   body('change_quantity')
-    .isFloat()
-    .withMessage('change_quantity must be a number')
-    .toFloat(),
+    .custom((value) => isSupportedDecimal(value, { signed: true }))
+    .withMessage('change_quantity must be a number with up to 3 decimals'),
   handleValidation,
   requireItemAccess({ source: 'body', key: 'item_id' }),
-  inventoryController.adjustInventory,
+  inventoryAdjustmentController.adjustInventory,
 );
 
 const bulkValidators = [
