@@ -1,5 +1,9 @@
 const pool = require('../db/pool');
-const { computeLowState, deriveStockStatus } = require('./_stockLogic');
+const { computeLowState } = require('./_stockLogic');
+const {
+  applyProfileToItem,
+  loadClientSettings,
+} = require('./_profileSettings');
 
 const LEGACY_OPERATIONAL_ATTRIBUTE_KEYS = new Set([
   'location',
@@ -37,33 +41,37 @@ function sanitizeDisplayAttributes(attributes) {
 exports.listItems = async (req, res, next) => {
   try {
     const clientId = Number(req.query.client_id);
-    const result = await pool.query(
-      `SELECT
-         i.*,
-         COALESCE(SUM(inv.quantity), 0)::numeric AS total_quantity,
-         COUNT(inv.id)::int AS inventory_record_count,
-         COALESCE(
-           string_agg(DISTINCT loc.code, ', ' ORDER BY loc.code),
-           ''
-         ) AS inventory_location
-       FROM items i
-       LEFT JOIN inventory inv ON i.id = inv.item_id
-       LEFT JOIN locations loc ON loc.id = inv.location_id
-       WHERE i.client_id = $1
-       GROUP BY i.id
-       ORDER BY i.name ASC, i.part_number ASC, i.lot_number ASC, i.id ASC`,
-      [clientId],
-    );
+    const [settings, result] = await Promise.all([
+      loadClientSettings(clientId),
+      pool.query(
+        `SELECT
+           item.*,
+           COALESCE(SUM(inventory.quantity), 0)::numeric AS total_quantity,
+           COUNT(inventory.id)::int AS inventory_record_count,
+           COALESCE(
+             string_agg(DISTINCT location.code, ', ' ORDER BY location.code),
+             ''
+           ) AS inventory_location
+         FROM items AS item
+         LEFT JOIN inventory ON item.id = inventory.item_id
+         LEFT JOIN locations AS location ON location.id = inventory.location_id
+         WHERE item.client_id = $1
+         GROUP BY item.id
+         ORDER BY item.name ASC, item.part_number ASC, item.lot_number ASC, item.id ASC`,
+        [clientId],
+      ),
+    ]);
 
-    const items = result.rows.map((item) => {
-      const quantity = Number(item.total_quantity);
+    const items = result.rows.map((rawItem) => {
+      const attributes = sanitizeDisplayAttributes(rawItem.attributes);
+      const item = { ...rawItem, attributes };
+      const quantity = Number(rawItem.total_quantity);
       const totalQuantity = Number.isFinite(quantity) ? quantity : 0;
       const lowState = computeLowState(item, totalQuantity);
+      const profiled = applyProfileToItem(item, totalQuantity, settings);
 
       return {
-        ...item,
-        attributes: sanitizeDisplayAttributes(item.attributes),
-        total_quantity: totalQuantity,
+        ...profiled,
         reorder_level:
           item.reorder_level == null ? null : Number(item.reorder_level),
         low_stock_threshold:
@@ -71,11 +79,14 @@ exports.listItems = async (req, res, next) => {
             ? null
             : Number(item.low_stock_threshold),
         threshold_configured: lowState.thresholdConfigured,
-        status: deriveStockStatus(item, totalQuantity),
+        inventory_profile: settings.profile_key,
       };
     });
 
-    return res.json(items);
+    return res.json({
+      settings,
+      items,
+    });
   } catch (error) {
     return next(error);
   }
