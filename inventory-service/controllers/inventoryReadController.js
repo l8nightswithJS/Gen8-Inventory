@@ -1,5 +1,38 @@
 const pool = require('../db/pool');
-const { computeLowState } = require('./_stockLogic');
+const { computeLowState, deriveStockStatus } = require('./_stockLogic');
+
+const LEGACY_OPERATIONAL_ATTRIBUTE_KEYS = new Set([
+  'location',
+  'locations',
+  'inventory_location',
+  'on_hand',
+  'on_hand_review',
+  'quantity',
+  'total_quantity',
+]);
+
+function normalizeAttributeKey(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/[^\w]/g, '')
+    .replace(/_+/g, '_');
+}
+
+function sanitizeDisplayAttributes(attributes) {
+  if (!attributes || typeof attributes !== 'object' || Array.isArray(attributes)) {
+    return {};
+  }
+
+  const cleaned = {};
+  for (const [key, value] of Object.entries(attributes)) {
+    if (!LEGACY_OPERATIONAL_ATTRIBUTE_KEYS.has(normalizeAttributeKey(key))) {
+      cleaned[key] = value;
+    }
+  }
+  return cleaned;
+}
 
 exports.listItems = async (req, res, next) => {
   try {
@@ -25,16 +58,20 @@ exports.listItems = async (req, res, next) => {
     const items = result.rows.map((item) => {
       const quantity = Number(item.total_quantity);
       const totalQuantity = Number.isFinite(quantity) ? quantity : 0;
-      const { low } = computeLowState(item, totalQuantity);
-
-      let status = 'in_stock';
-      if (totalQuantity <= 0) status = 'out_of_stock';
-      else if (low) status = 'low_stock';
+      const lowState = computeLowState(item, totalQuantity);
 
       return {
         ...item,
+        attributes: sanitizeDisplayAttributes(item.attributes),
         total_quantity: totalQuantity,
-        status,
+        reorder_level:
+          item.reorder_level == null ? null : Number(item.reorder_level),
+        low_stock_threshold:
+          item.low_stock_threshold == null
+            ? null
+            : Number(item.low_stock_threshold),
+        threshold_configured: lowState.thresholdConfigured,
+        status: deriveStockStatus(item, totalQuantity),
       };
     });
 
@@ -43,3 +80,5 @@ exports.listItems = async (req, res, next) => {
     return next(error);
   }
 };
+
+module.exports._test = { sanitizeDisplayAttributes };
