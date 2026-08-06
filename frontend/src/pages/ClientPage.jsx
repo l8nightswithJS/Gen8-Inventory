@@ -10,6 +10,7 @@ import BulkImport from '../components/BulkImport';
 import ColumnSetupModal from '../components/ColumnSetupModal';
 import ConfirmModal from '../components/ConfirmModal';
 import EditItemModal from '../components/EditItemModal';
+import ReviewResolutionModal from '../components/ReviewResolutionModal';
 import ScanModal from '../components/ScanModal';
 import LocationViewModal from '../components/LocationViewModal';
 import ItemActionModal from '../components/ItemActionModal';
@@ -24,12 +25,34 @@ import {
   FiChevronLeft,
 } from 'react-icons/fi';
 
+const LEGACY_COLUMN_MAP = {
+  Location: 'inventory_location',
+  location: 'inventory_location',
+  locations: 'inventory_location',
+  'On Hand': 'total_quantity',
+  on_hand: 'total_quantity',
+  'On Hand (Review)': null,
+  on_hand_review: null,
+};
+
+const normalizeColumns = (columns = []) =>
+  Array.from(
+    new Set(
+      columns
+        .map((column) =>
+          Object.prototype.hasOwnProperty.call(LEGACY_COLUMN_MAP, column)
+            ? LEGACY_COLUMN_MAP[column]
+            : column,
+        )
+        .filter(Boolean),
+    ),
+  );
+
 export default function ClientPage() {
   const { clientId } = useParams();
   const navigate = useNavigate();
   const isAdmin = localStorage.getItem('role') === 'admin';
 
-  // --- State Hooks ---
   const [client, setClient] = useState(null);
   const [items, setItems] = useState([]);
   const [query, setQuery] = useState('');
@@ -44,10 +67,13 @@ export default function ClientPage() {
     scan: false,
     deleteItem: null,
     editItem: null,
+    reviewItem: null,
     scannedLocation: null,
     scannedItem: null,
   });
-  const [schema, setSchema] = useState(() => getSavedSchema(clientId));
+  const [schema, setSchema] = useState(() =>
+    normalizeColumns(getSavedSchema(clientId)),
+  );
   const [sortConfig, setSortConfig] = useState({
     key: 'part_number',
     direction: 'ascending',
@@ -57,12 +83,16 @@ export default function ClientPage() {
 
   useEffect(() => {
     const handleResize = () => {
-      window.innerWidth < 768 ? setViewMode('mobile') : setViewMode('desktop');
+      setViewMode(window.innerWidth < 768 ? 'mobile' : 'desktop');
     };
     handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    setSchema(normalizeColumns(getSavedSchema(clientId)));
+  }, [clientId]);
 
   const fetchItems = useCallback(async () => {
     try {
@@ -71,8 +101,9 @@ export default function ClientPage() {
         meta: { silent: true },
       });
       setItems(Array.isArray(data) ? data : []);
-    } catch (err) {
-      const status = err?.response?.status;
+      setError('');
+    } catch (requestError) {
+      const status = requestError?.response?.status;
       setError(
         status === 401 || status === 403
           ? 'You’re not authorized to view items for this client.'
@@ -83,10 +114,10 @@ export default function ClientPage() {
 
   const fetchClientDetails = useCallback(async () => {
     try {
-      const res = await api.get(`/api/clients/${clientId}`);
-      setClient(res.data);
-    } catch (err) {
-      console.error('Failed to fetch client details:', err);
+      const response = await api.get(`/api/clients/${clientId}`);
+      setClient(response.data);
+    } catch (requestError) {
+      console.error('Failed to fetch client details:', requestError);
       navigate('/dashboard');
     }
   }, [clientId, navigate]);
@@ -97,7 +128,7 @@ export default function ClientPage() {
   }, [clientId, fetchItems, fetchClientDetails]);
 
   const handleModal = (modal, value) =>
-    setModalState((prev) => ({ ...prev, [modal]: value }));
+    setModalState((previous) => ({ ...previous, [modal]: value }));
 
   const handleUsbScan = async (barcode) => {
     try {
@@ -106,11 +137,11 @@ export default function ClientPage() {
         client_id: clientId,
       });
       if (result?.type) handleScanSuccess(result);
-    } catch (err) {
+    } catch (requestError) {
       setError(
-        err.response?.status === 404
+        requestError.response?.status === 404
           ? `Barcode "${barcode}" was not found.`
-          : err.response?.data?.message || 'An error occurred.',
+          : requestError.response?.data?.message || 'An error occurred.',
       );
     }
   };
@@ -135,42 +166,65 @@ export default function ClientPage() {
     try {
       await api.delete(`/api/items/${modalState.deleteItem.id}`);
       handleModal('deleteItem', null);
-      fetchItems();
-    } catch (err) {
-      setError(err?.response?.data?.message || 'Failed to delete item.');
+      await fetchItems();
+    } catch (requestError) {
+      setError(requestError?.response?.data?.message || 'Failed to delete item.');
     }
   };
 
-  // --- Memoized Calculations ---
   const filteredItems = useMemo(() => {
     if (!query) return items;
     const lowerQuery = query.toLowerCase();
+
     return items.filter((item) => {
+      const reviewValues = Array.isArray(item.review_issues)
+        ? item.review_issues.flatMap((issue) => [
+            issue.type,
+            issue.field,
+            issue.source_value,
+            issue.message,
+          ])
+        : [];
       const coreValues = [
         item.part_number,
         item.lot_number,
         item.name,
         item.description,
         item.barcode,
+        item.vendor_barcode,
+        item.uom,
+        item.inventory_location,
+        item.status,
+        ...reviewValues,
       ];
       const attributeValues = Object.values(item.attributes || {});
-      return [...coreValues, ...attributeValues].some((val) =>
-        String(val).toLowerCase().includes(lowerQuery),
+
+      return [...coreValues, ...attributeValues].some((value) =>
+        String(value ?? '')
+          .toLowerCase()
+          .includes(lowerQuery),
       );
     });
   }, [items, query]);
 
   const sortedItems = useMemo(() => {
-    let sortableItems = [...filteredItems];
+    const sortableItems = [...filteredItems];
     if (sortConfig.key) {
-      sortableItems.sort((a, b) => {
-        const valA = a[sortConfig.key] ?? a.attributes?.[sortConfig.key];
-        const valB = b[sortConfig.key] ?? b.attributes?.[sortConfig.key];
-        if (valA == null) return 1;
-        if (valB == null) return -1;
-        if (typeof valA === 'number' && typeof valB === 'number')
-          return valA - valB;
-        return String(valA).localeCompare(String(valB));
+      sortableItems.sort((first, second) => {
+        const firstValue =
+          first[sortConfig.key] ?? first.attributes?.[sortConfig.key];
+        const secondValue =
+          second[sortConfig.key] ?? second.attributes?.[sortConfig.key];
+
+        if (firstValue == null) return 1;
+        if (secondValue == null) return -1;
+        if (
+          typeof firstValue === 'number' &&
+          typeof secondValue === 'number'
+        ) {
+          return firstValue - secondValue;
+        }
+        return String(firstValue).localeCompare(String(secondValue));
       });
       if (sortConfig.direction === 'descending') sortableItems.reverse();
     }
@@ -183,43 +237,38 @@ export default function ClientPage() {
   }, [sortedItems, page, rowsPerPage]);
 
   const columns = useMemo(() => {
-    if (schema.length > 0) return schema;
-    if (items.length === 0)
-      return [
-        'part_number',
-        'name',
-        'description',
-        'lot_number',
-        'barcode',
-        'total_quantity',
-      ];
+    if (schema.length > 0) return normalizeColumns(schema);
 
     const preferredOrder = [
       'part_number',
       'name',
       'description',
       'lot_number',
+      'inventory_location',
       'total_quantity',
+      'uom',
+      'status',
       'reorder_level',
       'low_stock_threshold',
+      'vendor_barcode',
       'barcode',
     ];
 
+    if (items.length === 0) return preferredOrder.slice(0, 8);
+
     const allKeys = new Set(preferredOrder);
-    items.forEach((it) => {
-      if (it.attributes) {
-        Object.keys(it.attributes).forEach((key) => allKeys.add(key));
-      }
+    items.forEach((item) => {
+      Object.keys(item.attributes || {}).forEach((key) => allKeys.add(key));
     });
 
     const sortedKeys = Array.from(allKeys);
-    sortedKeys.sort((a, b) => {
-      const indexA = preferredOrder.indexOf(a);
-      const indexB = preferredOrder.indexOf(b);
-      if (indexA > -1 && indexB > -1) return indexA - indexB;
-      if (indexA > -1) return -1;
-      if (indexB > -1) return 1;
-      return a.localeCompare(b);
+    sortedKeys.sort((first, second) => {
+      const firstIndex = preferredOrder.indexOf(first);
+      const secondIndex = preferredOrder.indexOf(second);
+      if (firstIndex > -1 && secondIndex > -1) return firstIndex - secondIndex;
+      if (firstIndex > -1) return -1;
+      if (secondIndex > -1) return 1;
+      return first.localeCompare(second);
     });
 
     return sortedKeys;
@@ -311,8 +360,8 @@ export default function ClientPage() {
           totalItems={sortedItems.length}
           columns={columns}
           onSort={(key) =>
-            setSortConfig((sc) =>
-              sc.key === key && sc.direction === 'ascending'
+            setSortConfig((current) =>
+              current.key === key && current.direction === 'ascending'
                 ? { key, direction: 'descending' }
                 : { key, direction: 'ascending' },
             )
@@ -323,23 +372,24 @@ export default function ClientPage() {
           totalPages={Math.max(1, Math.ceil(sortedItems.length / rowsPerPage))}
           onEdit={(item) => handleModal('editItem', item)}
           onDelete={(item) => handleModal('deleteItem', item)}
+          onResolveReview={(item) => handleModal('reviewItem', item)}
           role={isAdmin ? 'admin' : 'viewer'}
           rowsPerPage={rowsPerPage}
-          onRowsPerPageChange={(n) => {
-            setRowsPerPage(n);
+          onRowsPerPageChange={(number) => {
+            setRowsPerPage(number);
             setPage(1);
           }}
           viewMode={viewMode}
         />
       </div>
 
-      {/* --- Modals --- */}
       {modalState.columnSetup && (
         <ColumnSetupModal
           isOpen={true}
           onClose={() => handleModal('columnSetup', false)}
-          onSave={(cols) => {
-            const newSchema = saveSchema(clientId, cols);
+          onSave={(selectedColumns) => {
+            const normalized = normalizeColumns(selectedColumns);
+            const newSchema = saveSchema(clientId, normalized);
             setSchema(newSchema);
             handleModal('columnSetup', false);
           }}
@@ -367,6 +417,13 @@ export default function ClientPage() {
           item={modalState.editItem}
           onClose={() => handleModal('editItem', null)}
           onUpdated={fetchItems}
+        />
+      )}
+      {modalState.reviewItem && (
+        <ReviewResolutionModal
+          item={modalState.reviewItem}
+          onClose={() => handleModal('reviewItem', null)}
+          onResolved={fetchItems}
         />
       )}
       {modalState.deleteItem && (
@@ -398,8 +455,8 @@ export default function ClientPage() {
             handleModal('scannedItem', null);
             handleModal('editItem', item);
           }}
-          onCheckStock={(_item) => {
-            alert(`Checking stock...`);
+          onCheckStock={() => {
+            alert('Checking stock...');
             handleModal('scannedItem', null);
           }}
         />
