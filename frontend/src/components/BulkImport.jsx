@@ -67,11 +67,19 @@ export default function BulkImport({ clientId, refresh, onClose }) {
       });
 
       const importedCount = data?.successCount ?? rawRows.length;
-      setSuccess(`${importedCount} items imported successfully!`);
+      const warningCount = Number(data?.warningCount || 0);
+      setSuccess(
+        warningCount > 0
+          ? `${importedCount} items imported. ${warningCount} On Hand value(s) need review.`
+          : `${importedCount} items imported successfully!`,
+      );
       await refresh?.();
-      setTimeout(() => {
-        onClose?.();
-      }, 1500);
+
+      if (warningCount === 0) {
+        setTimeout(() => {
+          onClose?.();
+        }, 1500);
+      }
     } catch (requestError) {
       const responseData = requestError?.response?.data;
       const validationMessage = Array.isArray(responseData?.errors)
