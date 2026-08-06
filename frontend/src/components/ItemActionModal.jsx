@@ -3,39 +3,43 @@ import { FiPackage, FiClipboard, FiEdit3 } from 'react-icons/fi';
 import Button from './ui/Button';
 
 export default function ItemActionModal({
-  isOpen,
+  isOpen = true,
   item,
   onClose,
   onCheckStock,
   onEditDetails,
 }) {
-  const descId = 'item-action-modal-desc';
-  const a = item?.attributes || {};
+  const descriptionId = 'item-action-modal-desc';
   const displayName =
-    a.name || a.part_number || a.description || 'Unknown Item';
+    item?.name || item?.description || item?.part_number || 'Unknown Item';
 
   return (
     <BaseModal
       isOpen={isOpen}
       onClose={onClose}
       title="Item Scanned"
-      describedBy={descId}
+      describedBy={descriptionId}
       size="max-w-sm"
     >
       <div className="px-4">
-        {/* Subhead under title */}
         <div className="mb-4 -mt-2 flex items-center gap-3">
           <FiPackage
             className="text-blue-600 dark:text-blue-400 flex-shrink-0"
             size={22}
           />
-          <p className="max-w-xs truncate text-sm text-slate-600 dark:text-slate-400">
-            {displayName}
-          </p>
+          <div className="min-w-0">
+            <p className="max-w-xs truncate text-sm font-medium text-slate-700 dark:text-slate-300">
+              {displayName}
+            </p>
+            <p className="max-w-xs truncate text-xs text-slate-500 dark:text-slate-400">
+              {item?.part_number || 'No part number'}
+              {item?.lot_number ? ` · Lot ${item.lot_number}` : ''}
+            </p>
+          </div>
         </div>
 
         <p
-          id={descId}
+          id={descriptionId}
           className="mb-6 text-center text-slate-700 dark:text-slate-300"
         >
           What would you like to do?
