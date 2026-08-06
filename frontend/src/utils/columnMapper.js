@@ -1,9 +1,6 @@
-// frontend/src/utils/columnMapper.js (New File)
-
-// A function to clean up and standardize column names
-export function normalizeKey(k) {
-  if (k == null) return null;
-  return String(k)
+export function normalizeKey(value) {
+  if (value == null) return null;
+  return String(value)
     .trim()
     .toLowerCase()
     .replace(/\s+/g, '_')
@@ -11,39 +8,69 @@ export function normalizeKey(k) {
     .replace(/_+/g, '_');
 }
 
-// The master list of all possible names for our core fields
 const ALIAS_MAP = {
   part_number: ['part', 'part_number', 'part #', 'part#', 'pn', 'p/n', 'sku'],
   lot_number: ['lot', 'lot_number', 'lot #', 'lot#', 'batch', 'batch_number'],
   description: ['desc', 'description', 'item_description'],
   name: ['name', 'item_name', 'product_name'],
-  barcode: ['barcode', 'bar code', 'upc', 'barcodes'],
+  vendor_barcode: [
+    'barcode',
+    'bar code',
+    'barcodes',
+    'vendor barcode',
+    'vendor_barcode',
+    'manufacturer barcode',
+    'manufacturer_barcode',
+    'supplier barcode',
+    'supplier_barcode',
+    'upc',
+    'gtin',
+  ],
+  barcode: [
+    'internal barcode',
+    'internal_barcode',
+    'container barcode',
+    'container_barcode',
+    'inventory barcode',
+    'inventory_barcode',
+  ],
+  uom: ['uom', 'unit', 'units', 'unit of measure', 'unit_of_measure'],
+  inventory_location: [
+    'location',
+    'locations',
+    'inventory location',
+    'inventory_location',
+    'bin',
+    'bin location',
+    'shelf',
+  ],
   total_quantity: [
     'quantity',
+    'on hand',
     'on_hand',
+    'qty in stock',
     'qty_in_stock',
     'stock',
+    'total quantity',
     'total_quantity',
   ],
   reorder_level: ['reorder_level', 'reorder point', 'reorder_lvl', 'min_stock'],
-  low_stock_threshold: ['low_stock_threshold', 'low_stock'],
+  low_stock_threshold: [
+    'low_stock_threshold',
+    'low stock threshold',
+    'low_stock',
+  ],
+  status: ['status', 'stock status', 'inventory status'],
 };
 
-// A reverse map for quick lookups (e.g., from 'part#' -> 'part_number')
 const REVERSE_ALIAS_MAP = new Map();
 for (const canonicalKey in ALIAS_MAP) {
-  REVERSE_ALIAS_MAP.set(canonicalKey, canonicalKey); // The canonical key maps to itself
+  REVERSE_ALIAS_MAP.set(normalizeKey(canonicalKey), canonicalKey);
   for (const alias of ALIAS_MAP[canonicalKey]) {
     REVERSE_ALIAS_MAP.set(normalizeKey(alias), canonicalKey);
   }
 }
 
-/**
- * Takes a messy user-entered column name and returns the official,
- * canonical key if it's a known core field.
- * @param {string} input - The user-entered column name (e.g., "Part #")
- * @returns {string} The canonical key (e.g., "part_number") or the normalized input.
- */
 export function getCanonicalKey(input) {
   const normalized = normalizeKey(input);
   return REVERSE_ALIAS_MAP.get(normalized) || normalized;
