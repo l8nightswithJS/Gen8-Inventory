@@ -6,6 +6,9 @@ const inventoryReadController = require('../controllers/inventoryReadController'
 const inventoryAdjustmentController = require('../controllers/inventoryAdjustmentController');
 const { requireRole, handleValidation } = require('shared-auth');
 const { requireItemAccess } = require('../middleware/requireItemAccess');
+const {
+  validateProfileAttributes,
+} = require('../middleware/validateProfileAttributes');
 
 const router = express.Router();
 
@@ -69,7 +72,6 @@ router.post(
   inventoryController.acknowledgeAlert,
 );
 
-// Named routes must be declared before GET /:id.
 router.get(
   '/export',
   query('client_id').isInt({ min: 1 }).withMessage('client_id is required').toInt(),
@@ -126,6 +128,7 @@ router.post(
     .withMessage('part_number is required'),
   ...commonItemValidators,
   handleValidation,
+  validateProfileAttributes,
   inventoryController.createItem,
 );
 
@@ -141,6 +144,7 @@ router.put(
   ...commonItemValidators,
   handleValidation,
   requireItemAccess(),
+  validateProfileAttributes,
   inventoryController.updateItem,
 );
 
@@ -172,6 +176,12 @@ const bulkValidators = [
   body('items')
     .isArray({ min: 1 })
     .withMessage('items must be a non-empty array'),
+  body('column_mapping').optional().isObject(),
+  body('default_location_id')
+    .optional({ nullable: true })
+    .isInt({ min: 1 })
+    .toInt(),
+  body('template').optional().isObject(),
   handleValidation,
 ];
 
