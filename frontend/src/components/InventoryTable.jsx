@@ -1,6 +1,11 @@
-// frontend/src/components/InventoryTable.jsx
 import { useMemo } from 'react';
-import { FiEdit2, FiTrash2, FiChevronUp, FiChevronDown } from 'react-icons/fi';
+import {
+  FiAlertTriangle,
+  FiChevronDown,
+  FiChevronUp,
+  FiEdit2,
+  FiTrash2,
+} from 'react-icons/fi';
 import Button from './ui/Button';
 
 const LABEL_OVERRIDES = {
@@ -9,22 +14,75 @@ const LABEL_OVERRIDES = {
   name: 'Name',
   description: 'Description',
   total_quantity: 'On Hand',
-  reorder_level: 'Reorder Lvl',
+  uom: 'UOM',
+  inventory_location: 'Location',
+  barcode: 'Internal Barcode',
+  vendor_barcode: 'Vendor Barcode',
+  reorder_level: 'Reorder Level',
   low_stock_threshold: 'Low-Stock Threshold',
+  status: 'Status',
 };
 
-const isNumericLike = (k) =>
-  /\b(level|qty|quantity|threshold|count|days|hours|_id)\b/i.test(k) ||
-  k === 'total_quantity';
+const HIDDEN_OPERATIONAL_COLUMNS = new Set([
+  'review_status',
+  'review_issues',
+  'reviewed_at',
+  'inventory_record_count',
+  'threshold_configured',
+]);
 
-const humanLabel = (k) =>
-  LABEL_OVERRIDES[k] ||
-  k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+const STATUS_LABELS = {
+  in_stock: 'In Stock',
+  low_stock: 'Low Stock',
+  out_of_stock: 'Out of Stock',
+  needs_review: 'Needs Review',
+};
 
-function MobileCard({ item, onEdit, onDelete }) {
+const STATUS_CLASSES = {
+  in_stock:
+    'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
+  low_stock:
+    'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+  out_of_stock: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+  needs_review:
+    'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
+};
+
+const isNumericLike = (key) =>
+  /\b(level|qty|quantity|threshold|count|days|hours|_id)\b/i.test(key) ||
+  key === 'total_quantity';
+
+const humanLabel = (key) =>
+  LABEL_OVERRIDES[key] ||
+  key.replace(/_/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase());
+
+function StatusBadge({ status }) {
+  const normalized = STATUS_LABELS[status] ? status : 'in_stock';
+  return (
+    <span
+      className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${STATUS_CLASSES[normalized]}`}
+    >
+      {STATUS_LABELS[normalized]}
+    </span>
+  );
+}
+
+function MobileCard({ item, onEdit, onDelete, onResolveReview, role }) {
   const part = item.part_number || item.name || '—';
   const onHand = item.total_quantity ?? '—';
-  const isLow = item.total_quantity <= item.reorder_level && item.alert_enabled;
+  const reviewIssues = Array.isArray(item.review_issues)
+    ? item.review_issues
+    : [];
+
+  const details = [
+    ['Name', item.name],
+    ['Description', item.description],
+    ['Location', item.inventory_location],
+    ['Reorder Level', item.reorder_level],
+    ['Internal Barcode', item.barcode],
+    ['Vendor Barcode', item.vendor_barcode],
+    ...Object.entries(item.attributes || {}),
+  ].filter(([, value]) => value != null && value !== '');
 
   return (
     <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-md p-4 mb-4">
@@ -38,11 +96,9 @@ function MobileCard({ item, onEdit, onDelete }) {
               Lot: {item.lot_number}
             </p>
           )}
-          {item.description && (
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
-              {item.description}
-            </p>
-          )}
+          <div className="mt-2">
+            <StatusBadge status={item.status} />
+          </div>
         </div>
         <div className="text-right flex-shrink-0">
           <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -51,51 +107,71 @@ function MobileCard({ item, onEdit, onDelete }) {
           <p className="font-bold text-2xl text-slate-800 dark:text-white tabular-nums">
             {onHand}
           </p>
+          {item.uom && (
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              {item.uom}
+            </p>
+          )}
         </div>
       </div>
 
+      {item.status === 'needs_review' && reviewIssues.length > 0 && (
+        <div className="mt-4 rounded border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900 dark:border-orange-500/30 dark:bg-orange-900/20 dark:text-orange-200">
+          <div className="flex items-center gap-2 font-semibold">
+            <FiAlertTriangle /> Inventory data needs review
+          </div>
+          <p className="mt-1">
+            {reviewIssues[0]?.message || 'Imported data requires review.'}
+          </p>
+          {reviewIssues.length > 1 && (
+            <p className="mt-1 text-xs">+{reviewIssues.length - 1} more issue(s)</p>
+          )}
+        </div>
+      )}
+
       <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-        {[
-          ['Reorder Lvl', item.reorder_level],
-          ['Barcode', item.barcode],
-          ...Object.entries(item.attributes || {}),
-        ]
-          .filter(([, v]) => v != null && v !== '')
-          .map(([k, v]) => (
-            <div key={k}>
-              <p className="text-slate-500 dark:text-slate-400">
-                {humanLabel(k)}
-              </p>
-              <p className="font-medium text-slate-700 dark:text-slate-300">
-                {String(v)}
-              </p>
-            </div>
-          ))}
+        {details.map(([key, value]) => (
+          <div key={key}>
+            <p className="text-slate-500 dark:text-slate-400">
+              {humanLabel(key)}
+            </p>
+            <p className="font-medium text-slate-700 dark:text-slate-300 break-words">
+              {String(value)}
+            </p>
+          </div>
+        ))}
       </div>
 
-      <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
-        {isLow && (
-          <span className="text-xs font-bold text-red-600 mr-auto tracking-wider">
-            LOW STOCK
-          </span>
-        )}
-        <Button
-          onClick={() => onEdit(item)}
-          size="sm"
-          variant="secondary"
-          leftIcon={FiEdit2}
-        >
-          Edit
-        </Button>
-        <Button
-          onClick={() => onDelete(item)}
-          size="sm"
-          variant="danger"
-          leftIcon={FiTrash2}
-        >
-          Delete
-        </Button>
-      </div>
+      {role === 'admin' && (
+        <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-end gap-2">
+          {item.status === 'needs_review' && (
+            <Button
+              onClick={() => onResolveReview?.(item)}
+              size="sm"
+              variant="secondary"
+              leftIcon={FiAlertTriangle}
+            >
+              Resolve
+            </Button>
+          )}
+          <Button
+            onClick={() => onEdit(item)}
+            size="sm"
+            variant="secondary"
+            leftIcon={FiEdit2}
+          >
+            Edit
+          </Button>
+          <Button
+            onClick={() => onDelete(item)}
+            size="sm"
+            variant="danger"
+            leftIcon={FiTrash2}
+          >
+            Delete
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -108,7 +184,8 @@ const SortableHeader = ({
   className,
 }) => {
   const isSorted = sortConfig.key === sortKey;
-  const isAsc = sortConfig.direction === 'ascending';
+  const isAscending = sortConfig.direction === 'ascending';
+
   return (
     <button
       className={`flex items-center gap-1 group ${className}`}
@@ -117,7 +194,7 @@ const SortableHeader = ({
       <span>{children}</span>
       <span className="opacity-0 group-hover:opacity-100 transition-opacity">
         {isSorted ? (
-          isAsc ? (
+          isAscending ? (
             <FiChevronUp size={14} />
           ) : (
             <FiChevronDown size={14} />
@@ -141,19 +218,35 @@ export default function InventoryTable({
   onPage,
   onEdit,
   onDelete,
+  onResolveReview,
   role = 'viewer',
   rowsPerPage,
   onRowsPerPageChange,
   viewMode = 'desktop',
 }) {
   const safeItems = useMemo(() => (Array.isArray(items) ? items : []), [items]);
+  const visibleColumns = useMemo(
+    () => columns.filter((key) => !HIDDEN_OPERATIONAL_COLUMNS.has(key)),
+    [columns],
+  );
+
+  const renderCellValue = (item, key) => {
+    if (key === 'status') return <StatusBadge status={item.status} />;
+
+    const value = item[key] ?? item.attributes?.[key];
+    if (value == null || value === '') {
+      return <span className="text-gray-400 dark:text-gray-500">—</span>;
+    }
+
+    return String(value);
+  };
 
   const ResponsiveTable = () => (
     <div className="overflow-x-auto bg-white dark:bg-slate-900 shadow-md rounded-lg">
       <table className="w-full table-auto border-collapse text-sm">
         <thead className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
           <tr>
-            {columns.map((key) => (
+            {visibleColumns.map((key) => (
               <th
                 key={key}
                 scope="col"
@@ -174,7 +267,7 @@ export default function InventoryTable({
             {role === 'admin' && (
               <th
                 scope="col"
-                className="px-4 py-3 text-center text-[12px] font-semibold uppercase text-slate-600 dark:text-slate-400 w-28"
+                className="px-4 py-3 text-center text-[12px] font-semibold uppercase text-slate-600 dark:text-slate-400 w-32"
               >
                 Actions
               </th>
@@ -185,87 +278,89 @@ export default function InventoryTable({
           {safeItems.length === 0 ? (
             <tr>
               <td
-                colSpan={columns.length + (role === 'admin' ? 1 : 0)}
+                colSpan={visibleColumns.length + (role === 'admin' ? 1 : 0)}
                 className="px-6 py-5 text-center text-gray-500 dark:text-gray-400 italic"
               >
                 No items to display.
               </td>
             </tr>
           ) : (
-            safeItems.map((item) => {
-              const isLow =
-                item.total_quantity <= item.reorder_level && item.alert_enabled;
-              return (
-                <tr
-                  key={item.id}
-                  className="border-b last:border-b-0 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                >
-                  {columns.map((key) => {
-                    const value = item[key] ?? item.attributes?.[key];
-                    const isNumeric = isNumericLike(key);
-
-                    const cellContent =
-                      value != null && value !== '' ? (
-                        String(value)
-                      ) : (
-                        <span className="text-gray-400 dark:text-gray-500">
-                          —
-                        </span>
-                      );
-
-                    return (
-                      <td
-                        key={key}
-                        className={`px-4 py-3 align-top text-sm text-slate-700 dark:text-slate-300 ${
-                          isNumeric ? 'text-right tabular-nums' : 'text-left'
-                        }`}
+            safeItems.map((item) => (
+              <tr
+                key={item.id}
+                className="border-b last:border-b-0 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+              >
+                {visibleColumns.map((key) => {
+                  const isNumeric = isNumericLike(key);
+                  return (
+                    <td
+                      key={key}
+                      className={`px-4 py-3 align-top text-sm text-slate-700 dark:text-slate-300 ${
+                        isNumeric ? 'text-right tabular-nums' : 'text-left'
+                      }`}
+                    >
+                      <div
+                        className="flex items-center gap-2"
+                        style={{
+                          justifyContent: isNumeric ? 'flex-end' : 'flex-start',
+                        }}
                       >
-                        <div
-                          className="flex items-center gap-2"
-                          style={{
-                            justifyContent: isNumeric
-                              ? 'flex-end'
-                              : 'flex-start',
-                          }}
-                        >
-                          {key === 'total_quantity' && isLow && (
+                        {key === 'total_quantity' &&
+                          item.status === 'low_stock' && (
+                            <div
+                              className="h-2 w-2 rounded-full bg-amber-500"
+                              title="Low Stock"
+                            />
+                          )}
+                        {key === 'total_quantity' &&
+                          item.status === 'out_of_stock' && (
                             <div
                               className="h-2 w-2 rounded-full bg-red-500"
-                              title="Low Stock"
-                            ></div>
+                              title="Out of Stock"
+                            />
                           )}
-                          <span>{cellContent}</span>
-                        </div>
-                      </td>
-                    );
-                  })}
-
-                  {role === 'admin' && (
-                    <td className="px-4 py-3 align-top text-center w-28">
-                      <div className="flex items-center justify-center gap-1">
-                        <Button
-                          onClick={() => onEdit(item)}
-                          variant="ghost"
-                          size="sm"
-                          title="Edit"
-                        >
-                          <FiEdit2 size={16} />
-                        </Button>
-                        <Button
-                          onClick={() => onDelete(item)}
-                          variant="ghost"
-                          size="sm"
-                          className="text-rose-600 hover:text-rose-700"
-                          title="Delete"
-                        >
-                          <FiTrash2 size={16} />
-                        </Button>
+                        <span>{renderCellValue(item, key)}</span>
                       </div>
                     </td>
-                  )}
-                </tr>
-              );
-            })
+                  );
+                })}
+
+                {role === 'admin' && (
+                  <td className="px-4 py-3 align-top text-center w-32">
+                    <div className="flex items-center justify-center gap-1">
+                      {item.status === 'needs_review' && (
+                        <Button
+                          onClick={() => onResolveReview?.(item)}
+                          variant="ghost"
+                          size="sm"
+                          className="text-orange-600 hover:text-orange-700"
+                          title="Resolve inventory review"
+                        >
+                          <FiAlertTriangle size={16} />
+                        </Button>
+                      )}
+                      <Button
+                        onClick={() => onEdit(item)}
+                        variant="ghost"
+                        size="sm"
+                        title="Edit"
+                      >
+                        <FiEdit2 size={16} />
+                      </Button>
+                      <Button
+                        onClick={() => onDelete(item)}
+                        variant="ghost"
+                        size="sm"
+                        className="text-rose-600 hover:text-rose-700"
+                        title="Delete"
+                      >
+                        <FiTrash2 size={16} />
+                      </Button>
+                    </div>
+                  </td>
+                )}
+              </tr>
+            ))
           )}
         </tbody>
       </table>
@@ -279,12 +374,14 @@ export default function InventoryTable({
           No items to display.
         </p>
       ) : (
-        safeItems.map((it) => (
+        safeItems.map((item) => (
           <MobileCard
-            key={it.id}
-            item={it}
+            key={item.id}
+            item={item}
             onEdit={onEdit}
             onDelete={onDelete}
+            onResolveReview={onResolveReview}
+            role={role}
           />
         ))
       )}
@@ -301,12 +398,14 @@ export default function InventoryTable({
           <span className="text-gray-600 dark:text-gray-400">Rows:</span>
           <select
             value={rowsPerPage}
-            onChange={(e) => onRowsPerPageChange?.(Number(e.target.value))}
+            onChange={(event) =>
+              onRowsPerPageChange?.(Number(event.target.value))
+            }
             className="h-8 border rounded px-2 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700"
           >
-            {[15, 25, 50, 100].map((n) => (
-              <option key={n} value={n}>
-                {n}
+            {[15, 25, 50, 100].map((number) => (
+              <option key={number} value={number}>
+                {number}
               </option>
             ))}
           </select>
