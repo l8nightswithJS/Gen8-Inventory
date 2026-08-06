@@ -26,6 +26,32 @@ const DERIVED_FIELDS = Object.freeze([
   'priority',
 ]);
 
+const RESERVED_FIELD_KEYS = new Set([
+  ...CORE_FIELDS,
+  ...DERIVED_FIELDS,
+  'id',
+  'client_id',
+  'attributes',
+  'location',
+  'locations',
+  'quantity',
+  'on_hand',
+  'review_status',
+  'review_issues',
+  'reviewed_at',
+  'inventory_levels',
+  'inventory_record_count',
+  'threshold_configured',
+  'alert_enabled',
+  'alert_acknowledged_at',
+  'created_at',
+  'updated_at',
+  'last_updated',
+  '__proto__',
+  'prototype',
+  'constructor',
+]);
+
 const PROFILE_PRESETS = Object.freeze({
   general: {
     key: 'general',
@@ -218,8 +244,18 @@ function normalizeFieldKey(value) {
     .replace(/_+/g, '_');
 }
 
+function isReservedFieldKey(value) {
+  return RESERVED_FIELD_KEYS.has(normalizeFieldKey(value));
+}
+
 function sanitizeFieldDefinition(raw) {
   const key = normalizeFieldKey(raw?.key);
+  const label = String(raw?.label || key || '').trim();
+  if (!key || !label) return null;
+  if (isReservedFieldKey(key)) {
+    throw new Error(`Custom field key "${key}" is reserved by the inventory system.`);
+  }
+
   const supportedTypes = new Set([
     'text',
     'long_text',
@@ -232,7 +268,7 @@ function sanitizeFieldDefinition(raw) {
   const type = supportedTypes.has(raw?.type) ? raw.type : 'text';
   const definition = {
     key,
-    label: String(raw?.label || key || '').trim(),
+    label,
     type,
     required: raw?.required === true,
   };
@@ -247,7 +283,7 @@ function sanitizeFieldDefinition(raw) {
     );
   }
 
-  return key && definition.label ? definition : null;
+  return definition;
 }
 
 function normalizeSettings(raw = {}) {
@@ -374,9 +410,11 @@ module.exports = {
   DERIVED_FIELDS,
   PROFILE_KEYS,
   PROFILE_PRESETS,
+  RESERVED_FIELD_KEYS,
   coerceAttributeValue,
   coerceAttributes,
   getProfilePreset,
+  isReservedFieldKey,
   normalizeFieldKey,
   normalizeProfileKey,
   normalizeSettings,
