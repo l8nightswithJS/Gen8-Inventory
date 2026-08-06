@@ -8,7 +8,7 @@ import {
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
 
-const FormField = ({ label, id, children }) => (
+const FormField = ({ label, id, help, children }) => (
   <div>
     <label
       htmlFor={id}
@@ -17,6 +17,9 @@ const FormField = ({ label, id, children }) => (
       {label}
     </label>
     {children}
+    {help && (
+      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{help}</p>
+    )}
   </div>
 );
 
@@ -40,16 +43,16 @@ export default function EditItemModal({
     setError('');
   }, [item]);
 
-  const handleChange = (e) => {
-    const { name, type, checked, value } = e.target;
-    setForm((prev) => ({
-      ...prev,
+  const handleChange = (event) => {
+    const { name, type, checked, value } = event.target;
+    setForm((previous) => ({
+      ...previous,
       [name]: type === 'checkbox' ? checked : value,
     }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     if (!item) return;
 
     setError('');
@@ -64,10 +67,10 @@ export default function EditItemModal({
       await api.put(`/api/items/${item.id}`, payload);
       onUpdated?.();
       onClose?.();
-    } catch (err) {
+    } catch (requestError) {
       setError(
-        err?.response?.data?.message ||
-          err?.message ||
+        requestError?.response?.data?.message ||
+          requestError?.message ||
           'Failed to update item.',
       );
     } finally {
@@ -77,6 +80,10 @@ export default function EditItemModal({
 
   const inputStyles =
     'w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500';
+
+  const reviewIssues = Array.isArray(item?.review_issues)
+    ? item.review_issues
+    : [];
 
   return (
     <BaseModal
@@ -106,6 +113,24 @@ export default function EditItemModal({
         </p>
       )}
 
+      {item?.review_status === 'needs_review' && reviewIssues.length > 0 && (
+        <div className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-200">
+          <p className="font-semibold">Inventory data needs review</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            {reviewIssues.map((issue, index) => (
+              <li key={`${issue.type || 'issue'}-${index}`}>
+                {issue.message || 'Imported data requires review.'}
+                {issue.source_value ? ` Source: ${issue.source_value}` : ''}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs">
+            Use the Resolve action from the inventory list to assign official
+            location quantities.
+          </p>
+        </div>
+      )}
+
       <form id="edit-item-form" onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Part Number" id="edit-part_number">
@@ -129,17 +154,30 @@ export default function EditItemModal({
             />
           </FormField>
 
-          <div className="sm:col-span-2">
-            <FormField label="Name" id="edit-name">
-              <input
-                id="edit-name"
-                name="name"
-                value={form.name ?? ''}
-                onChange={handleChange}
-                className={inputStyles}
-              />
-            </FormField>
-          </div>
+          <FormField
+            label="Unit of Measure"
+            id="edit-uom"
+            help="Examples: lb, kg, pieces, boxes, bags"
+          >
+            <input
+              id="edit-uom"
+              name="uom"
+              value={form.uom ?? ''}
+              onChange={handleChange}
+              className={inputStyles}
+              maxLength={40}
+            />
+          </FormField>
+
+          <FormField label="Name" id="edit-name">
+            <input
+              id="edit-name"
+              name="name"
+              value={form.name ?? ''}
+              onChange={handleChange}
+              className={inputStyles}
+            />
+          </FormField>
 
           <div className="sm:col-span-2">
             <FormField label="Description" id="edit-description">
@@ -154,17 +192,33 @@ export default function EditItemModal({
             </FormField>
           </div>
 
-          <div className="sm:col-span-2">
-            <FormField label="Barcode" id="edit-barcode">
-              <input
-                id="edit-barcode"
-                name="barcode"
-                value={form.barcode ?? ''}
-                onChange={handleChange}
-                className={inputStyles}
-              />
-            </FormField>
-          </div>
+          <FormField
+            label="Internal Inventory Barcode"
+            id="edit-barcode"
+            help="Unique barcode used to identify this inventory or container record."
+          >
+            <input
+              id="edit-barcode"
+              name="barcode"
+              value={form.barcode ?? ''}
+              onChange={handleChange}
+              className={inputStyles}
+            />
+          </FormField>
+
+          <FormField
+            label="Vendor Barcode"
+            id="edit-vendor_barcode"
+            help="Manufacturer or supplier barcode; it may repeat across containers."
+          >
+            <input
+              id="edit-vendor_barcode"
+              name="vendor_barcode"
+              value={form.vendor_barcode ?? ''}
+              onChange={handleChange}
+              className={inputStyles}
+            />
+          </FormField>
         </div>
 
         {customAttributeKeys.length > 0 && (
@@ -222,7 +276,7 @@ export default function EditItemModal({
                   name="reorder_level"
                   type="number"
                   min="0"
-                  step="1"
+                  step="0.001"
                   value={form.reorder_level ?? ''}
                   onChange={handleChange}
                   className={inputStyles}
@@ -238,7 +292,7 @@ export default function EditItemModal({
                   name="low_stock_threshold"
                   type="number"
                   min="0"
-                  step="1"
+                  step="0.001"
                   value={form.low_stock_threshold ?? ''}
                   onChange={handleChange}
                   className={inputStyles}
