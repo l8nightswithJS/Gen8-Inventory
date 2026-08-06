@@ -1,6 +1,8 @@
 const express = require('express');
 const { body, param, query } = require('express-validator');
 const inventoryController = require('../controllers/inventoryController');
+const bulkImportController = require('../controllers/bulkImportController');
+const inventoryReadController = require('../controllers/inventoryReadController');
 const { requireRole, handleValidation } = require('shared-auth');
 const { requireItemAccess } = require('../middleware/requireItemAccess');
 
@@ -70,7 +72,7 @@ router.get(
   '/',
   query('client_id').isInt({ min: 1 }).withMessage('client_id is required').toInt(),
   handleValidation,
-  inventoryController.listItems,
+  inventoryReadController.listItems,
 );
 
 router.get(
@@ -125,9 +127,9 @@ router.post(
     .withMessage('location_id is required')
     .toInt(),
   body('change_quantity')
-    .isInt()
-    .withMessage('change_quantity must be an integer')
-    .toInt(),
+    .isFloat()
+    .withMessage('change_quantity must be a number')
+    .toFloat(),
   handleValidation,
   requireItemAccess({ source: 'body', key: 'item_id' }),
   inventoryController.adjustInventory,
@@ -145,14 +147,14 @@ router.post(
   '/bulk',
   requireRole('admin'),
   bulkValidators,
-  inventoryController.bulkImportItems,
+  bulkImportController.bulkImportItems,
 );
 
 router.post(
   '/import',
   requireRole('admin'),
   bulkValidators,
-  inventoryController.bulkImportItems,
+  bulkImportController.bulkImportItems,
 );
 
 module.exports = router;
