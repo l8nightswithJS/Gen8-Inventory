@@ -4,6 +4,8 @@ const WRITABLE_CORE_FIELDS = new Set([
   'name',
   'description',
   'barcode',
+  'vendor_barcode',
+  'uom',
   'reorder_level',
   'low_stock_threshold',
   'alert_enabled',
@@ -15,9 +17,11 @@ const TEXT_FIELDS = new Set([
   'name',
   'description',
   'barcode',
+  'vendor_barcode',
+  'uom',
 ]);
 
-const INTEGER_FIELDS = new Set(['reorder_level', 'low_stock_threshold']);
+const DECIMAL_FIELDS = new Set(['reorder_level', 'low_stock_threshold']);
 
 const READ_ONLY_FIELDS = new Set([
   'id',
@@ -29,10 +33,28 @@ const READ_ONLY_FIELDS = new Set([
   'last_updated',
   'total_quantity',
   'status',
+  'threshold_configured',
   'inventory_levels',
+  'inventory_location',
+  'inventory_record_count',
+  'review_status',
+  'review_issues',
+  'reviewed_at',
   '__proto__',
   'prototype',
   'constructor',
+]);
+
+const RESERVED_OPERATIONAL_ATTRIBUTES = new Set([
+  'location',
+  'locations',
+  'inventory_location',
+  'on_hand',
+  'on_hand_review',
+  'total_quantity',
+  'quantity',
+  'review_status',
+  'review_issues',
 ]);
 
 class ItemContractError extends Error {
@@ -54,6 +76,15 @@ function isPlainObject(value) {
 
 function hasOwn(object, key) {
   return Object.prototype.hasOwnProperty.call(object, key);
+}
+
+function normalizeAttributeKey(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/[^\w]/g, '')
+    .replace(/_+/g, '_');
 }
 
 function normalizeClientId(value) {
@@ -103,18 +134,20 @@ function normalizeText(value, field, { required = false } = {}) {
   return normalized;
 }
 
-function normalizeInteger(value, field) {
+function normalizeNonNegativeDecimal(value, field) {
   if (value === undefined) return undefined;
   if (value === null || value === '') return null;
 
   const normalized = String(value).trim();
-  if (!/^\d+$/.test(normalized)) {
-    throw new ItemContractError(`${field} must be a non-negative integer.`);
+  if (!/^\d+(?:\.\d{1,3})?$/.test(normalized)) {
+    throw new ItemContractError(
+      `${field} must be a non-negative number with no more than 3 decimal places.`,
+    );
   }
 
   const parsed = Number(normalized);
-  if (!Number.isSafeInteger(parsed)) {
-    throw new ItemContractError(`${field} must be a safe non-negative integer.`);
+  if (!Number.isFinite(parsed) || parsed > 99999999999.999) {
+    throw new ItemContractError(`${field} is outside the supported range.`);
   }
 
   return parsed;
@@ -130,7 +163,11 @@ function normalizeBoolean(value, field) {
 }
 
 function isReservedAttributeKey(key) {
-  return WRITABLE_CORE_FIELDS.has(key) || READ_ONLY_FIELDS.has(key);
+  return (
+    WRITABLE_CORE_FIELDS.has(key) ||
+    READ_ONLY_FIELDS.has(key) ||
+    RESERVED_OPERATIONAL_ATTRIBUTES.has(normalizeAttributeKey(key))
+  );
 }
 
 function normalizeAttributes(value) {
@@ -166,8 +203,8 @@ function normalizeItemPayload(body, { partial = false } = {}) {
       value = normalizeText(body[field], field, {
         required: field === 'part_number',
       });
-    } else if (INTEGER_FIELDS.has(field)) {
-      value = normalizeInteger(body[field], field);
+    } else if (DECIMAL_FIELDS.has(field)) {
+      value = normalizeNonNegativeDecimal(body[field], field);
     } else if (field === 'alert_enabled') {
       value = normalizeBoolean(body[field], field);
     }
@@ -188,13 +225,10 @@ function normalizeItemPayload(body, { partial = false } = {}) {
   let legacyAttributesProvided = false;
 
   // Preserve compatibility with older clients that submitted custom fields at
-  // the top level, while never copying database/read-only fields into JSON.
+  // the top level, while never copying database/read-only or operational fields
+  // such as Location and On Hand into JSON attributes.
   for (const [key, value] of Object.entries(body)) {
-    if (
-      WRITABLE_CORE_FIELDS.has(key) ||
-      READ_ONLY_FIELDS.has(key) ||
-      value === undefined
-    ) {
+    if (isReservedAttributeKey(key) || value === undefined) {
       continue;
     }
 
@@ -229,5 +263,6 @@ module.exports = {
   WRITABLE_CORE_FIELDS,
   normalizeAttributes,
   normalizeCreateItemPayload,
+  normalizeNonNegativeDecimal,
   normalizeUpdateItemPayload,
 };
