@@ -129,4 +129,24 @@ describe('phase 2 typed profile attributes', () => {
       validateProfileAttributes({ condition: 'Accepted' }, settings),
     ).toThrow(/Demand is required/);
   });
+
+  test('rejects custom fields that shadow protected inventory data', () => {
+    expect(() =>
+      normalizeSettings({
+        profile_key: 'general',
+        field_definitions: [
+          { key: 'part_number', label: 'Duplicate Part Number', type: 'text' },
+        ],
+      }),
+    ).toThrow(/part_number.*reserved/i);
+
+    expect(() =>
+      normalizeSettings({
+        profile_key: 'general',
+        field_definitions: [
+          { key: 'status', label: 'Manual Status', type: 'text' },
+        ],
+      }),
+    ).toThrow(/status.*reserved/i);
+  });
 });
