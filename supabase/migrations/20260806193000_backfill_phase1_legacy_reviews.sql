@@ -40,6 +40,69 @@ set
 from legacy_quantity_review as legacy
 where item.id = legacy.id;
 
+-- Preserve the location text attached to legacy ambiguous-quantity rows before
+-- removing the duplicated custom Location attribute. This gives the reviewer
+-- the original placement context even when no official balance was created.
+with legacy_location_review as (
+  select
+    id,
+    coalesce(
+      attributes ->> 'Location',
+      attributes ->> 'location',
+      attributes ->> 'Locations',
+      attributes ->> 'locations'
+    ) as source_value
+  from public.items
+  where
+    (
+      attributes ? 'On Hand (Review)'
+      or attributes ? 'on_hand_review'
+      or attributes ? 'On Hand Review'
+      or attributes ? 'on hand review'
+    )
+    and (
+      attributes ? 'Location'
+      or attributes ? 'location'
+      or attributes ? 'Locations'
+      or attributes ? 'locations'
+    )
+)
+update public.items as item
+set
+  review_status = 'needs_review',
+  review_issues = case
+    when legacy.source_value ~ '[,;/]'
+      and not (
+        item.review_issues @> '[{"type":"location_allocation"}]'::jsonb
+      )
+      then item.review_issues || jsonb_build_array(
+        jsonb_build_object(
+          'type', 'location_allocation',
+          'field', 'location',
+          'source_value', legacy.source_value,
+          'message', 'Legacy import contains multiple locations. Quantity must be allocated to individual locations.'
+        )
+      )
+    when legacy.source_value !~ '[,;/]'
+      and not (
+        item.review_issues @> '[{"type":"location_confirmation"}]'::jsonb
+      )
+      then item.review_issues || jsonb_build_array(
+        jsonb_build_object(
+          'type', 'location_confirmation',
+          'field', 'location',
+          'source_value', legacy.source_value,
+          'message', 'Confirm this imported location when resolving the quantity.'
+        )
+      )
+    else item.review_issues
+  end,
+  reviewed_at = null
+from legacy_location_review as legacy
+where item.id = legacy.id
+  and legacy.source_value is not null
+  and length(trim(legacy.source_value)) > 0;
+
 -- Earlier imports created one synthetic location code for values such as
 -- "A1,B4" or "A1/B5". Mark those records for allocation review while keeping
 -- the current balance intact until an administrator resolves it.
