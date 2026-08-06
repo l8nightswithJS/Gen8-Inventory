@@ -2,15 +2,17 @@ import { useState } from 'react';
 import api from '../utils/axiosConfig';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
+import { PROFILE_PRESETS } from '../config/inventoryProfiles';
 
 function AddClientForm({ onSuccess, onCancel }) {
   const [name, setName] = useState('');
+  const [profileKey, setProfileKey] = useState('general');
   const [logoFile, setLogoFile] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     setError('');
 
     if (!name.trim()) {
@@ -22,17 +24,16 @@ function AddClientForm({ onSuccess, onCancel }) {
     try {
       const formData = new FormData();
       formData.append('name', name.trim());
-      if (logoFile) {
-        formData.append('logo', logoFile);
-      }
+      formData.append('profile_key', profileKey);
+      if (logoFile) formData.append('logo', logoFile);
 
-      const res = await api.post('/api/clients/add', formData, {
+      const response = await api.post('/api/clients/add', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      onSuccess?.(res.data);
-    } catch (err) {
-      setError(err?.response?.data?.message || 'Error adding client');
+      onSuccess?.(response.data);
+    } catch (errorResponse) {
+      setError(errorResponse?.response?.data?.message || 'Error adding client');
     } finally {
       setLoading(false);
     }
@@ -45,6 +46,7 @@ function AddClientForm({ onSuccess, onCancel }) {
           {error}
         </p>
       )}
+
       <div>
         <label
           htmlFor="clientName"
@@ -56,11 +58,36 @@ function AddClientForm({ onSuccess, onCancel }) {
           id="clientName"
           type="text"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(event) => setName(event.target.value)}
           className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           required
           disabled={loading}
         />
+      </div>
+
+      <div>
+        <label
+          htmlFor="inventoryProfile"
+          className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+        >
+          Inventory Profile
+        </label>
+        <select
+          id="inventoryProfile"
+          value={profileKey}
+          onChange={(event) => setProfileKey(event.target.value)}
+          className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          disabled={loading}
+        >
+          {Object.values(PROFILE_PRESETS).map((profile) => (
+            <option key={profile.key} value={profile.key}>
+              {profile.label}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          This controls shared columns, typed fields, and automatic import mappings.
+        </p>
       </div>
 
       <div>
@@ -74,7 +101,7 @@ function AddClientForm({ onSuccess, onCancel }) {
           id="logoFile"
           type="file"
           accept="image/*"
-          onChange={(e) => setLogoFile(e.target.files?.[0] || null)}
+          onChange={(event) => setLogoFile(event.target.files?.[0] || null)}
           className="block w-full text-sm text-gray-700 dark:text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 dark:file:bg-blue-900/20 file:text-blue-700 dark:file:text-blue-300 hover:file:bg-blue-100 dark:hover:file:bg-blue-900/40"
           disabled={loading}
         />
@@ -105,7 +132,6 @@ export default function AddClientModal({ isOpen, onClose, onClientAdded }) {
 
   return (
     <BaseModal isOpen={isOpen} onClose={onClose} title="Add New Client">
-      {/* The form already has padding, so we remove it from the direct child */}
       <AddClientForm onSuccess={handleSuccess} onCancel={onClose} />
     </BaseModal>
   );
