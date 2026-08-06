@@ -3,6 +3,10 @@ const {
   ItemContractError,
   normalizeUpdateItemPayload,
 } = require('./_itemContract');
+const {
+  loadClientSettings,
+  validateProfileAttributes,
+} = require('./_profileSettings');
 
 const IMPORT_ALIASES = {
   part_number: ['part', 'part_number', 'part #', 'part#', 'pn', 'p/n', 'sku'],
@@ -35,6 +39,8 @@ const IMPORT_ALIASES = {
     'quantity',
     'on hand',
     'on_hand',
+    'current qty',
+    'current quantity',
     'qty in stock',
     'qty_in_stock',
     'stock',
@@ -51,7 +57,7 @@ const IMPORT_ALIASES = {
     'storage location',
     'storage_location',
   ],
-  reorder_level: ['reorder_level', 'reorder point', 'reorder_lvl', 'min_stock'],
+  reorder_level: ['reorder_level', 'reorder level', 'reorder point', 'reorder_lvl', 'min_stock'],
   low_stock_threshold: [
     'low_stock_threshold',
     'low stock threshold',
@@ -69,21 +75,61 @@ function normalizeKey(value) {
     .replace(/_+/g, '_');
 }
 
-const REVERSE_IMPORT_ALIASES = new Map();
-for (const [canonical, aliases] of Object.entries(IMPORT_ALIASES)) {
-  REVERSE_IMPORT_ALIASES.set(normalizeKey(canonical), canonical);
-  for (const alias of aliases) {
-    REVERSE_IMPORT_ALIASES.set(normalizeKey(alias), canonical);
-  }
+function isBlankOrNa(value) {
+  if (value === undefined || value === null) return true;
+  const text = String(value).trim();
+  return !text || /^n\/?a$/i.test(text);
 }
 
-function mapImportedRow(rawRow) {
+function buildAliasLookup(settings = {}) {
+  const aliases = new Map();
+  for (const [canonical, sourceAliases] of Object.entries(IMPORT_ALIASES)) {
+    aliases.set(normalizeKey(canonical), canonical);
+    for (const alias of sourceAliases) {
+      aliases.set(normalizeKey(alias), canonical);
+    }
+  }
+
+  for (const [source, target] of Object.entries(settings.import_aliases || {})) {
+    aliases.set(normalizeKey(source), target == null ? null : normalizeKey(target));
+  }
+  return aliases;
+}
+
+function normalizeMappingTarget(target) {
+  if (target === null || target === undefined) return null;
+  const normalized = normalizeKey(target);
+  if (!normalized || normalized === 'ignore' || normalized === '__ignore__') {
+    return null;
+  }
+  if (normalized === 'inventory_location') return 'location';
+  if (normalized === 'on_hand') return 'total_quantity';
+  return normalized;
+}
+
+function mapImportedRow(rawRow, explicitMapping = {}, settings = {}) {
   const mapped = {};
+  const aliasLookup = buildAliasLookup(settings);
 
   for (const [rawKey, value] of Object.entries(rawRow || {})) {
     const cleanedKey = String(rawKey).trim();
-    const canonical = REVERSE_IMPORT_ALIASES.get(normalizeKey(cleanedKey));
-    mapped[canonical || cleanedKey] = value;
+    const explicitTarget = Object.prototype.hasOwnProperty.call(
+      explicitMapping,
+      rawKey,
+    )
+      ? explicitMapping[rawKey]
+      : Object.prototype.hasOwnProperty.call(explicitMapping, cleanedKey)
+        ? explicitMapping[cleanedKey]
+        : undefined;
+
+    const target =
+      explicitTarget !== undefined
+        ? normalizeMappingTarget(explicitTarget)
+        : normalizeMappingTarget(aliasLookup.get(normalizeKey(cleanedKey))) ||
+          cleanedKey;
+
+    if (!target) continue;
+    mapped[target] = value;
   }
 
   return mapped;
@@ -243,6 +289,70 @@ async function findOrCreateLocation(dbClient, cache, rawCode) {
   return locationId;
 }
 
+async function validateLocationId(dbClient, locationId) {
+  if (!locationId) return null;
+  const result = await dbClient.query(
+    'SELECT id FROM locations WHERE id = $1 LIMIT 1',
+    [locationId],
+  );
+  if (result.rows.length === 0) {
+    throw new ItemContractError('The selected default location does not exist.');
+  }
+  return Number(result.rows[0].id);
+}
+
+async function saveImportTemplate(dbClient, clientId, template, fallbackLocationId) {
+  if (!template || template.save !== true) return null;
+
+  const name = String(template.name || '').trim();
+  if (!name) {
+    throw new ItemContractError('An import template name is required.');
+  }
+
+  const isDefault = template.is_default !== false;
+  if (isDefault) {
+    await dbClient.query(
+      'UPDATE client_import_templates SET is_default = false WHERE client_id = $1',
+      [clientId],
+    );
+  }
+
+  const result = await dbClient.query(
+    `INSERT INTO client_import_templates (
+       client_id,
+       name,
+       sheet_name,
+       header_row,
+       column_mapping,
+       default_location_id,
+       is_default
+     )
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
+     ON CONFLICT (client_id, name)
+     DO UPDATE SET
+       sheet_name = EXCLUDED.sheet_name,
+       header_row = EXCLUDED.header_row,
+       column_mapping = EXCLUDED.column_mapping,
+       default_location_id = EXCLUDED.default_location_id,
+       is_default = EXCLUDED.is_default,
+       updated_at = NOW()
+     RETURNING *`,
+    [
+      clientId,
+      name,
+      String(template.sheet_name || '').trim() || null,
+      Number.isSafeInteger(Number(template.header_row))
+        ? Number(template.header_row)
+        : null,
+      JSON.stringify(template.column_mapping || {}),
+      template.default_location_id || fallbackLocationId || null,
+      isDefault,
+    ],
+  );
+
+  return result.rows[0];
+}
+
 function sendUniqueConflict(error, res) {
   if (error?.code !== '23505') return false;
 
@@ -264,6 +374,7 @@ function sendUniqueConflict(error, res) {
 exports.bulkImportItems = async (req, res, next) => {
   const clientId = Number(req.body?.client_id);
   const items = req.body?.items;
+  const explicitMapping = req.body?.column_mapping || {};
 
   if (!Number.isSafeInteger(clientId) || clientId < 1) {
     return res.status(400).json({ message: 'client_id must be a positive integer.' });
@@ -282,12 +393,40 @@ exports.bulkImportItems = async (req, res, next) => {
     dbClient = await pool.connect();
     await dbClient.query('BEGIN');
 
+    const settings = await loadClientSettings(clientId, dbClient);
+    const requestedDefaultLocation = Number(req.body?.default_location_id);
+    const defaultLocationId = await validateLocationId(
+      dbClient,
+      Number.isSafeInteger(requestedDefaultLocation) && requestedDefaultLocation > 0
+        ? requestedDefaultLocation
+        : settings.default_location_id,
+    );
+
     for (let index = 0; index < items.length; index += 1) {
-      const spreadsheetRow = index + 2;
-      const mapped = mapImportedRow(items[index]);
+      const spreadsheetRow = Number(req.body?.header_row || 1) + index + 1;
+      const mapped = mapImportedRow(
+        items[index],
+        explicitMapping,
+        settings,
+      );
+
+      if (isBlankOrNa(mapped.part_number) && !isBlankOrNa(mapped.vendor_item_number)) {
+        mapped.part_number = mapped.vendor_item_number;
+        warnings.push({
+          row: spreadsheetRow,
+          field: 'Part Number',
+          value: mapped.vendor_item_number,
+          message:
+            'Part Number was missing or N/A, so Vendor Item Number was used as the inventory part number.',
+        });
+      }
+
+      if (!mapped.uom && settings.default_uom) mapped.uom = settings.default_uom;
+      if (isBlankOrNa(mapped.lot_number)) mapped.lot_number = null;
+      if (isBlankOrNa(mapped.batch_number)) mapped.batch_number = null;
+
       const rawQuantity = mapped.total_quantity;
       const rawLocation = mapped.location;
-
       delete mapped.total_quantity;
       delete mapped.location;
 
@@ -335,17 +474,15 @@ exports.bulkImportItems = async (req, res, next) => {
             'Multiple locations were supplied. Quantity must be allocated to individual locations.',
           ),
         );
-      } else if (
+      }
+
+      if (
         parsedQuantity.quantity !== null &&
-        !parsedLocation.source
+        parsedLocation.codes.length === 0 &&
+        !defaultLocationId
       ) {
-        reviewIssues.push(
-          createReviewIssue(
-            'missing_location',
-            'location',
-            rawLocation,
-            'A numeric On Hand quantity was supplied without a location.',
-          ),
+        throw new ItemContractError(
+          `Row ${spreadsheetRow}: a physical location is required for Current Qty. Select a default import location or map a Location column.`,
         );
       }
 
@@ -359,11 +496,18 @@ exports.bulkImportItems = async (req, res, next) => {
         throw error;
       }
 
-      const { coreData, attributes } = normalized;
+      const { coreData } = normalized;
+      let { attributes } = normalized;
       if (!coreData.part_number) {
         throw new ItemContractError(
           `Row ${spreadsheetRow}: no mappable part number was found.`,
         );
+      }
+
+      try {
+        attributes = validateProfileAttributes(attributes, settings);
+      } catch (error) {
+        throw new ItemContractError(`Row ${spreadsheetRow}: ${error.message}`);
       }
 
       const insert = buildInsert(
@@ -375,17 +519,23 @@ exports.bulkImportItems = async (req, res, next) => {
       const itemResult = await dbClient.query(insert.text, insert.values);
       const itemId = itemResult.rows[0].id;
 
-      const canCreateInventoryBalance =
+      const canCreateImportedLocationBalance =
         parsedQuantity.quantity !== null &&
         parsedLocation.codes.length === 1 &&
         !parsedLocation.requiresAllocation;
+      const canCreateDefaultLocationBalance =
+        parsedQuantity.quantity !== null &&
+        parsedLocation.codes.length === 0 &&
+        defaultLocationId;
 
-      if (canCreateInventoryBalance) {
-        const locationId = await findOrCreateLocation(
-          dbClient,
-          locationCache,
-          parsedLocation.codes[0],
-        );
+      if (canCreateImportedLocationBalance || canCreateDefaultLocationBalance) {
+        const locationId = canCreateImportedLocationBalance
+          ? await findOrCreateLocation(
+              dbClient,
+              locationCache,
+              parsedLocation.codes[0],
+            )
+          : defaultLocationId;
 
         await dbClient.query(
           `INSERT INTO inventory (item_id, location_id, quantity)
@@ -397,6 +547,26 @@ exports.bulkImportItems = async (req, res, next) => {
       if (reviewIssues.length > 0) needsReviewCount += 1;
     }
 
+    const savedTemplate = await saveImportTemplate(
+      dbClient,
+      clientId,
+      req.body?.template,
+      defaultLocationId,
+    );
+
+    if (
+      defaultLocationId &&
+      Number(settings.default_location_id) !== Number(defaultLocationId) &&
+      req.body?.save_default_location === true
+    ) {
+      await dbClient.query(
+        `UPDATE client_inventory_settings
+         SET default_location_id = $2, updated_at = NOW()
+         WHERE client_id = $1`,
+        [clientId, defaultLocationId],
+      );
+    }
+
     await dbClient.query('COMMIT');
 
     return res.status(201).json({
@@ -405,6 +575,7 @@ exports.bulkImportItems = async (req, res, next) => {
       needsReviewCount,
       warningCount: warnings.length,
       warnings: warnings.slice(0, 50),
+      savedTemplate,
     });
   } catch (error) {
     if (dbClient) {
@@ -424,8 +595,11 @@ exports.bulkImportItems = async (req, res, next) => {
 };
 
 module.exports._test = {
+  buildAliasLookup,
+  isBlankOrNa,
   mapImportedRow,
+  normalizeLocation,
+  normalizeMappingTarget,
   parseImportedLocation,
   parseImportedQuantity,
-  normalizeLocation,
 };
