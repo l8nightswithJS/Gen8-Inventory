@@ -57,7 +57,13 @@ const IMPORT_ALIASES = {
     'storage location',
     'storage_location',
   ],
-  reorder_level: ['reorder_level', 'reorder level', 'reorder point', 'reorder_lvl', 'min_stock'],
+  reorder_level: [
+    'reorder_level',
+    'reorder level',
+    'reorder point',
+    'reorder_lvl',
+    'min_stock',
+  ],
   low_stock_threshold: [
     'low_stock_threshold',
     'low stock threshold',
@@ -113,20 +119,25 @@ function mapImportedRow(rawRow, explicitMapping = {}, settings = {}) {
 
   for (const [rawKey, value] of Object.entries(rawRow || {})) {
     const cleanedKey = String(rawKey).trim();
+    const normalizedSource = normalizeKey(cleanedKey);
+    const hasExplicitMapping =
+      Object.prototype.hasOwnProperty.call(explicitMapping, rawKey) ||
+      Object.prototype.hasOwnProperty.call(explicitMapping, cleanedKey);
     const explicitTarget = Object.prototype.hasOwnProperty.call(
       explicitMapping,
       rawKey,
     )
       ? explicitMapping[rawKey]
-      : Object.prototype.hasOwnProperty.call(explicitMapping, cleanedKey)
-        ? explicitMapping[cleanedKey]
-        : undefined;
+      : explicitMapping[cleanedKey];
 
-    const target =
-      explicitTarget !== undefined
-        ? normalizeMappingTarget(explicitTarget)
-        : normalizeMappingTarget(aliasLookup.get(normalizeKey(cleanedKey))) ||
-          cleanedKey;
+    let target;
+    if (hasExplicitMapping) {
+      target = normalizeMappingTarget(explicitTarget);
+    } else if (aliasLookup.has(normalizedSource)) {
+      target = normalizeMappingTarget(aliasLookup.get(normalizedSource));
+    } else {
+      target = cleanedKey;
+    }
 
     if (!target) continue;
     mapped[target] = value;
@@ -410,7 +421,10 @@ exports.bulkImportItems = async (req, res, next) => {
         settings,
       );
 
-      if (isBlankOrNa(mapped.part_number) && !isBlankOrNa(mapped.vendor_item_number)) {
+      if (
+        isBlankOrNa(mapped.part_number) &&
+        !isBlankOrNa(mapped.vendor_item_number)
+      ) {
         mapped.part_number = mapped.vendor_item_number;
         warnings.push({
           row: spreadsheetRow,
