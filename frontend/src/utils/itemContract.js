@@ -4,6 +4,8 @@ export const ITEM_CORE_FIELDS = new Set([
   'name',
   'description',
   'barcode',
+  'vendor_barcode',
+  'uom',
   'reorder_level',
   'low_stock_threshold',
   'alert_enabled',
@@ -19,7 +21,17 @@ const RESERVED_FIELDS = new Set([
   'last_updated',
   'total_quantity',
   'status',
+  'threshold_configured',
   'inventory_levels',
+  'inventory_location',
+  'inventory_record_count',
+  'review_status',
+  'review_issues',
+  'reviewed_at',
+  'location',
+  'locations',
+  'on_hand',
+  'on_hand_review',
   '__proto__',
   'prototype',
   'constructor',
@@ -31,24 +43,40 @@ function normalizeOptionalText(value) {
   return normalized || null;
 }
 
-function normalizeOptionalInteger(value, label) {
+function normalizeOptionalDecimal(value, label) {
   if (value === undefined || value === null || value === '') return null;
 
   const normalized = String(value).trim();
-  if (!/^\d+$/.test(normalized)) {
-    throw new Error(`${label} must be a non-negative whole number.`);
+  if (!/^\d+(?:\.\d{1,3})?$/.test(normalized)) {
+    throw new Error(
+      `${label} must be a non-negative number with no more than 3 decimal places.`,
+    );
   }
 
   const parsed = Number(normalized);
-  if (!Number.isSafeInteger(parsed)) {
-    throw new Error(`${label} is too large.`);
+  if (!Number.isFinite(parsed) || parsed > 99999999999.999) {
+    throw new Error(`${label} is outside the supported range.`);
   }
 
   return parsed;
 }
 
+function normalizeFieldKey(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/[^\w]/g, '')
+    .replace(/_+/g, '_');
+}
+
 function isCustomField(key) {
-  return !ITEM_CORE_FIELDS.has(key) && !RESERVED_FIELDS.has(key);
+  const normalized = normalizeFieldKey(key);
+  return (
+    !ITEM_CORE_FIELDS.has(key) &&
+    !RESERVED_FIELDS.has(key) &&
+    !RESERVED_FIELDS.has(normalized)
+  );
 }
 
 export function getCustomAttributeKeys(schema = [], item = null) {
@@ -69,6 +97,8 @@ export function createItemForm(item = null) {
     name: item.name ?? '',
     description: item.description ?? '',
     barcode: item.barcode ?? '',
+    vendor_barcode: item.vendor_barcode ?? '',
+    uom: item.uom ?? '',
     reorder_level: item.reorder_level ?? '',
     low_stock_threshold: item.low_stock_threshold ?? '',
     alert_enabled: item.alert_enabled !== false,
@@ -86,11 +116,13 @@ export function buildItemPayload({ form, customKeys = [], clientId }) {
     name: normalizeOptionalText(form.name),
     description: normalizeOptionalText(form.description),
     barcode: normalizeOptionalText(form.barcode),
-    reorder_level: normalizeOptionalInteger(
+    vendor_barcode: normalizeOptionalText(form.vendor_barcode),
+    uom: normalizeOptionalText(form.uom),
+    reorder_level: normalizeOptionalDecimal(
       form.reorder_level,
       'Reorder Level',
     ),
-    low_stock_threshold: normalizeOptionalInteger(
+    low_stock_threshold: normalizeOptionalDecimal(
       form.low_stock_threshold,
       'Low-Stock Threshold',
     ),
