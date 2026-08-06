@@ -1,5 +1,9 @@
 const pool = require('../db/pool');
 const { createClient } = require('@supabase/supabase-js');
+const {
+  getProfilePreset,
+  normalizeProfileKey,
+} = require('../../packages/inventory-profiles');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -35,7 +39,6 @@ async function uploadLogoToSupabase(fileBuffer, originalName, fileType) {
   }
 }
 
-// GET /api/clients
 exports.getAllClients = async (req, res, next) => {
   try {
     const userId = req.user?.id;
@@ -44,11 +47,16 @@ exports.getAllClients = async (req, res, next) => {
     }
 
     const result = await pool.query(
-      `SELECT c.*
-       FROM clients c
-       JOIN user_clients uc ON c.id = uc.client_id
-       WHERE uc.user_id = $1
-       ORDER BY c.name ASC`,
+      `SELECT
+         client.*,
+         COALESCE(settings.profile_key, 'general') AS inventory_profile
+       FROM clients AS client
+       JOIN user_clients AS user_client
+         ON client.id = user_client.client_id
+       LEFT JOIN client_inventory_settings AS settings
+         ON settings.client_id = client.id
+       WHERE user_client.user_id = $1
+       ORDER BY client.name ASC`,
       [userId],
     );
 
@@ -58,10 +66,11 @@ exports.getAllClients = async (req, res, next) => {
   }
 };
 
-// POST /api/clients/add
 exports.createClient = async (req, res, next) => {
   const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
   const userId = req.user?.id;
+  const profileKey = normalizeProfileKey(req.body?.profile_key);
+  const preset = getProfilePreset(profileKey);
   let logo_url = null;
   let dbClient = null;
   let transactionStarted = false;
@@ -101,8 +110,34 @@ exports.createClient = async (req, res, next) => {
       [userId, newClientId],
     );
 
+    await dbClient.query(
+      `INSERT INTO client_inventory_settings (
+         client_id,
+         profile_key,
+         default_uom,
+         display_columns,
+         field_definitions,
+         import_aliases
+       )
+       VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb)`,
+      [
+        newClientId,
+        preset.key,
+        preset.defaultUom,
+        JSON.stringify(preset.displayColumns),
+        JSON.stringify(preset.fieldDefinitions),
+        JSON.stringify(preset.importAliases),
+      ],
+    );
+
     const newClient = await dbClient.query(
-      'SELECT * FROM clients WHERE id = $1',
+      `SELECT
+         client.*,
+         settings.profile_key AS inventory_profile
+       FROM clients AS client
+       JOIN client_inventory_settings AS settings
+         ON settings.client_id = client.id
+       WHERE client.id = $1`,
       [newClientId],
     );
 
@@ -136,7 +171,6 @@ exports.createClient = async (req, res, next) => {
   }
 };
 
-// PUT /api/clients/:clientId
 exports.updateClient = async (req, res, next) => {
   try {
     const id = getClientId(req);
@@ -201,7 +235,6 @@ exports.updateClient = async (req, res, next) => {
   }
 };
 
-// GET /api/clients/:clientId
 exports.getClientById = async (req, res, next) => {
   try {
     const id = getClientId(req);
@@ -215,10 +248,15 @@ exports.getClientById = async (req, res, next) => {
     }
 
     const result = await pool.query(
-      `SELECT c.*
-       FROM clients c
-       JOIN user_clients uc ON uc.client_id = c.id
-       WHERE c.id = $1 AND uc.user_id = $2
+      `SELECT
+         client.*,
+         COALESCE(settings.profile_key, 'general') AS inventory_profile
+       FROM clients AS client
+       JOIN user_clients AS user_client
+         ON user_client.client_id = client.id
+       LEFT JOIN client_inventory_settings AS settings
+         ON settings.client_id = client.id
+       WHERE client.id = $1 AND user_client.user_id = $2
        LIMIT 1`,
       [id, userId],
     );
@@ -233,7 +271,6 @@ exports.getClientById = async (req, res, next) => {
   }
 };
 
-// DELETE /api/clients/:clientId
 exports.deleteClient = async (req, res, next) => {
   try {
     const id = getClientId(req);
