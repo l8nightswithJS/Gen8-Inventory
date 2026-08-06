@@ -44,36 +44,68 @@ function normalizeUom(value) {
   if (value === undefined || value === null || value === '') return null;
   if (typeof value !== 'string') throw new Error('uom must be text.');
 
-  const normalized = value.trim();
+  const normalized = value.trim().toLowerCase();
   if (!normalized) return null;
   if (normalized.length > 40) throw new Error('uom must be 40 characters or fewer.');
   return normalized;
 }
 
 exports.adjustInventory = async (req, res, next) => {
+  const itemId = Number(req.body?.item_id);
+  const locationId = Number(req.body?.location_id);
+  let changeQuantity;
+
   try {
-    const itemId = Number(req.body?.item_id);
-    const locationId = Number(req.body?.location_id);
-    const changeQuantity = parseSignedQuantity(
+    changeQuantity = parseSignedQuantity(
       req.body?.change_quantity,
       'change_quantity',
     );
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
 
-    if (!Number.isSafeInteger(itemId) || itemId < 1) {
-      return res.status(400).json({ message: 'item_id must be a positive integer.' });
-    }
-    if (!Number.isSafeInteger(locationId) || locationId < 1) {
-      return res
-        .status(400)
-        .json({ message: 'location_id must be a positive integer.' });
-    }
-    if (changeQuantity === 0) {
-      return res
-        .status(400)
-        .json({ message: 'change_quantity must not be zero.' });
+  if (!Number.isSafeInteger(itemId) || itemId < 1) {
+    return res.status(400).json({ message: 'item_id must be a positive integer.' });
+  }
+  if (!Number.isSafeInteger(locationId) || locationId < 1) {
+    return res
+      .status(400)
+      .json({ message: 'location_id must be a positive integer.' });
+  }
+  if (changeQuantity === 0) {
+    return res
+      .status(400)
+      .json({ message: 'change_quantity must not be zero.' });
+  }
+
+  let dbClient = null;
+  try {
+    dbClient = await pool.connect();
+    await dbClient.query('BEGIN');
+
+    const itemResult = await dbClient.query(
+      `SELECT id, review_status
+       FROM items
+       WHERE id = $1
+       FOR UPDATE`,
+      [itemId],
+    );
+
+    if (itemResult.rows.length === 0) {
+      await dbClient.query('ROLLBACK');
+      return res.status(404).json({ message: 'Item not found.' });
     }
 
-    const result = await pool.query(
+    if (itemResult.rows[0].review_status === 'needs_review') {
+      await dbClient.query('ROLLBACK');
+      return res.status(409).json({
+        code: 'ITEM_NEEDS_REVIEW',
+        message:
+          'Resolve this item’s imported quantity and location before adjusting stock.',
+      });
+    }
+
+    const result = await dbClient.query(
       `INSERT INTO inventory (item_id, location_id, quantity)
        VALUES ($1, $2, $3)
        ON CONFLICT (item_id, location_id)
@@ -84,11 +116,15 @@ exports.adjustInventory = async (req, res, next) => {
       [itemId, locationId, changeQuantity],
     );
 
+    await dbClient.query('COMMIT');
+
     return res.json({
       message: 'Inventory updated successfully',
       new_quantity: Number(result.rows[0].quantity),
     });
   } catch (error) {
+    if (dbClient) await dbClient.query('ROLLBACK').catch(() => undefined);
+
     if (error.code === '23514') {
       return res
         .status(409)
@@ -99,10 +135,9 @@ exports.adjustInventory = async (req, res, next) => {
         message: 'The selected item or location does not exist.',
       });
     }
-    if (error.message?.includes('change_quantity')) {
-      return res.status(400).json({ message: error.message });
-    }
     return next(error);
+  } finally {
+    dbClient?.release();
   }
 };
 
@@ -173,6 +208,14 @@ exports.resolveReview = async (req, res, next) => {
     if (itemResult.rows.length === 0) {
       await dbClient.query('ROLLBACK');
       return res.status(404).json({ message: 'Item not found.' });
+    }
+
+    if (itemResult.rows[0].review_status !== 'needs_review') {
+      await dbClient.query('ROLLBACK');
+      return res.status(409).json({
+        code: 'ITEM_NOT_IN_REVIEW',
+        message: 'This item no longer has unresolved inventory data.',
+      });
     }
 
     await dbClient.query('DELETE FROM inventory WHERE item_id = $1', [itemId]);
