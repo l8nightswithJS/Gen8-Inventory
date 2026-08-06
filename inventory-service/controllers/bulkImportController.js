@@ -135,15 +135,15 @@ async function findOrCreateLocation(dbClient, cache, rawCode) {
   );
 
   if (result.rows.length === 0) {
-    try {
-      result = await dbClient.query(
-        `INSERT INTO locations (code, description)
-         VALUES ($1, $2)
-         RETURNING id`,
-        [code, 'Created automatically during bulk import'],
-      );
-    } catch (error) {
-      if (error.code !== '23505') throw error;
+    result = await dbClient.query(
+      `INSERT INTO locations (code, description)
+       VALUES ($1, $2)
+       ON CONFLICT DO NOTHING
+       RETURNING id`,
+      [code, 'Created automatically during bulk import'],
+    );
+
+    if (result.rows.length === 0) {
       result = await dbClient.query(
         'SELECT id FROM locations WHERE lower(code) = lower($1) LIMIT 1',
         [code],
@@ -190,11 +190,12 @@ exports.bulkImportItems = async (req, res, next) => {
     return res.status(400).json({ message: 'items must be a non-empty array.' });
   }
 
-  const dbClient = await pool.connect();
+  let dbClient = null;
   const locationCache = new Map();
   const warnings = [];
 
   try {
+    dbClient = await pool.connect();
     await dbClient.query('BEGIN');
 
     for (let index = 0; index < items.length; index += 1) {
@@ -222,7 +223,11 @@ exports.bulkImportItems = async (req, res, next) => {
         });
       }
 
-      if (parsedQuantity.quantity === null && rawQuantity !== undefined && rawQuantity !== '') {
+      if (
+        parsedQuantity.quantity === null &&
+        rawQuantity !== undefined &&
+        rawQuantity !== ''
+      ) {
         mapped['On Hand (Review)'] = rawQuantity;
       }
 
@@ -271,7 +276,9 @@ exports.bulkImportItems = async (req, res, next) => {
       warnings: warnings.slice(0, 50),
     });
   } catch (error) {
-    await dbClient.query('ROLLBACK').catch(() => undefined);
+    if (dbClient) {
+      await dbClient.query('ROLLBACK').catch(() => undefined);
+    }
 
     if (error instanceof ItemContractError) {
       return res.status(error.status || 400).json({ message: error.message });
@@ -281,7 +288,7 @@ exports.bulkImportItems = async (req, res, next) => {
     console.error('Bulk import error:', error);
     return next(error);
   } finally {
-    dbClient.release();
+    dbClient?.release();
   }
 };
 
