@@ -57,6 +57,7 @@ export default function InventoryProfileModal({
   const [derivedFields, setDerivedFields] = useState([]);
   const [locations, setLocations] = useState([]);
   const [profileKey, setProfileKey] = useState(settings.profile_key || 'general');
+  const [initialProfileKey] = useState(settings.profile_key || 'general');
   const [defaultUom, setDefaultUom] = useState(settings.default_uom || '');
   const [defaultLocationId, setDefaultLocationId] = useState(
     settings.default_location_id ? String(settings.default_location_id) : '',
@@ -161,6 +162,7 @@ export default function InventoryProfileModal({
           label: definition.label.trim(),
         }))
         .filter((definition) => definition.key && definition.label);
+      const profileChanged = profileKey !== initialProfileKey;
 
       const { data } = await api.put(
         `/api/clients/${clientId}/inventory-settings`,
@@ -172,7 +174,7 @@ export default function InventoryProfileModal({
             : null,
           display_columns: displayColumns,
           field_definitions: cleanedDefinitions,
-          apply_preset: false,
+          apply_preset: profileChanged,
         },
       );
       await onSaved?.(data);
