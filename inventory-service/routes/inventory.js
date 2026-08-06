@@ -4,6 +4,7 @@ const inventoryController = require('../controllers/inventoryController');
 const bulkImportController = require('../controllers/bulkImportController');
 const inventoryReadController = require('../controllers/inventoryReadController');
 const inventoryAdjustmentController = require('../controllers/inventoryAdjustmentController');
+const profileAlertsController = require('../controllers/profileAlertsController');
 const { requireRole, handleValidation } = require('shared-auth');
 const { requireItemAccess } = require('../middleware/requireItemAccess');
 const {
@@ -61,7 +62,7 @@ router.get(
   '/alerts',
   query('client_id').isInt({ min: 1 }).withMessage('client_id is required').toInt(),
   handleValidation,
-  inventoryController.getActiveAlerts,
+  profileAlertsController.getActiveAlerts,
 );
 
 router.post(
