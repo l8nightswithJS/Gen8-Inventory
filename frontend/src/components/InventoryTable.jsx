@@ -20,6 +20,16 @@ const LABEL_OVERRIDES = {
   vendor_barcode: 'Vendor Barcode',
   reorder_level: 'Reorder Level',
   low_stock_threshold: 'Low-Stock Threshold',
+  manufacturer_part_number: 'Mfg Material #',
+  vendor_item_number: 'Vendor Item #',
+  minimum_quantity: 'Minimum Qty',
+  weekly_demand: 'Weekly Demand',
+  reorder_quantity: 'Reorder Qty',
+  target_quantity: 'Target Qty',
+  weeks_on_hand: 'Weeks on Hand',
+  suggested_reorder: 'Suggested Reorder',
+  batch_number: 'Batch #',
+  priority: 'Priority',
   status: 'Status',
 };
 
@@ -34,6 +44,7 @@ const HIDDEN_OPERATIONAL_COLUMNS = new Set([
 const STATUS_LABELS = {
   in_stock: 'In Stock',
   low_stock: 'Low Stock',
+  critical: 'Critical',
   out_of_stock: 'Out of Stock',
   needs_review: 'Needs Review',
 };
@@ -43,14 +54,17 @@ const STATUS_CLASSES = {
     'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
   low_stock:
     'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+  critical:
+    'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
   out_of_stock: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
   needs_review:
-    'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
+    'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
 };
 
 const isNumericLike = (key) =>
-  /\b(level|qty|quantity|threshold|count|days|hours|_id)\b/i.test(key) ||
-  key === 'total_quantity';
+  /\b(level|qty|quantity|threshold|count|days|hours|weeks|demand|reorder|target|minimum|_id)\b/i.test(
+    key,
+  ) || key === 'total_quantity';
 
 const humanLabel = (key) =>
   LABEL_OVERRIDES[key] ||
@@ -68,7 +82,7 @@ function StatusBadge({ status }) {
 }
 
 function MobileCard({ item, onEdit, onDelete, onResolveReview, role }) {
-  const part = item.part_number || item.name || '—';
+  const part = item.part_number || item.name || item.description || '—';
   const onHand = item.total_quantity ?? '—';
   const reviewIssues = Array.isArray(item.review_issues)
     ? item.review_issues
@@ -78,6 +92,9 @@ function MobileCard({ item, onEdit, onDelete, onResolveReview, role }) {
     ['Name', item.name],
     ['Description', item.description],
     ['Location', item.inventory_location],
+    ['Priority', item.priority],
+    ['Weeks on Hand', item.weeks_on_hand],
+    ['Suggested Reorder', item.suggested_reorder],
     ['Reorder Level', item.reorder_level],
     ['Internal Barcode', item.barcode],
     ['Vendor Barcode', item.vendor_barcode],
@@ -116,7 +133,7 @@ function MobileCard({ item, onEdit, onDelete, onResolveReview, role }) {
       </div>
 
       {item.status === 'needs_review' && reviewIssues.length > 0 && (
-        <div className="mt-4 rounded border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900 dark:border-orange-500/30 dark:bg-orange-900/20 dark:text-orange-200">
+        <div className="mt-4 rounded border border-violet-200 bg-violet-50 p-3 text-sm text-violet-900 dark:border-violet-500/30 dark:bg-violet-900/20 dark:text-violet-200">
           <div className="flex items-center gap-2 font-semibold">
             <FiAlertTriangle /> Inventory data needs review
           </div>
@@ -291,34 +308,35 @@ export default function InventoryTable({
                 className="border-b last:border-b-0 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
               >
                 {visibleColumns.map((key) => {
-                  const isNumeric = isNumericLike(key);
+                  const numeric = isNumericLike(key);
+                  const stockDot =
+                    item.status === 'out_of_stock'
+                      ? 'bg-red-500'
+                      : item.status === 'critical'
+                        ? 'bg-orange-500'
+                        : item.status === 'low_stock'
+                          ? 'bg-amber-500'
+                          : null;
+
                   return (
                     <td
                       key={key}
                       className={`px-4 py-3 align-top text-sm text-slate-700 dark:text-slate-300 ${
-                        isNumeric ? 'text-right tabular-nums' : 'text-left'
+                        numeric ? 'text-right tabular-nums' : 'text-left'
                       }`}
                     >
                       <div
                         className="flex items-center gap-2"
                         style={{
-                          justifyContent: isNumeric ? 'flex-end' : 'flex-start',
+                          justifyContent: numeric ? 'flex-end' : 'flex-start',
                         }}
                       >
-                        {key === 'total_quantity' &&
-                          item.status === 'low_stock' && (
-                            <div
-                              className="h-2 w-2 rounded-full bg-amber-500"
-                              title="Low Stock"
-                            />
-                          )}
-                        {key === 'total_quantity' &&
-                          item.status === 'out_of_stock' && (
-                            <div
-                              className="h-2 w-2 rounded-full bg-red-500"
-                              title="Out of Stock"
-                            />
-                          )}
+                        {key === 'total_quantity' && stockDot && (
+                          <div
+                            className={`h-2 w-2 rounded-full ${stockDot}`}
+                            title={STATUS_LABELS[item.status]}
+                          />
+                        )}
                         <span>{renderCellValue(item, key)}</span>
                       </div>
                     </td>
@@ -333,7 +351,7 @@ export default function InventoryTable({
                           onClick={() => onResolveReview?.(item)}
                           variant="ghost"
                           size="sm"
-                          className="text-orange-600 hover:text-orange-700"
+                          className="text-violet-600 hover:text-violet-700"
                           title="Resolve inventory review"
                         >
                           <FiAlertTriangle size={16} />
