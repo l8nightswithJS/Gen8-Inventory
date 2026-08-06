@@ -9,7 +9,28 @@ const IMPORT_ALIASES = {
   lot_number: ['lot', 'lot_number', 'lot #', 'lot#', 'batch', 'batch_number'],
   description: ['desc', 'description', 'item_description'],
   name: ['name', 'item_name', 'product_name'],
-  barcode: ['barcode', 'bar code', 'upc', 'barcodes'],
+  vendor_barcode: [
+    'barcode',
+    'bar code',
+    'barcodes',
+    'vendor barcode',
+    'vendor_barcode',
+    'manufacturer barcode',
+    'manufacturer_barcode',
+    'supplier barcode',
+    'supplier_barcode',
+    'upc',
+    'gtin',
+  ],
+  barcode: [
+    'internal barcode',
+    'internal_barcode',
+    'container barcode',
+    'container_barcode',
+    'inventory barcode',
+    'inventory_barcode',
+  ],
+  uom: ['uom', 'unit', 'units', 'unit of measure', 'unit_of_measure'],
   total_quantity: [
     'quantity',
     'on hand',
@@ -25,11 +46,17 @@ const IMPORT_ALIASES = {
     'locations',
     'bin',
     'bin location',
+    'bin_location',
     'shelf',
     'storage location',
+    'storage_location',
   ],
   reorder_level: ['reorder_level', 'reorder point', 'reorder_lvl', 'min_stock'],
-  low_stock_threshold: ['low_stock_threshold', 'low_stock'],
+  low_stock_threshold: [
+    'low_stock_threshold',
+    'low stock threshold',
+    'low_stock',
+  ],
 };
 
 function normalizeKey(value) {
@@ -62,46 +89,58 @@ function mapImportedRow(rawRow) {
   return mapped;
 }
 
+function hasSupportedPrecision(value) {
+  return Math.abs(value - Math.round(value * 1000) / 1000) < 1e-9;
+}
+
 function parseImportedQuantity(value) {
   if (value === undefined || value === null || value === '') {
-    return { quantity: null, warning: null };
+    return { quantity: null, warning: null, issueType: null };
   }
 
   if (typeof value === 'number') {
-    if (Number.isFinite(value) && value >= 0) {
-      return { quantity: value, warning: null };
+    if (Number.isFinite(value) && value >= 0 && hasSupportedPrecision(value)) {
+      return { quantity: value, warning: null, issueType: null };
     }
     return {
       quantity: null,
-      warning: 'On Hand must be a non-negative number.',
+      warning:
+        'On Hand must be a non-negative number with no more than 3 decimal places.',
+      issueType: 'invalid_quantity',
     };
   }
 
   const text = String(value).trim();
-  if (!text) return { quantity: null, warning: null };
+  if (!text) return { quantity: null, warning: null, issueType: null };
 
-  const exactNumber = /^\d+(?:\.\d+)?$/;
+  const exactNumber = /^\d+(?:\.\d{1,3})?$/;
   if (exactNumber.test(text)) {
-    return { quantity: Number(text), warning: null };
+    return { quantity: Number(text), warning: null, issueType: null };
   }
 
-  const thousandsNumber = /^\d{1,3}(?:,\d{3})+(?:\.\d+)?$/;
+  const thousandsNumber = /^\d{1,3}(?:,\d{3})+(?:\.\d{1,3})?$/;
   if (thousandsNumber.test(text)) {
-    return { quantity: Number(text.replace(/,/g, '')), warning: null };
+    return {
+      quantity: Number(text.replace(/,/g, '')),
+      warning: null,
+      issueType: null,
+    };
   }
 
-  const approximateNumber = /^(\d+(?:\.\d+)?)\+$/;
+  const approximateNumber = /^(\d+(?:\.\d{1,3})?)\+$/;
   const approximateMatch = text.match(approximateNumber);
   if (approximateMatch) {
     return {
       quantity: Number(approximateMatch[1]),
       warning: `Approximate quantity "${text}" was imported as ${approximateMatch[1]}.`,
+      issueType: 'approximate_quantity',
     };
   }
 
   return {
     quantity: null,
     warning: `On Hand value "${text}" is ambiguous and needs review.`,
+    issueType: 'ambiguous_quantity',
   };
 }
 
@@ -110,10 +149,52 @@ function normalizeLocation(value) {
   return String(value).trim();
 }
 
-function buildInsert(coreData, attributes, clientId) {
-  const columns = ['client_id', ...Object.keys(coreData), 'attributes'];
-  const values = [clientId, ...Object.values(coreData), JSON.stringify(attributes)];
+function parseImportedLocation(value) {
+  const source = normalizeLocation(value);
+  if (!source) return { source, codes: [], requiresAllocation: false };
+
+  const codes = source
+    .split(/[,;/\n]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  return {
+    source,
+    codes,
+    requiresAllocation: codes.length > 1,
+  };
+}
+
+function createReviewIssue(type, field, sourceValue, message) {
+  return {
+    type,
+    field,
+    source_value:
+      sourceValue === undefined || sourceValue === null
+        ? null
+        : String(sourceValue),
+    message,
+  };
+}
+
+function buildInsert(coreData, attributes, clientId, reviewIssues) {
+  const reviewStatus = reviewIssues.length > 0 ? 'needs_review' : 'clear';
+  const columns = [
+    'client_id',
+    ...Object.keys(coreData),
+    'attributes',
+    'review_status',
+    'review_issues',
+  ];
+  const values = [
+    clientId,
+    ...Object.values(coreData),
+    JSON.stringify(attributes),
+    reviewStatus,
+    JSON.stringify(reviewIssues),
+  ];
   const placeholders = values.map((_, index) => `$${index + 1}`);
+  placeholders[placeholders.length - 3] += '::jsonb';
   placeholders[placeholders.length - 1] += '::jsonb';
 
   return {
@@ -125,7 +206,9 @@ function buildInsert(coreData, attributes, clientId) {
 }
 
 async function findOrCreateLocation(dbClient, cache, rawCode) {
-  const code = normalizeLocation(rawCode) || 'Imported';
+  const code = normalizeLocation(rawCode);
+  if (!code) throw new Error('A location code is required.');
+
   const cacheKey = code.toLowerCase();
   if (cache.has(cacheKey)) return cache.get(cacheKey);
 
@@ -172,7 +255,7 @@ function sendUniqueConflict(error, res) {
     code: 'UNIQUE_CONFLICT',
     constraint,
     message: constraint.toLowerCase().includes('barcode')
-      ? 'Import failed. Each inventory record must have a unique barcode.'
+      ? 'Import failed. An internal inventory barcode is already assigned to another record.'
       : `Import failed because ${constraint} requires a unique value.`,
   });
   return true;
@@ -193,6 +276,7 @@ exports.bulkImportItems = async (req, res, next) => {
   let dbClient = null;
   const locationCache = new Map();
   const warnings = [];
+  let needsReviewCount = 0;
 
   try {
     dbClient = await pool.connect();
@@ -207,13 +291,10 @@ exports.bulkImportItems = async (req, res, next) => {
       delete mapped.total_quantity;
       delete mapped.location;
 
-      const locationText = normalizeLocation(rawLocation);
-      if (locationText) {
-        // Keep the human-readable source location visible in the item card.
-        mapped.Location = locationText;
-      }
-
       const parsedQuantity = parseImportedQuantity(rawQuantity);
+      const parsedLocation = parseImportedLocation(rawLocation);
+      const reviewIssues = [];
+
       if (parsedQuantity.warning) {
         warnings.push({
           row: spreadsheetRow,
@@ -221,14 +302,51 @@ exports.bulkImportItems = async (req, res, next) => {
           value: rawQuantity,
           message: parsedQuantity.warning,
         });
+        reviewIssues.push(
+          createReviewIssue(
+            parsedQuantity.issueType || 'quantity_review',
+            'quantity',
+            rawQuantity,
+            parsedQuantity.warning,
+          ),
+        );
       }
 
-      if (
-        parsedQuantity.quantity === null &&
-        rawQuantity !== undefined &&
-        rawQuantity !== ''
+      const quantityWasProvided =
+        rawQuantity !== undefined && rawQuantity !== null && rawQuantity !== '';
+
+      if (!quantityWasProvided && parsedLocation.source) {
+        reviewIssues.push(
+          createReviewIssue(
+            'missing_quantity',
+            'quantity',
+            rawQuantity,
+            'A location was provided without an On Hand quantity.',
+          ),
+        );
+      }
+
+      if (parsedLocation.requiresAllocation) {
+        reviewIssues.push(
+          createReviewIssue(
+            'location_allocation',
+            'location',
+            parsedLocation.source,
+            'Multiple locations were supplied. Quantity must be allocated to individual locations.',
+          ),
+        );
+      } else if (
+        parsedQuantity.quantity !== null &&
+        !parsedLocation.source
       ) {
-        mapped['On Hand (Review)'] = rawQuantity;
+        reviewIssues.push(
+          createReviewIssue(
+            'missing_location',
+            'location',
+            rawLocation,
+            'A numeric On Hand quantity was supplied without a location.',
+          ),
+        );
       }
 
       let normalized;
@@ -248,15 +366,25 @@ exports.bulkImportItems = async (req, res, next) => {
         );
       }
 
-      const insert = buildInsert(coreData, attributes, clientId);
+      const insert = buildInsert(
+        coreData,
+        attributes,
+        clientId,
+        reviewIssues,
+      );
       const itemResult = await dbClient.query(insert.text, insert.values);
       const itemId = itemResult.rows[0].id;
 
-      if (parsedQuantity.quantity !== null) {
+      const canCreateInventoryBalance =
+        parsedQuantity.quantity !== null &&
+        parsedLocation.codes.length === 1 &&
+        !parsedLocation.requiresAllocation;
+
+      if (canCreateInventoryBalance) {
         const locationId = await findOrCreateLocation(
           dbClient,
           locationCache,
-          locationText,
+          parsedLocation.codes[0],
         );
 
         await dbClient.query(
@@ -265,6 +393,8 @@ exports.bulkImportItems = async (req, res, next) => {
           [itemId, locationId, parsedQuantity.quantity],
         );
       }
+
+      if (reviewIssues.length > 0) needsReviewCount += 1;
     }
 
     await dbClient.query('COMMIT');
@@ -272,6 +402,7 @@ exports.bulkImportItems = async (req, res, next) => {
     return res.status(201).json({
       message: 'Bulk import successful',
       successCount: items.length,
+      needsReviewCount,
       warningCount: warnings.length,
       warnings: warnings.slice(0, 50),
     });
@@ -294,6 +425,7 @@ exports.bulkImportItems = async (req, res, next) => {
 
 module.exports._test = {
   mapImportedRow,
+  parseImportedLocation,
   parseImportedQuantity,
   normalizeLocation,
 };
