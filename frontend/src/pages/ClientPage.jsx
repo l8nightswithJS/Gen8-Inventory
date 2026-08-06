@@ -10,12 +10,12 @@ import BulkImport from '../components/BulkImport';
 import ColumnSetupModal from '../components/ColumnSetupModal';
 import ConfirmModal from '../components/ConfirmModal';
 import EditItemModal from '../components/EditItemModal';
+import InventoryProfileModal from '../components/InventoryProfileModal';
 import ReviewResolutionModal from '../components/ReviewResolutionModal';
 import ScanModal from '../components/ScanModal';
 import LocationViewModal from '../components/LocationViewModal';
 import ItemActionModal from '../components/ItemActionModal';
 import UsbScannerInput from '../components/UsbScannerInput';
-import { getSavedSchema, saveSchema } from '../context/SchemaContext';
 import {
   FiPlus,
   FiLayers,
@@ -23,7 +23,27 @@ import {
   FiColumns,
   FiCamera,
   FiChevronLeft,
+  FiSettings,
 } from 'react-icons/fi';
+
+const DEFAULT_SETTINGS = {
+  profile_key: 'general',
+  profile_label: 'General Inventory',
+  default_uom: null,
+  default_location_id: null,
+  display_columns: [
+    'part_number',
+    'name',
+    'description',
+    'lot_number',
+    'inventory_location',
+    'total_quantity',
+    'uom',
+    'status',
+  ],
+  field_definitions: [],
+  import_templates: [],
+};
 
 const LEGACY_COLUMN_MAP = {
   Location: 'inventory_location',
@@ -54,6 +74,7 @@ export default function ClientPage() {
   const isAdmin = localStorage.getItem('role') === 'admin';
 
   const [client, setClient] = useState(null);
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [items, setItems] = useState([]);
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
@@ -64,6 +85,7 @@ export default function ClientPage() {
     addItem: false,
     import: false,
     columnSetup: false,
+    profile: false,
     scan: false,
     deleteItem: null,
     editItem: null,
@@ -71,9 +93,6 @@ export default function ClientPage() {
     scannedLocation: null,
     scannedItem: null,
   });
-  const [schema, setSchema] = useState(() =>
-    normalizeColumns(getSavedSchema(clientId)),
-  );
   const [sortConfig, setSortConfig] = useState({
     key: 'part_number',
     direction: 'ascending',
@@ -90,8 +109,21 @@ export default function ClientPage() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  useEffect(() => {
-    setSchema(normalizeColumns(getSavedSchema(clientId)));
+  const fetchSettings = useCallback(async () => {
+    try {
+      const { data } = await api.get(
+        `/api/clients/${clientId}/inventory-settings`,
+        { meta: { silent: true } },
+      );
+      setSettings({ ...DEFAULT_SETTINGS, ...(data || {}) });
+      return data;
+    } catch (requestError) {
+      setError(
+        requestError?.response?.data?.message ||
+          'Failed to load client inventory profile.',
+      );
+      return null;
+    }
   }, [clientId]);
 
   const fetchItems = useCallback(async () => {
@@ -100,7 +132,11 @@ export default function ClientPage() {
         params: { client_id: clientId },
         meta: { silent: true },
       });
-      setItems(Array.isArray(data) ? data : []);
+      const nextItems = Array.isArray(data) ? data : data?.items;
+      setItems(Array.isArray(nextItems) ? nextItems : []);
+      if (!Array.isArray(data) && data?.settings) {
+        setSettings((previous) => ({ ...previous, ...data.settings }));
+      }
       setError('');
     } catch (requestError) {
       const status = requestError?.response?.status;
@@ -124,8 +160,9 @@ export default function ClientPage() {
 
   useEffect(() => {
     fetchClientDetails();
+    fetchSettings();
     fetchItems();
-  }, [clientId, fetchItems, fetchClientDetails]);
+  }, [fetchClientDetails, fetchItems, fetchSettings]);
 
   const handleModal = (modal, value) =>
     setModalState((previous) => ({ ...previous, [modal]: value }));
@@ -189,6 +226,29 @@ export default function ClientPage() {
     }
   };
 
+  const saveColumns = async (selectedColumns) => {
+    try {
+      const normalized = normalizeColumns(selectedColumns);
+      const { data } = await api.put(
+        `/api/clients/${clientId}/inventory-settings`,
+        {
+          profile_key: settings.profile_key,
+          display_columns: normalized,
+          field_definitions: settings.field_definitions,
+          default_uom: settings.default_uom,
+          default_location_id: settings.default_location_id,
+          apply_preset: false,
+        },
+      );
+      setSettings((previous) => ({ ...previous, ...data }));
+      handleModal('columnSetup', false);
+    } catch (requestError) {
+      setError(
+        requestError?.response?.data?.message || 'Failed to save shared columns.',
+      );
+    }
+  };
+
   const filteredItems = useMemo(() => {
     if (!query) return items;
     const lowerQuery = query.toLowerCase();
@@ -212,6 +272,8 @@ export default function ClientPage() {
         item.uom,
         item.inventory_location,
         item.status,
+        item.priority,
+        item.weeks_on_hand,
         ...reviewValues,
       ];
       const attributeValues = Object.values(item.attributes || {});
@@ -241,7 +303,9 @@ export default function ClientPage() {
         ) {
           return firstValue - secondValue;
         }
-        return String(firstValue).localeCompare(String(secondValue));
+        return String(firstValue).localeCompare(String(secondValue), undefined, {
+          numeric: true,
+        });
       });
       if (sortConfig.direction === 'descending') sortableItems.reverse();
     }
@@ -254,42 +318,11 @@ export default function ClientPage() {
   }, [sortedItems, page, rowsPerPage]);
 
   const columns = useMemo(() => {
-    if (schema.length > 0) return normalizeColumns(schema);
-
-    const preferredOrder = [
-      'part_number',
-      'name',
-      'description',
-      'lot_number',
-      'inventory_location',
-      'total_quantity',
-      'uom',
-      'status',
-      'reorder_level',
-      'low_stock_threshold',
-      'vendor_barcode',
-      'barcode',
-    ];
-
-    if (items.length === 0) return preferredOrder.slice(0, 8);
-
-    const allKeys = new Set(preferredOrder);
-    items.forEach((item) => {
-      Object.keys(item.attributes || {}).forEach((key) => allKeys.add(key));
-    });
-
-    const sortedKeys = Array.from(allKeys);
-    sortedKeys.sort((first, second) => {
-      const firstIndex = preferredOrder.indexOf(first);
-      const secondIndex = preferredOrder.indexOf(second);
-      if (firstIndex > -1 && secondIndex > -1) return firstIndex - secondIndex;
-      if (firstIndex > -1) return -1;
-      if (secondIndex > -1) return 1;
-      return first.localeCompare(second);
-    });
-
-    return sortedKeys;
-  }, [items, schema]);
+    const sharedColumns = normalizeColumns(settings.display_columns || []);
+    return sharedColumns.length > 0
+      ? sharedColumns
+      : DEFAULT_SETTINGS.display_columns;
+  }, [settings.display_columns]);
 
   return (
     <div className="mx-auto max-w-7xl px-4">
@@ -297,13 +330,18 @@ export default function ClientPage() {
         <div>
           <button
             onClick={() => navigate('/dashboard')}
-            className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 mb-2 sm:mb-0"
+            className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 mb-2"
           >
             <FiChevronLeft /> All Clients
           </button>
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-            {client?.name || 'Loading...'}
-          </h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+              {client?.name || 'Loading...'}
+            </h1>
+            <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+              {settings.profile_label || settings.profile_key}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -358,10 +396,18 @@ export default function ClientPage() {
                 <Button
                   onClick={() => handleModal('columnSetup', true)}
                   variant="secondary"
-                  title="Edit Columns"
+                  title="Edit Shared Columns"
                 >
                   <FiColumns className="sm:mr-2" />
                   <span className="hidden sm:inline">Columns</span>
+                </Button>
+                <Button
+                  onClick={() => handleModal('profile', true)}
+                  variant="secondary"
+                  title="Inventory Profile"
+                >
+                  <FiSettings className="sm:mr-2" />
+                  <span className="hidden sm:inline">Profile</span>
                 </Button>
               </>
             )}
@@ -404,25 +450,33 @@ export default function ClientPage() {
         <ColumnSetupModal
           isOpen={true}
           onClose={() => handleModal('columnSetup', false)}
-          onSave={(selectedColumns) => {
-            const normalized = normalizeColumns(selectedColumns);
-            const newSchema = saveSchema(clientId, normalized);
-            setSchema(newSchema);
-            handleModal('columnSetup', false);
-          }}
+          onSave={saveColumns}
           initial={columns}
+        />
+      )}
+      {modalState.profile && (
+        <InventoryProfileModal
+          clientId={clientId}
+          settings={settings}
+          onClose={() => handleModal('profile', false)}
+          onSaved={async (updatedSettings) => {
+            setSettings((previous) => ({ ...previous, ...updatedSettings }));
+            await fetchItems();
+          }}
         />
       )}
       {modalState.import && (
         <BulkImport
           clientId={clientId}
+          settings={settings}
           onClose={() => handleModal('import', false)}
           refresh={fetchItems}
+          refreshSettings={fetchSettings}
         />
       )}
       {modalState.addItem && (
         <AddItemModal
-          schema={columns}
+          settings={settings}
           clientId={clientId}
           onClose={() => handleModal('addItem', false)}
           onCreated={fetchItems}
@@ -430,7 +484,7 @@ export default function ClientPage() {
       )}
       {modalState.editItem && (
         <EditItemModal
-          schema={columns}
+          settings={settings}
           item={modalState.editItem}
           onClose={() => handleModal('editItem', null)}
           onUpdated={fetchItems}
