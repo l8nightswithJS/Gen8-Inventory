@@ -20,6 +20,10 @@ jest.mock('../middleware/requireItemAccess', () => ({
   }),
 }));
 
+jest.mock('../middleware/validateProfileAttributes', () => ({
+  validateProfileAttributes: (_req, _res, next) => next(),
+}));
+
 const mockMakeHandler = (name) => (req, res) =>
   res.json({
     handler: name,
@@ -29,13 +33,16 @@ const mockMakeHandler = (name) => (req, res) =>
 
 jest.mock('../controllers/inventoryController', () => ({
   getMasterInventoryByLocation: mockMakeHandler('getMasterInventoryByLocation'),
-  getActiveAlerts: mockMakeHandler('getActiveAlerts'),
   acknowledgeAlert: mockMakeHandler('acknowledgeAlert'),
   getItemById: mockMakeHandler('getItemById'),
   createItem: mockMakeHandler('createItem'),
   updateItem: mockMakeHandler('updateItem'),
   deleteItem: mockMakeHandler('deleteItem'),
   exportItems: mockMakeHandler('exportItems'),
+}));
+
+jest.mock('../controllers/profileAlertsController', () => ({
+  getActiveAlerts: mockMakeHandler('getActiveAlerts'),
 }));
 
 jest.mock('../controllers/inventoryReadController', () => ({
@@ -74,6 +81,15 @@ describe('inventory route authorization wiring', () => {
       itemAccess: { source: 'params', key: 'id' },
       itemListAccess: false,
     });
+  });
+
+  test('uses profile-aware alert controller', async () => {
+    const response = await request(app).get(
+      '/api/inventory/alerts?client_id=1',
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.handler).toBe('getActiveAlerts');
   });
 
   test('protects alert acknowledgement by item ID', async () => {
