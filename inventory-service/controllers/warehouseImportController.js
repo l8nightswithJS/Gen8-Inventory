@@ -1,7 +1,11 @@
 const pool = require('../db/pool');
 const { ItemContractError, normalizeUpdateItemPayload } = require('./_itemContract');
 const { loadClientSettings, validateProfileAttributes } = require('./_profileSettings');
-const { getStagingLocation, recordMovement } = require('./_movementLedger');
+const {
+  getStagingLocation,
+  movementActor,
+  recordMovement,
+} = require('./_movementLedger');
 const legacyImport = require('./bulkImportController')._test;
 
 const LOCATION_STRATEGIES = new Set(['staging', 'file', 'selected']);
@@ -9,7 +13,9 @@ const LOCATION_STRATEGIES = new Set(['staging', 'file', 'selected']);
 function normalizeStrategy(value) {
   const strategy = String(value || 'staging').trim().toLowerCase();
   if (!LOCATION_STRATEGIES.has(strategy)) {
-    throw new ItemContractError('location_strategy must be staging, file, or selected.');
+    throw new ItemContractError(
+      'location_strategy must be staging, file, or selected.',
+    );
   }
   return strategy;
 }
@@ -17,7 +23,9 @@ function normalizeStrategy(value) {
 function blankOrNa(value) {
   return legacyImport.isBlankOrNa
     ? legacyImport.isBlankOrNa(value)
-    : value == null || !String(value).trim() || /^n\/?a$/i.test(String(value).trim());
+    : value == null ||
+        !String(value).trim() ||
+        /^n\/?a$/i.test(String(value).trim());
 }
 
 async function activeLocationById(db, id) {
@@ -30,7 +38,9 @@ async function activeLocationById(db, id) {
     [id],
   );
   if (!result.rows[0]) {
-    throw new ItemContractError('The selected inventory location does not exist or is inactive.');
+    throw new ItemContractError(
+      'The selected inventory location does not exist or is inactive.',
+    );
   }
   return result.rows[0];
 }
@@ -63,7 +73,13 @@ async function findOrCreateFileLocation(db, cache, rawCode) {
   return result.rows[0];
 }
 
-async function saveTemplate(db, clientId, template, strategy, selectedLocationId) {
+async function saveTemplate(
+  db,
+  clientId,
+  template,
+  strategy,
+  selectedLocationId,
+) {
   if (!template || template.save !== true) return null;
   const name = String(template.name || '').trim();
   if (!name) throw new ItemContractError('An import template name is required.');
@@ -98,7 +114,9 @@ async function saveTemplate(db, clientId, template, strategy, selectedLocationId
       clientId,
       name,
       String(template.sheet_name || '').trim() || null,
-      Number.isFinite(Number(template.header_row)) ? Number(template.header_row) : null,
+      Number.isFinite(Number(template.header_row))
+        ? Number(template.header_row)
+        : null,
       JSON.stringify(template.column_mapping || {}),
       template.default_location_id || selectedLocationId || null,
       strategy,
@@ -129,7 +147,9 @@ function buildInsert(clientId, coreData, attributes, quantity, reviewIssues) {
   const placeholders = values.map((_, index) => `$${index + 1}`);
   placeholders[placeholders.length - 3] += '::jsonb';
   placeholders[placeholders.length - 1] += '::jsonb';
-  const quoted = columns.map((column) => `"${String(column).replace(/"/g, '""')}"`);
+  const quoted = columns.map(
+    (column) => `"${String(column).replace(/"/g, '""')}"`,
+  );
 
   return {
     text: `INSERT INTO items (${quoted.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING id, barcode, part_number, lot_number, uom`,
@@ -152,10 +172,14 @@ exports.bulkImportItems = async (req, res, next) => {
   const mapping = req.body?.column_mapping || {};
 
   if (!Number.isSafeInteger(clientId) || clientId < 1) {
-    return res.status(400).json({ message: 'client_id must be a positive integer.' });
+    return res
+      .status(400)
+      .json({ message: 'client_id must be a positive integer.' });
   }
   if (!Array.isArray(rows) || rows.length === 0) {
-    return res.status(400).json({ message: 'items must be a non-empty array.' });
+    return res
+      .status(400)
+      .json({ message: 'items must be a non-empty array.' });
   }
 
   let db = null;
@@ -167,17 +191,20 @@ exports.bulkImportItems = async (req, res, next) => {
     const strategy = normalizeStrategy(req.body?.location_strategy);
     const staging = await getStagingLocation(db);
     const requestedLocationId = Number(req.body?.default_location_id);
-    const selected = strategy === 'selected'
-      ? await activeLocationById(
-          db,
-          Number.isSafeInteger(requestedLocationId) && requestedLocationId > 0
-            ? requestedLocationId
-            : settings.default_location_id,
-        )
-      : null;
+    const selected =
+      strategy === 'selected'
+        ? await activeLocationById(
+            db,
+            Number.isSafeInteger(requestedLocationId) && requestedLocationId > 0
+              ? requestedLocationId
+              : settings.default_location_id,
+          )
+        : null;
 
     if (strategy === 'selected' && !selected) {
-      throw new ItemContractError('Select a destination location before importing.');
+      throw new ItemContractError(
+        'Select a destination location before importing.',
+      );
     }
 
     const warnings = [];
@@ -189,12 +216,16 @@ exports.bulkImportItems = async (req, res, next) => {
       const spreadsheetRow = Number(req.body?.header_row || 1) + index + 1;
       const mapped = legacyImport.mapImportedRow(rows[index], mapping, settings);
 
-      if (blankOrNa(mapped.part_number) && !blankOrNa(mapped.vendor_item_number)) {
+      if (
+        blankOrNa(mapped.part_number) &&
+        !blankOrNa(mapped.vendor_item_number)
+      ) {
         mapped.part_number = mapped.vendor_item_number;
         warnings.push({
           row: spreadsheetRow,
           field: 'Part Number',
-          message: 'Vendor Item Number was used because Part Number was blank or N/A.',
+          message:
+            'Vendor Item Number was used because Part Number was blank or N/A.',
         });
       }
 
@@ -219,21 +250,25 @@ exports.bulkImportItems = async (req, res, next) => {
           value: rawQuantity,
           message: parsedQuantity.warning,
         });
-        reviewIssues.push(issue(
-          parsedQuantity.issueType || 'quantity_review',
-          'quantity',
-          rawQuantity,
-          parsedQuantity.warning,
-        ));
+        reviewIssues.push(
+          issue(
+            parsedQuantity.issueType || 'quantity_review',
+            'quantity',
+            rawQuantity,
+            parsedQuantity.warning,
+          ),
+        );
       }
 
       if (strategy === 'file' && parsedLocation.requiresAllocation) {
-        reviewIssues.push(issue(
-          'location_allocation',
-          'location',
-          rawLocation,
-          'Multiple file locations were supplied. Allocate the quantity to individual locations.',
-        ));
+        reviewIssues.push(
+          issue(
+            'location_allocation',
+            'location',
+            rawLocation,
+            'Multiple file locations were supplied. Allocate the quantity to individual locations.',
+          ),
+        );
       }
 
       let normalized;
@@ -241,21 +276,30 @@ exports.bulkImportItems = async (req, res, next) => {
         normalized = normalizeUpdateItemPayload(mapped);
       } catch (error) {
         if (error instanceof ItemContractError) {
-          throw new ItemContractError(`Row ${spreadsheetRow}: ${error.message}`);
+          throw new ItemContractError(
+            `Row ${spreadsheetRow}: ${error.message}`,
+          );
         }
         throw error;
       }
 
       const { coreData } = normalized;
       if (!coreData.part_number) {
-        throw new ItemContractError(`Row ${spreadsheetRow}: no mappable part number was found.`);
+        throw new ItemContractError(
+          `Row ${spreadsheetRow}: no mappable part number was found.`,
+        );
       }
 
       let attributes;
       try {
-        attributes = validateProfileAttributes(normalized.attributes, settings);
+        attributes = validateProfileAttributes(
+          normalized.attributes,
+          settings,
+        );
       } catch (error) {
-        throw new ItemContractError(`Row ${spreadsheetRow}: ${error.message}`);
+        throw new ItemContractError(
+          `Row ${spreadsheetRow}: ${error.message}`,
+        );
       }
 
       const insert = buildInsert(
@@ -275,13 +319,18 @@ exports.bulkImportItems = async (req, res, next) => {
         } else if (strategy === 'selected') {
           destination = selected;
         } else if (parsedLocation.codes.length === 1) {
-          destination = await findOrCreateFileLocation(db, locationCache, parsedLocation.codes[0]);
+          destination = await findOrCreateFileLocation(
+            db,
+            locationCache,
+            parsedLocation.codes[0],
+          );
         } else if (parsedLocation.codes.length === 0) {
           destination = staging;
           warnings.push({
             row: spreadsheetRow,
             field: 'Location',
-            message: 'No file location was supplied; inventory was placed in STAGING.',
+            message:
+              'No file location was supplied; inventory was placed in STAGING.',
           });
         }
       }
@@ -306,6 +355,7 @@ exports.bulkImportItems = async (req, res, next) => {
             spreadsheet_row: spreadsheetRow,
             location_strategy: strategy,
           },
+          ...movementActor(req.user),
         });
       }
 
@@ -350,9 +400,10 @@ exports.bulkImportItems = async (req, res, next) => {
       createdItems,
       savedTemplate,
       locationStrategy: strategy,
-      stagingLocation: strategy === 'staging'
-        ? { id: staging.id, code: staging.code, barcode: staging.barcode }
-        : null,
+      stagingLocation:
+        strategy === 'staging'
+          ? { id: staging.id, code: staging.code, barcode: staging.barcode }
+          : null,
     });
   } catch (error) {
     if (db) await db.query('ROLLBACK').catch(() => undefined);
@@ -363,7 +414,8 @@ exports.bulkImportItems = async (req, res, next) => {
       return res.status(409).json({
         code: 'UNIQUE_CONFLICT',
         constraint: error.constraint || null,
-        message: 'Import encountered a unique-value conflict. Retry after confirming the database migration is applied.',
+        message:
+          'Import encountered a unique-value conflict. Retry after confirming the database migration is applied.',
       });
     }
     return next(error);
