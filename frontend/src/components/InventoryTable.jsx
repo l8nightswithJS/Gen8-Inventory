@@ -3,23 +3,23 @@ import {
   FiAlertTriangle,
   FiChevronDown,
   FiChevronUp,
+  FiClock,
   FiEdit2,
+  FiPackage,
   FiTrash2,
 } from 'react-icons/fi';
 import Button from './ui/Button';
 
-const LABEL_OVERRIDES = {
+const LABELS = {
   part_number: 'Part #',
   lot_number: 'Lot #',
-  name: 'Name',
-  description: 'Description',
   total_quantity: 'On Hand',
+  initial_quantity: 'Initial Qty',
   uom: 'UOM',
   inventory_location: 'Location',
-  barcode: 'Internal Barcode',
+  barcode: 'Container Barcode',
   vendor_barcode: 'Vendor Barcode',
-  reorder_level: 'Reorder Level',
-  low_stock_threshold: 'Low-Stock Threshold',
+  container_status: 'Container',
   manufacturer_part_number: 'Mfg Material #',
   vendor_item_number: 'Vendor Item #',
   minimum_quantity: 'Minimum Qty',
@@ -33,7 +33,7 @@ const LABEL_OVERRIDES = {
   status: 'Status',
 };
 
-const HIDDEN_OPERATIONAL_COLUMNS = new Set([
+const HIDDEN = new Set([
   'review_status',
   'review_issues',
   'reviewed_at',
@@ -50,179 +50,105 @@ const STATUS_LABELS = {
 };
 
 const STATUS_CLASSES = {
-  in_stock:
-    'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
-  low_stock:
-    'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
-  critical:
-    'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
+  in_stock: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
+  low_stock: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+  critical: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
   out_of_stock: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
-  needs_review:
-    'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
+  needs_review: 'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
 };
 
-const isNumericLike = (key) =>
-  /\b(level|qty|quantity|threshold|count|days|hours|weeks|demand|reorder|target|minimum|_id)\b/i.test(
-    key,
-  ) || key === 'total_quantity';
+const CONTAINER_LABELS = {
+  available: 'Available',
+  empty: 'Empty',
+  hold: 'Hold',
+  quarantine: 'Quarantine',
+};
+
+const isNumeric = (key) =>
+  /\b(level|qty|quantity|threshold|count|weeks|demand|reorder|target|minimum|_id)\b/i.test(key) ||
+  ['total_quantity', 'initial_quantity'].includes(key);
 
 const humanLabel = (key) =>
-  LABEL_OVERRIDES[key] ||
-  key.replace(/_/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase());
+  LABELS[key] || key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
-function StatusBadge({ status }) {
+function Badge({ status }) {
   const normalized = STATUS_LABELS[status] ? status : 'in_stock';
   return (
-    <span
-      className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${STATUS_CLASSES[normalized]}`}
-    >
+    <span className={`inline-flex whitespace-nowrap rounded-full px-2 py-1 text-xs font-semibold ${STATUS_CLASSES[normalized]}`}>
       {STATUS_LABELS[normalized]}
     </span>
   );
 }
 
-function MobileCard({ item, onEdit, onDelete, onResolveReview, role }) {
-  const part = item.part_number || item.name || item.description || '—';
-  const onHand = item.total_quantity ?? '—';
-  const reviewIssues = Array.isArray(item.review_issues)
-    ? item.review_issues
-    : [];
-
-  const details = [
-    ['Name', item.name],
-    ['Description', item.description],
-    ['Location', item.inventory_location],
-    ['Priority', item.priority],
-    ['Weeks on Hand', item.weeks_on_hand],
-    ['Suggested Reorder', item.suggested_reorder],
-    ['Reorder Level', item.reorder_level],
-    ['Internal Barcode', item.barcode],
-    ['Vendor Barcode', item.vendor_barcode],
-    ...Object.entries(item.attributes || {}),
-  ].filter(([, value]) => value != null && value !== '');
-
+function SortHeader({ label, sortKey, onSort, sortConfig }) {
+  const active = sortConfig.key === sortKey;
   return (
-    <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-md p-4 mb-4">
-      <div className="flex items-start justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-3">
-        <div>
-          <p className="font-bold text-lg text-slate-800 dark:text-white">
-            {part}
-          </p>
-          {item.lot_number && (
-            <p className="text-sm font-mono text-slate-500 dark:text-slate-400">
-              Lot: {item.lot_number}
-            </p>
-          )}
-          <div className="mt-2">
-            <StatusBadge status={item.status} />
-          </div>
-        </div>
-        <div className="text-right flex-shrink-0">
-          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-            On Hand
-          </p>
-          <p className="font-bold text-2xl text-slate-800 dark:text-white tabular-nums">
-            {onHand}
-          </p>
-          {item.uom && (
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              {item.uom}
-            </p>
-          )}
-        </div>
-      </div>
-
-      {item.status === 'needs_review' && reviewIssues.length > 0 && (
-        <div className="mt-4 rounded border border-violet-200 bg-violet-50 p-3 text-sm text-violet-900 dark:border-violet-500/30 dark:bg-violet-900/20 dark:text-violet-200">
-          <div className="flex items-center gap-2 font-semibold">
-            <FiAlertTriangle /> Inventory data needs review
-          </div>
-          <p className="mt-1">
-            {reviewIssues[0]?.message || 'Imported data requires review.'}
-          </p>
-          {reviewIssues.length > 1 && (
-            <p className="mt-1 text-xs">+{reviewIssues.length - 1} more issue(s)</p>
-          )}
-        </div>
-      )}
-
-      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-        {details.map(([key, value]) => (
-          <div key={key}>
-            <p className="text-slate-500 dark:text-slate-400">
-              {humanLabel(key)}
-            </p>
-            <p className="font-medium text-slate-700 dark:text-slate-300 break-words">
-              {String(value)}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      {role === 'admin' && (
-        <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-end gap-2">
-          {item.status === 'needs_review' && (
-            <Button
-              onClick={() => onResolveReview?.(item)}
-              size="sm"
-              variant="secondary"
-              leftIcon={FiAlertTriangle}
-            >
-              Resolve
-            </Button>
-          )}
-          <Button
-            onClick={() => onEdit(item)}
-            size="sm"
-            variant="secondary"
-            leftIcon={FiEdit2}
-          >
-            Edit
-          </Button>
-          <Button
-            onClick={() => onDelete(item)}
-            size="sm"
-            variant="danger"
-            leftIcon={FiTrash2}
-          >
-            Delete
-          </Button>
-        </div>
-      )}
-    </div>
+    <button className="flex items-center gap-1 whitespace-nowrap" onClick={() => onSort(sortKey)}>
+      {label}
+      {active ? (
+        sortConfig.direction === 'ascending' ? <FiChevronUp /> : <FiChevronDown />
+      ) : null}
+    </button>
   );
 }
 
-const SortableHeader = ({
-  children,
-  sortKey,
-  onSort,
-  sortConfig,
-  className,
-}) => {
-  const isSorted = sortConfig.key === sortKey;
-  const isAscending = sortConfig.direction === 'ascending';
-
+function MobileCard({ item, role, onEdit, onDelete, onResolveReview, onRemaining, onHistory }) {
   return (
-    <button
-      className={`flex items-center gap-1 group ${className}`}
-      onClick={() => onSort(sortKey)}
-    >
-      <span>{children}</span>
-      <span className="opacity-0 group-hover:opacity-100 transition-opacity">
-        {isSorted ? (
-          isAscending ? (
-            <FiChevronUp size={14} />
-          ) : (
-            <FiChevronDown size={14} />
-          )
-        ) : (
-          <FiChevronUp size={14} className="text-slate-400" />
+    <div className="mb-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3 dark:border-slate-800">
+        <div className="min-w-0">
+          <p className="break-words text-lg font-bold text-slate-900 dark:text-white">
+            {item.part_number || item.name || item.description || '—'}
+          </p>
+          <p className="mt-1 font-mono text-xs text-slate-500">{item.barcode || 'Barcode pending'}</p>
+          {item.lot_number && <p className="mt-1 text-sm text-slate-500">Lot: {item.lot_number}</p>}
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Badge status={item.status} />
+            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              {CONTAINER_LABELS[item.container_status] || item.container_status || 'Available'}
+            </span>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-slate-500">On Hand</p>
+          <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-white">{item.total_quantity ?? 0}</p>
+          <p className="text-xs text-slate-500">{item.uom || ''}</p>
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+        {[
+          ['Name', item.name],
+          ['Description', item.description],
+          ['Location', item.inventory_location],
+          ['Initial Qty', item.initial_quantity],
+          ...Object.entries(item.attributes || {}),
+        ]
+          .filter(([, value]) => value !== null && value !== undefined && value !== '')
+          .map(([label, value]) => (
+            <div key={label}>
+              <p className="text-slate-500">{humanLabel(label)}</p>
+              <p className="break-words font-medium text-slate-700 dark:text-slate-300">{String(value)}</p>
+            </div>
+          ))}
+      </div>
+
+      <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+        <Button variant="secondary" size="sm" onClick={() => onRemaining?.(item)} leftIcon={FiPackage}>Remaining</Button>
+        <Button variant="secondary" size="sm" onClick={() => onHistory?.(item)} leftIcon={FiClock}>History</Button>
+        {role === 'admin' && item.status === 'needs_review' && (
+          <Button variant="secondary" size="sm" onClick={() => onResolveReview?.(item)} leftIcon={FiAlertTriangle}>Resolve</Button>
         )}
-      </span>
-    </button>
+        {role === 'admin' && (
+          <>
+            <Button variant="secondary" size="sm" onClick={() => onEdit?.(item)} leftIcon={FiEdit2}>Edit</Button>
+            <Button variant="danger" size="sm" onClick={() => onDelete?.(item)} leftIcon={FiTrash2}>Archive</Button>
+          </>
+        )}
+      </div>
+    </div>
   );
-};
+}
 
 export default function InventoryTable({
   items,
@@ -236,225 +162,112 @@ export default function InventoryTable({
   onEdit,
   onDelete,
   onResolveReview,
+  onRemaining,
+  onHistory,
   role = 'viewer',
   rowsPerPage,
   onRowsPerPageChange,
   viewMode = 'desktop',
 }) {
   const safeItems = useMemo(() => (Array.isArray(items) ? items : []), [items]);
-  const visibleColumns = useMemo(
-    () => columns.filter((key) => !HIDDEN_OPERATIONAL_COLUMNS.has(key)),
-    [columns],
-  );
+  const visibleColumns = useMemo(() => columns.filter((key) => !HIDDEN.has(key)), [columns]);
 
-  const renderCellValue = (item, key) => {
-    if (key === 'status') return <StatusBadge status={item.status} />;
-
+  const cell = (item, key) => {
+    if (key === 'status') return <Badge status={item.status} />;
+    if (key === 'container_status') return CONTAINER_LABELS[item.container_status] || item.container_status || 'Available';
     const value = item[key] ?? item.attributes?.[key];
-    if (value == null || value === '') {
-      return <span className="text-gray-400 dark:text-gray-500">—</span>;
-    }
-
-    return String(value);
+    return value === null || value === undefined || value === '' ? '—' : String(value);
   };
 
-  const ResponsiveTable = () => (
-    <div className="overflow-x-auto bg-white dark:bg-slate-900 shadow-md rounded-lg">
-      <table className="w-full table-auto border-collapse text-sm">
-        <thead className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+  const desktop = (
+    <div className="relative w-full overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <table className="min-w-max w-full border-collapse text-sm">
+        <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
           <tr>
-            {visibleColumns.map((key) => (
+            {visibleColumns.map((key, index) => (
               <th
                 key={key}
-                scope="col"
-                className={`px-4 py-3 text-[12px] font-semibold uppercase text-slate-600 dark:text-slate-400 ${
-                  isNumericLike(key) ? 'text-right' : 'text-left'
-                }`}
+                className={`whitespace-nowrap px-3 py-3 text-xs font-semibold uppercase text-slate-600 dark:text-slate-400 ${isNumeric(key) ? 'text-right' : 'text-left'} ${index === 0 ? 'sticky left-0 z-20 bg-slate-50 dark:bg-slate-900 shadow-[2px_0_0_rgba(148,163,184,0.15)]' : ''}`}
               >
-                <SortableHeader
-                  sortKey={key}
-                  onSort={onSort}
-                  sortConfig={sortConfig}
-                  className={isNumericLike(key) ? 'ml-auto' : ''}
-                >
-                  {humanLabel(key)}
-                </SortableHeader>
+                <SortHeader label={humanLabel(key)} sortKey={key} onSort={onSort} sortConfig={sortConfig} />
               </th>
             ))}
-            {role === 'admin' && (
-              <th
-                scope="col"
-                className="px-4 py-3 text-center text-[12px] font-semibold uppercase text-slate-600 dark:text-slate-400 w-32"
-              >
-                Actions
-              </th>
-            )}
+            <th className="sticky right-0 z-20 min-w-[190px] bg-slate-50 px-3 py-3 text-center text-xs font-semibold uppercase text-slate-600 shadow-[-2px_0_0_rgba(148,163,184,0.15)] dark:bg-slate-900 dark:text-slate-400">
+              Actions
+            </th>
           </tr>
         </thead>
         <tbody>
           {safeItems.length === 0 ? (
-            <tr>
-              <td
-                colSpan={visibleColumns.length + (role === 'admin' ? 1 : 0)}
-                className="px-6 py-5 text-center text-gray-500 dark:text-gray-400 italic"
-              >
-                No items to display.
+            <tr><td colSpan={visibleColumns.length + 1} className="px-6 py-6 text-center italic text-slate-500">No items to display.</td></tr>
+          ) : safeItems.map((item) => (
+            <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50">
+              {visibleColumns.map((key, index) => (
+                <td
+                  key={key}
+                  className={`max-w-[260px] whitespace-nowrap px-3 py-3 text-slate-700 dark:text-slate-300 ${isNumeric(key) ? 'text-right tabular-nums' : 'text-left'} ${index === 0 ? 'sticky left-0 z-10 bg-white font-medium shadow-[2px_0_0_rgba(148,163,184,0.12)] dark:bg-slate-900' : ''}`}
+                >
+                  <div className={index === 0 ? 'max-w-[220px] truncate' : 'max-w-[250px] truncate'}>{cell(item, key)}</div>
+                </td>
+              ))}
+              <td className="sticky right-0 z-10 bg-white px-2 py-2 shadow-[-2px_0_0_rgba(148,163,184,0.12)] dark:bg-slate-900">
+                <div className="flex items-center justify-center gap-1">
+                  <Button variant="ghost" size="sm" title="Update remaining quantity" onClick={() => onRemaining?.(item)}><FiPackage size={16} /></Button>
+                  <Button variant="ghost" size="sm" title="Movement history" onClick={() => onHistory?.(item)}><FiClock size={16} /></Button>
+                  {role === 'admin' && item.status === 'needs_review' && (
+                    <Button variant="ghost" size="sm" title="Resolve review" onClick={() => onResolveReview?.(item)} className="text-violet-600"><FiAlertTriangle size={16} /></Button>
+                  )}
+                  {role === 'admin' && (
+                    <>
+                      <Button variant="ghost" size="sm" title="Edit" onClick={() => onEdit?.(item)}><FiEdit2 size={16} /></Button>
+                      <Button variant="ghost" size="sm" title="Archive" onClick={() => onDelete?.(item)} className="text-rose-600"><FiTrash2 size={16} /></Button>
+                    </>
+                  )}
+                </div>
               </td>
             </tr>
-          ) : (
-            safeItems.map((item) => (
-              <tr
-                key={item.id}
-                className="border-b last:border-b-0 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-              >
-                {visibleColumns.map((key) => {
-                  const numeric = isNumericLike(key);
-                  const stockDot =
-                    item.status === 'out_of_stock'
-                      ? 'bg-red-500'
-                      : item.status === 'critical'
-                        ? 'bg-orange-500'
-                        : item.status === 'low_stock'
-                          ? 'bg-amber-500'
-                          : null;
-
-                  return (
-                    <td
-                      key={key}
-                      className={`px-4 py-3 align-top text-sm text-slate-700 dark:text-slate-300 ${
-                        numeric ? 'text-right tabular-nums' : 'text-left'
-                      }`}
-                    >
-                      <div
-                        className="flex items-center gap-2"
-                        style={{
-                          justifyContent: numeric ? 'flex-end' : 'flex-start',
-                        }}
-                      >
-                        {key === 'total_quantity' && stockDot && (
-                          <div
-                            className={`h-2 w-2 rounded-full ${stockDot}`}
-                            title={STATUS_LABELS[item.status]}
-                          />
-                        )}
-                        <span>{renderCellValue(item, key)}</span>
-                      </div>
-                    </td>
-                  );
-                })}
-
-                {role === 'admin' && (
-                  <td className="px-4 py-3 align-top text-center w-32">
-                    <div className="flex items-center justify-center gap-1">
-                      {item.status === 'needs_review' && (
-                        <Button
-                          onClick={() => onResolveReview?.(item)}
-                          variant="ghost"
-                          size="sm"
-                          className="text-violet-600 hover:text-violet-700"
-                          title="Resolve inventory review"
-                        >
-                          <FiAlertTriangle size={16} />
-                        </Button>
-                      )}
-                      <Button
-                        onClick={() => onEdit(item)}
-                        variant="ghost"
-                        size="sm"
-                        title="Edit"
-                      >
-                        <FiEdit2 size={16} />
-                      </Button>
-                      <Button
-                        onClick={() => onDelete(item)}
-                        variant="ghost"
-                        size="sm"
-                        className="text-rose-600 hover:text-rose-700"
-                        title="Delete"
-                      >
-                        <FiTrash2 size={16} />
-                      </Button>
-                    </div>
-                  </td>
-                )}
-              </tr>
-            ))
-          )}
+          ))}
         </tbody>
       </table>
     </div>
   );
 
-  const MobileCards = () => (
+  const mobile = (
     <div>
-      {safeItems.length === 0 ? (
-        <p className="text-center text-gray-500 dark:text-gray-400 italic mt-4">
-          No items to display.
-        </p>
-      ) : (
-        safeItems.map((item) => (
-          <MobileCard
-            key={item.id}
-            item={item}
-            onEdit={onEdit}
-            onDelete={onDelete}
-            onResolveReview={onResolveReview}
-            role={role}
-          />
-        ))
-      )}
-    </div>
-  );
-
-  const Pager = () => (
-    <div className="my-4 flex flex-col sm:flex-row items-center sm:justify-between gap-3 text-sm text-gray-700 dark:text-gray-300">
-      <div className="font-medium">
-        Total items: <span className="font-bold">{totalItems}</span>
-      </div>
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
-          <span className="text-gray-600 dark:text-gray-400">Rows:</span>
-          <select
-            value={rowsPerPage}
-            onChange={(event) =>
-              onRowsPerPageChange?.(Number(event.target.value))
-            }
-            className="h-8 border rounded px-2 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700"
-          >
-            {[15, 25, 50, 100].map((number) => (
-              <option key={number} value={number}>
-                {number}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            disabled={page <= 1}
-            onClick={() => onPage(page - 1)}
-            className="px-3 py-1.5 border rounded disabled:opacity-50 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 border-slate-300 dark:border-slate-700"
-          >
-            Prev
-          </button>
-          <span className="tabular-nums">
-            Page {page} of {totalPages}
-          </span>
-          <button
-            disabled={page >= totalPages}
-            onClick={() => onPage(page + 1)}
-            className="px-3 py-1.5 border rounded disabled:opacity-50 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 border-slate-300 dark:border-slate-700"
-          >
-            Next
-          </button>
-        </div>
-      </div>
+      {safeItems.map((item) => (
+        <MobileCard
+          key={item.id}
+          item={item}
+          role={role}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onResolveReview={onResolveReview}
+          onRemaining={onRemaining}
+          onHistory={onHistory}
+        />
+      ))}
     </div>
   );
 
   return (
-    <div className="mt-4 flex flex-col">
-      {viewMode === 'mobile' ? <MobileCards /> : <ResponsiveTable />}
-      <Pager />
+    <div className="mt-4 min-w-0">
+      {viewMode === 'mobile' ? mobile : desktop}
+      <div className="my-4 flex flex-col items-center gap-3 text-sm text-slate-700 dark:text-slate-300 sm:flex-row sm:justify-between">
+        <div className="font-medium">Total containers: <span className="font-bold">{totalItems}</span></div>
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="flex items-center gap-2">
+            Rows
+            <select value={rowsPerPage} onChange={(event) => onRowsPerPageChange?.(Number(event.target.value))} className="h-8 rounded border border-slate-300 bg-white px-2 dark:border-slate-700 dark:bg-slate-800">
+              {[15, 25, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
+          <div className="flex items-center gap-2">
+            <button disabled={page <= 1} onClick={() => onPage(page - 1)} className="rounded border px-3 py-1.5 disabled:opacity-50">Prev</button>
+            <span>Page {page} of {totalPages}</span>
+            <button disabled={page >= totalPages} onClick={() => onPage(page + 1)} className="rounded border px-3 py-1.5 disabled:opacity-50">Next</button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
