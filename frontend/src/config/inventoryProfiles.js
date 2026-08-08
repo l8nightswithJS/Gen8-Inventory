@@ -27,10 +27,10 @@ export const PROFILE_PRESETS = {
       'lot_number',
       'material_type',
       'color',
-      'additive',
       'inventory_location',
       'total_quantity',
       'uom',
+      'container_status',
       'status',
     ],
     field_definitions: [
@@ -66,6 +66,7 @@ export const PROFILE_PRESETS = {
       'inventory_location',
       'total_quantity',
       'uom',
+      'container_status',
       'status',
     ],
     field_definitions: [
@@ -179,7 +180,29 @@ export const CORE_IMPORT_FIELDS = [
   { key: 'reorder_level', label: 'Reorder Level' },
   { key: 'low_stock_threshold', label: 'Low-Stock Threshold' },
   { key: 'vendor_barcode', label: 'Vendor Barcode' },
-  { key: 'barcode', label: 'Internal Barcode' },
+];
+
+export const CALCULATED_IMPORT_FIELDS = [
+  {
+    key: 'weeks_on_hand',
+    label: 'Weeks on Hand',
+    aliases: ['weeks on hand', 'weeks_on_hand'],
+  },
+  {
+    key: 'suggested_reorder',
+    label: 'Suggested Reorder',
+    aliases: ['suggested reorder', 'suggested_reorder'],
+  },
+  {
+    key: 'status',
+    label: 'Stock Status',
+    aliases: ['stock status', 'inventory status', 'status'],
+  },
+  {
+    key: 'priority',
+    label: 'Priority',
+    aliases: ['priority'],
+  },
 ];
 
 const GLOBAL_ALIASES = {
@@ -200,7 +223,6 @@ const GLOBAL_ALIASES = {
   reorder_level: ['reorder level', 'reorder point', 'min stock'],
   low_stock_threshold: ['low stock threshold', 'low stock'],
   vendor_barcode: ['barcode', 'vendor barcode', 'manufacturer barcode', 'upc', 'gtin'],
-  barcode: ['internal barcode', 'container barcode', 'inventory barcode'],
 };
 
 export function normalizeKey(value) {
@@ -227,6 +249,15 @@ function aliasLookup(settings = {}) {
     lookup.set(normalizeKey(source), target == null ? null : normalizeKey(target));
   });
   return lookup;
+}
+
+export function getCalculatedImportField(header) {
+  const normalized = normalizeKey(header);
+  return (
+    CALCULATED_IMPORT_FIELDS.find((field) =>
+      field.aliases.some((alias) => normalizeKey(alias) === normalized),
+    ) || null
+  );
 }
 
 export function buildColumnMapping(headers, settings = {}) {
