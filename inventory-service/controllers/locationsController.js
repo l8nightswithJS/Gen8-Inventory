@@ -167,12 +167,28 @@ exports.deleteLocation = async (req, res) => {
       });
     }
 
+    const history = await pool.query(
+      `SELECT 1
+       FROM inventory_movements
+       WHERE from_location_id = $1 OR to_location_id = $1
+       LIMIT 1`,
+      [id],
+    );
+    if (history.rows.length > 0) {
+      return res.status(409).json({
+        code: 'LOCATION_HAS_HISTORY',
+        message:
+          'This location has inventory movement history and cannot be deleted. Mark it inactive instead so the audit trail remains readable.',
+      });
+    }
+
     await pool.query('DELETE FROM locations WHERE id = $1', [id]);
     return res.json({ message: 'Location deleted successfully.' });
   } catch (error) {
     if (error.code === '23503') {
       return res.status(409).json({
-        message: 'This location has inventory history and cannot be deleted. Mark it inactive instead.',
+        message:
+          'This location is referenced by inventory data and cannot be deleted. Mark it inactive instead.',
       });
     }
     return handleDbError(res, error, 'deleteLocation');
