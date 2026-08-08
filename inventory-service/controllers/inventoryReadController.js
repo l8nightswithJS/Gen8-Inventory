@@ -100,13 +100,14 @@ exports.listItems = async (req, res, next) => {
                  'location_type', location.location_type,
                  'quantity', inventory.quantity
                )
-             ) FILTER (WHERE inventory.id IS NOT NULL),
+             ) FILTER (WHERE inventory.id IS NOT NULL AND inventory.quantity > 0),
              '[]'::jsonb
            ) AS inventory_levels
          FROM items AS item
          LEFT JOIN inventory ON item.id = inventory.item_id
          LEFT JOIN locations AS location ON location.id = inventory.location_id
          WHERE item.client_id = $1
+           AND item.archived_at IS NULL
          GROUP BY item.id
          ORDER BY item.name ASC, item.part_number ASC, item.lot_number ASC, item.id ASC`,
         [clientId],
