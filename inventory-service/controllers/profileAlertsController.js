@@ -17,6 +17,7 @@ exports.getActiveAlerts = async (req, res, next) => {
          LEFT JOIN inventory ON item.id = inventory.item_id
          WHERE item.client_id = $1
            AND item.alert_acknowledged_at IS NULL
+           AND item.archived_at IS NULL
          GROUP BY item.id`,
         [clientId],
       ),
