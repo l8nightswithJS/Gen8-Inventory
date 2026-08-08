@@ -3,6 +3,13 @@ function numeric(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function movementActor(user) {
+  return {
+    actorUserId: user?.id || null,
+    actorEmail: user?.email || null,
+  };
+}
+
 async function getStagingLocation(db) {
   const result = await db.query(
     `SELECT id, code, barcode, description
@@ -11,7 +18,9 @@ async function getStagingLocation(db) {
      LIMIT 1`,
   );
   if (result.rows.length === 0) {
-    const error = new Error('STAGING location is not configured. Run the warehouse migration.');
+    const error = new Error(
+      'STAGING location is not configured. Run the warehouse migration.',
+    );
     error.status = 500;
     throw error;
   }
@@ -33,6 +42,8 @@ async function recordMovement(
     uom = null,
     reason = null,
     metadata = {},
+    actorUserId = null,
+    actorEmail = null,
   },
 ) {
   const result = await db.query(
@@ -48,9 +59,11 @@ async function recordMovement(
        destination_quantity_after,
        uom,
        reason,
-       metadata
+       metadata,
+       actor_user_id,
+       actor_email
      )
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14)
      RETURNING *`,
     [
       itemId,
@@ -65,6 +78,8 @@ async function recordMovement(
       uom,
       reason,
       JSON.stringify(metadata || {}),
+      actorUserId,
+      actorEmail,
     ],
   );
   return result.rows[0];
@@ -102,7 +117,9 @@ async function resolveSourceBalance(db, itemId, requestedLocationId = null) {
       (balance) => Number(balance.location_id) === Number(requestedLocationId),
     );
     if (!source) {
-      const error = new Error('The selected source location has no available quantity for this container.');
+      const error = new Error(
+        'The selected source location has no available quantity for this container.',
+      );
       error.status = 409;
       error.code = 'SOURCE_BALANCE_NOT_FOUND';
       throw error;
@@ -118,7 +135,9 @@ async function resolveSourceBalance(db, itemId, requestedLocationId = null) {
   }
 
   if (balances.length > 1) {
-    const error = new Error('This container is split across multiple locations. Select the source location first.');
+    const error = new Error(
+      'This container is split across multiple locations. Select the source location first.',
+    );
     error.status = 409;
     error.code = 'SOURCE_LOCATION_REQUIRED';
     error.balances = balances;
@@ -131,6 +150,7 @@ async function resolveSourceBalance(db, itemId, requestedLocationId = null) {
 module.exports = {
   getPositiveBalances,
   getStagingLocation,
+  movementActor,
   numeric,
   recordMovement,
   resolveSourceBalance,
