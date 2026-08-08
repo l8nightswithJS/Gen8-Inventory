@@ -1,34 +1,53 @@
-// In inventory-service/routes/locations.js (Corrected)
 const express = require('express');
-// CORRECTED: Added 'param' to the import below
 const { body, param } = require('express-validator');
 const ctrl = require('../controllers/locationsController');
-const { handleValidation } = require('shared-auth');
+const { handleValidation, requireRole } = require('shared-auth');
 
 const router = express.Router();
+
+const locationValidators = [
+  body('code')
+    .isString()
+    .trim()
+    .notEmpty()
+    .isLength({ max: 80 })
+    .withMessage('Location code is required and must be 80 characters or fewer'),
+  body('description').optional({ nullable: true }).isString().isLength({ max: 255 }),
+  body('barcode').optional({ nullable: true }).isString().isLength({ max: 120 }),
+  body('location_type')
+    .optional()
+    .isIn(['staging', 'rack', 'shelf', 'bin', 'floor', 'other'])
+    .withMessage('Invalid location type'),
+  body('zone').optional({ nullable: true }).isString().isLength({ max: 40 }),
+  body('rack').optional({ nullable: true }).isString().isLength({ max: 40 }),
+  body('shelf').optional({ nullable: true }).isString().isLength({ max: 40 }),
+  body('bin_position').optional({ nullable: true }).isString().isLength({ max: 40 }),
+  body('active').optional().isBoolean(),
+];
 
 router.get('/', ctrl.getLocations);
 
 router.post(
   '/',
-  body('code').isString().notEmpty().withMessage('Location code is required'),
-  body('description').optional().isString(),
+  requireRole('admin'),
+  ...locationValidators,
   handleValidation,
   ctrl.createLocation,
 );
 
 router.put(
   '/:id',
-  param('id').isInt().withMessage('A valid location ID is required'),
-  body('code').isString().notEmpty().withMessage('Location code is required'),
-  body('description').optional().isString(),
+  requireRole('admin'),
+  param('id').isInt({ min: 1 }).withMessage('A valid location ID is required'),
+  ...locationValidators,
   handleValidation,
   ctrl.updateLocation,
 );
 
 router.delete(
   '/:id',
-  param('id').isInt().withMessage('A valid location ID is required'),
+  requireRole('admin'),
+  param('id').isInt({ min: 1 }).withMessage('A valid location ID is required'),
   handleValidation,
   ctrl.deleteLocation,
 );
