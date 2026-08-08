@@ -1,7 +1,6 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import api from '../utils/axiosConfig';
-import QuantityAdjustModal from '../components/QuantityAdjustModal';
 import InventoryTable from '../components/InventoryTable';
 import SearchBar from '../components/SearchBar';
 import Button from '../components/ui/Button';
@@ -13,17 +12,20 @@ import EditItemModal from '../components/EditItemModal';
 import InventoryProfileModal from '../components/InventoryProfileModal';
 import ReviewResolutionModal from '../components/ReviewResolutionModal';
 import ScanModal from '../components/ScanModal';
-import LocationViewModal from '../components/LocationViewModal';
-import ItemActionModal from '../components/ItemActionModal';
 import UsbScannerInput from '../components/UsbScannerInput';
+import TransferInventoryModal from '../components/TransferInventoryModal';
+import RemainingQuantityModal from '../components/RemainingQuantityModal';
+import MovementHistoryModal from '../components/MovementHistoryModal';
 import {
-  FiPlus,
-  FiLayers,
-  FiDownload,
-  FiColumns,
   FiCamera,
   FiChevronLeft,
+  FiColumns,
+  FiDownload,
+  FiLayers,
+  FiMapPin,
+  FiPlus,
   FiSettings,
+  FiX,
 } from 'react-icons/fi';
 
 const DEFAULT_SETTINGS = {
@@ -39,6 +41,7 @@ const DEFAULT_SETTINGS = {
     'inventory_location',
     'total_quantity',
     'uom',
+    'container_status',
     'status',
   ],
   field_definitions: [],
@@ -80,7 +83,6 @@ export default function ClientPage() {
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState('desktop');
   const [currentLocation, setCurrentLocation] = useState(null);
-  const [adjustingItem, setAdjustingItem] = useState(null);
   const [modalState, setModalState] = useState({
     addItem: false,
     import: false,
@@ -90,8 +92,9 @@ export default function ClientPage() {
     deleteItem: null,
     editItem: null,
     reviewItem: null,
-    scannedLocation: null,
-    scannedItem: null,
+    transferItem: null,
+    remainingItem: null,
+    historyItem: null,
   });
   const [sortConfig, setSortConfig] = useState({
     key: 'part_number',
@@ -101,9 +104,7 @@ export default function ClientPage() {
   const [rowsPerPage, setRowsPerPage] = useState(15);
 
   useEffect(() => {
-    const handleResize = () => {
-      setViewMode(window.innerWidth < 768 ? 'mobile' : 'desktop');
-    };
+    const handleResize = () => setViewMode(window.innerWidth < 768 ? 'mobile' : 'desktop');
     handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
@@ -164,65 +165,72 @@ export default function ClientPage() {
     fetchItems();
   }, [fetchClientDetails, fetchItems, fetchSettings]);
 
-  const handleModal = (modal, value) =>
-    setModalState((previous) => ({ ...previous, [modal]: value }));
+  const handleModal = (key, value) =>
+    setModalState((previous) => ({ ...previous, [key]: value }));
 
-  const handleUsbScan = async (barcode) => {
-    try {
-      const { data: result } = await api.post('/api/scan', {
-        barcode,
-        client_id: clientId,
-      });
-      if (result?.type) handleScanSuccess(result);
-    } catch (requestError) {
-      setError(
-        requestError.response?.status === 404
-          ? `Barcode "${barcode}" was not found.`
-          : requestError.response?.data?.message || 'An error occurred.',
-      );
+  const openScannedItem = (scannedItem) => {
+    if (scannedItem?.review_status === 'needs_review') {
+      if (isAdmin) handleModal('reviewItem', scannedItem);
+      else setError('This container needs inventory review before warehouse operations.');
+      return;
+    }
+
+    if (!currentLocation) {
+      handleModal('remainingItem', scannedItem);
+      return;
+    }
+
+    const atDestination = (scannedItem.inventory_levels || []).some(
+      (balance) =>
+        Number(balance.location_id) === Number(currentLocation.id) &&
+        Number(balance.quantity) > 0,
+    );
+
+    if (atDestination) {
+      handleModal('remainingItem', scannedItem);
+    } else {
+      handleModal('transferItem', scannedItem);
     }
   };
 
   const handleScanSuccess = (result) => {
     handleModal('scan', false);
+    setError('');
 
     if (result.type === 'location') {
       setCurrentLocation(result.data);
-      handleModal('scannedLocation', result.data);
       return;
     }
+    if (result.type === 'item') openScannedItem(result.data);
+  };
 
-    if (result.type !== 'item') return;
-
-    const scannedItem = result.data;
-    if (scannedItem?.review_status === 'needs_review') {
-      setAdjustingItem(null);
-      if (isAdmin) {
-        handleModal('reviewItem', scannedItem);
-      } else {
-        setError(
-          'This item has unresolved imported quantity or location data. An administrator must resolve it before stock can be adjusted.',
-        );
-      }
-      return;
-    }
-
-    if (!currentLocation) {
-      alert('No active location. Scan a location first to adjust stock.');
-      handleModal('scannedItem', scannedItem);
-    } else {
-      setAdjustingItem(scannedItem);
+  const handleUsbScan = async (barcode) => {
+    try {
+      const { data } = await api.post('/api/scan', {
+        barcode,
+        client_id: clientId,
+      });
+      handleScanSuccess(data);
+    } catch (requestError) {
+      setError(
+        requestError?.response?.status === 404
+          ? `Barcode "${barcode}" was not found.`
+          : requestError?.response?.data?.message || 'Scan failed.',
+      );
     }
   };
 
-  const confirmDelete = async () => {
+  const confirmArchive = async () => {
     if (!modalState.deleteItem) return;
     try {
       await api.delete(`/api/items/${modalState.deleteItem.id}`);
       handleModal('deleteItem', null);
       await fetchItems();
     } catch (requestError) {
-      setError(requestError?.response?.data?.message || 'Failed to delete item.');
+      setError(
+        requestError?.response?.data?.message || 'Failed to archive container.',
+      );
+      handleModal('deleteItem', null);
     }
   };
 
@@ -251,18 +259,9 @@ export default function ClientPage() {
 
   const filteredItems = useMemo(() => {
     if (!query) return items;
-    const lowerQuery = query.toLowerCase();
-
+    const needle = query.toLowerCase();
     return items.filter((item) => {
-      const reviewValues = Array.isArray(item.review_issues)
-        ? item.review_issues.flatMap((issue) => [
-            issue.type,
-            issue.field,
-            issue.source_value,
-            issue.message,
-          ])
-        : [];
-      const coreValues = [
+      const values = [
         item.part_number,
         item.lot_number,
         item.name,
@@ -272,44 +271,27 @@ export default function ClientPage() {
         item.uom,
         item.inventory_location,
         item.status,
+        item.container_status,
         item.priority,
-        item.weeks_on_hand,
-        ...reviewValues,
+        ...Object.values(item.attributes || {}),
       ];
-      const attributeValues = Object.values(item.attributes || {});
-
-      return [...coreValues, ...attributeValues].some((value) =>
-        String(value ?? '')
-          .toLowerCase()
-          .includes(lowerQuery),
-      );
+      return values.some((value) => String(value ?? '').toLowerCase().includes(needle));
     });
   }, [items, query]);
 
   const sortedItems = useMemo(() => {
-    const sortableItems = [...filteredItems];
-    if (sortConfig.key) {
-      sortableItems.sort((first, second) => {
-        const firstValue =
-          first[sortConfig.key] ?? first.attributes?.[sortConfig.key];
-        const secondValue =
-          second[sortConfig.key] ?? second.attributes?.[sortConfig.key];
-
-        if (firstValue == null) return 1;
-        if (secondValue == null) return -1;
-        if (
-          typeof firstValue === 'number' &&
-          typeof secondValue === 'number'
-        ) {
-          return firstValue - secondValue;
-        }
-        return String(firstValue).localeCompare(String(secondValue), undefined, {
-          numeric: true,
-        });
-      });
-      if (sortConfig.direction === 'descending') sortableItems.reverse();
-    }
-    return sortableItems;
+    const result = [...filteredItems];
+    if (!sortConfig.key) return result;
+    result.sort((a, b) => {
+      const av = a[sortConfig.key] ?? a.attributes?.[sortConfig.key];
+      const bv = b[sortConfig.key] ?? b.attributes?.[sortConfig.key];
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === 'number' && typeof bv === 'number') return av - bv;
+      return String(av).localeCompare(String(bv), undefined, { numeric: true });
+    });
+    if (sortConfig.direction === 'descending') result.reverse();
+    return result;
   }, [filteredItems, sortConfig]);
 
   const pageItems = useMemo(() => {
@@ -318,105 +300,77 @@ export default function ClientPage() {
   }, [sortedItems, page, rowsPerPage]);
 
   const columns = useMemo(() => {
-    const sharedColumns = normalizeColumns(settings.display_columns || []);
-    return sharedColumns.length > 0
-      ? sharedColumns
-      : DEFAULT_SETTINGS.display_columns;
+    const shared = normalizeColumns(settings.display_columns || []);
+    return shared.length ? shared : DEFAULT_SETTINGS.display_columns;
   }, [settings.display_columns]);
 
   return (
     <div className="mx-auto max-w-7xl px-4">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-y-4">
-        <div>
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 mb-2"
-          >
-            <FiChevronLeft /> All Clients
-          </button>
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-              {client?.name || 'Loading...'}
-            </h1>
-            <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
-              {settings.profile_label || settings.profile_key}
-            </span>
-          </div>
+      <div className="mb-6">
+        <button
+          onClick={() => navigate('/dashboard')}
+          className="mb-2 inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400"
+        >
+          <FiChevronLeft /> All Clients
+        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white sm:text-4xl">
+            {client?.name || 'Loading...'}
+          </h1>
+          <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+            {settings.profile_label || settings.profile_key}
+          </span>
         </div>
       </div>
 
-      <div className="bg-white dark:bg-slate-900 shadow-md rounded-lg p-4 border border-slate-200 dark:border-slate-800">
-        <div className="flex flex-col md:flex-row md:items-center gap-4 mb-4">
-          <div className="flex-grow">
-            <SearchBar onSearch={setQuery} />
+      {currentLocation && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-300 bg-blue-50 px-4 py-3 dark:border-blue-500/40 dark:bg-blue-950/30">
+          <div className="flex items-center gap-3">
+            <FiMapPin className="text-blue-600" />
+            <div>
+              <p className="text-xs font-semibold uppercase text-blue-600">Active scan destination</p>
+              <p className="font-bold text-blue-900 dark:text-blue-200">
+                {currentLocation.code}
+                {currentLocation.description ? ` — ${currentLocation.description}` : ''}
+              </p>
+              <p className="font-mono text-xs text-blue-700 dark:text-blue-300">
+                {currentLocation.barcode || currentLocation.code}
+              </p>
+            </div>
           </div>
-          <div className="flex items-center flex-wrap gap-2 justify-start md:justify-end">
+          <button
+            onClick={() => setCurrentLocation(null)}
+            className="rounded p-2 text-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/30"
+            title="Clear destination"
+          >
+            <FiX />
+          </button>
+        </div>
+      )}
+
+      <div className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-md dark:border-slate-800 dark:bg-slate-900">
+        <div className="mb-4 flex flex-col gap-4 md:flex-row md:items-center">
+          <div className="flex-grow"><SearchBar onSearch={setQuery} /></div>
+          <div className="flex flex-wrap items-center gap-2 md:justify-end">
             {viewMode === 'desktop' ? (
-              <div className="sm:w-64 flex-shrink-0">
-                <UsbScannerInput onScan={handleUsbScan} />
-              </div>
+              <div className="w-64 flex-shrink-0"><UsbScannerInput onScan={handleUsbScan} /></div>
             ) : (
-              <Button
-                onClick={() => handleModal('scan', true)}
-                variant="secondary"
-                title="Scan"
-                leftIcon={FiCamera}
-              >
-                Scan
-              </Button>
+              <Button onClick={() => handleModal('scan', true)} variant="secondary" leftIcon={FiCamera}>Scan</Button>
             )}
 
             {isAdmin && (
               <>
-                <Button
-                  onClick={() => handleModal('addItem', true)}
-                  variant="secondary"
-                  title="Add Item"
-                >
-                  <FiPlus className="sm:mr-2" />
-                  <span className="hidden sm:inline">Add</span>
-                </Button>
-                <Button
-                  onClick={() => handleModal('import', true)}
-                  variant="secondary"
-                  title="Bulk Import"
-                >
-                  <FiLayers className="sm:mr-2" />
-                  <span className="hidden sm:inline">Bulk</span>
-                </Button>
-                <Button
-                  as="a"
-                  href={`${process.env.REACT_APP_API_BASE_URL}/api/items/export?client_id=${clientId}`}
-                  variant="secondary"
-                  title="Export Data"
-                >
-                  <FiDownload className="sm:mr-2" />
-                  <span className="hidden sm:inline">Export</span>
-                </Button>
-                <Button
-                  onClick={() => handleModal('columnSetup', true)}
-                  variant="secondary"
-                  title="Edit Shared Columns"
-                >
-                  <FiColumns className="sm:mr-2" />
-                  <span className="hidden sm:inline">Columns</span>
-                </Button>
-                <Button
-                  onClick={() => handleModal('profile', true)}
-                  variant="secondary"
-                  title="Inventory Profile"
-                >
-                  <FiSettings className="sm:mr-2" />
-                  <span className="hidden sm:inline">Profile</span>
-                </Button>
+                <Button onClick={() => handleModal('addItem', true)} variant="secondary"><FiPlus className="sm:mr-2" /><span className="hidden sm:inline">Add</span></Button>
+                <Button onClick={() => handleModal('import', true)} variant="secondary"><FiLayers className="sm:mr-2" /><span className="hidden sm:inline">Bulk</span></Button>
+                <Button as="a" href={`${process.env.REACT_APP_API_BASE_URL}/api/items/export?client_id=${clientId}`} variant="secondary"><FiDownload className="sm:mr-2" /><span className="hidden sm:inline">Export</span></Button>
+                <Button onClick={() => handleModal('columnSetup', true)} variant="secondary"><FiColumns className="sm:mr-2" /><span className="hidden sm:inline">Columns</span></Button>
+                <Button onClick={() => handleModal('profile', true)} variant="secondary"><FiSettings className="sm:mr-2" /><span className="hidden sm:inline">Profile</span></Button>
               </>
             )}
           </div>
         </div>
 
-        {error && (
-          <p className="text-red-600 dark:text-red-400 my-3">{error}</p>
-        )}
+        {error && <p className="my-3 text-red-600 dark:text-red-400">{error}</p>}
 
         <InventoryTable
           items={pageItems}
@@ -436,6 +390,8 @@ export default function ClientPage() {
           onEdit={(item) => handleModal('editItem', item)}
           onDelete={(item) => handleModal('deleteItem', item)}
           onResolveReview={(item) => handleModal('reviewItem', item)}
+          onRemaining={(item) => handleModal('remainingItem', item)}
+          onHistory={(item) => handleModal('historyItem', item)}
           role={isAdmin ? 'admin' : 'viewer'}
           rowsPerPage={rowsPerPage}
           onRowsPerPageChange={(number) => {
@@ -448,7 +404,7 @@ export default function ClientPage() {
 
       {modalState.columnSetup && (
         <ColumnSetupModal
-          isOpen={true}
+          isOpen
           onClose={() => handleModal('columnSetup', false)}
           onSave={saveColumns}
           initial={columns}
@@ -459,8 +415,8 @@ export default function ClientPage() {
           clientId={clientId}
           settings={settings}
           onClose={() => handleModal('profile', false)}
-          onSaved={async (updatedSettings) => {
-            setSettings((previous) => ({ ...previous, ...updatedSettings }));
+          onSaved={async (updated) => {
+            setSettings((previous) => ({ ...previous, ...updated }));
             await fetchItems();
           }}
         />
@@ -476,16 +432,16 @@ export default function ClientPage() {
       )}
       {modalState.addItem && (
         <AddItemModal
-          settings={settings}
           clientId={clientId}
+          settings={settings}
           onClose={() => handleModal('addItem', false)}
           onCreated={fetchItems}
         />
       )}
       {modalState.editItem && (
         <EditItemModal
-          settings={settings}
           item={modalState.editItem}
+          settings={settings}
           onClose={() => handleModal('editItem', null)}
           onUpdated={fetchItems}
         />
@@ -497,12 +453,35 @@ export default function ClientPage() {
           onResolved={fetchItems}
         />
       )}
+      {modalState.transferItem && currentLocation && (
+        <TransferInventoryModal
+          item={modalState.transferItem}
+          destination={currentLocation}
+          onClose={() => handleModal('transferItem', null)}
+          onTransferred={fetchItems}
+        />
+      )}
+      {modalState.remainingItem && (
+        <RemainingQuantityModal
+          item={modalState.remainingItem}
+          preferredLocation={currentLocation}
+          onClose={() => handleModal('remainingItem', null)}
+          onUpdated={fetchItems}
+        />
+      )}
+      {modalState.historyItem && (
+        <MovementHistoryModal
+          item={modalState.historyItem}
+          onClose={() => handleModal('historyItem', null)}
+        />
+      )}
       {modalState.deleteItem && (
         <ConfirmModal
-          title="Delete Item?"
-          message="Are you sure you want to delete this item?"
+          isOpen
+          title="Archive Container?"
+          message="This keeps the barcode and movement history, but removes the empty container from active inventory. Containers with stock cannot be archived."
           onCancel={() => handleModal('deleteItem', null)}
-          onConfirm={confirmDelete}
+          onConfirm={confirmArchive}
         />
       )}
       {modalState.scan && client && (
@@ -510,37 +489,6 @@ export default function ClientPage() {
           client={client}
           onClose={() => handleModal('scan', false)}
           onScanSuccess={handleScanSuccess}
-        />
-      )}
-      {modalState.scannedLocation && (
-        <LocationViewModal
-          location={modalState.scannedLocation}
-          onClose={() => handleModal('scannedLocation', null)}
-        />
-      )}
-      {modalState.scannedItem && (
-        <ItemActionModal
-          item={modalState.scannedItem}
-          onClose={() => handleModal('scannedItem', null)}
-          onEditDetails={(item) => {
-            handleModal('scannedItem', null);
-            handleModal('editItem', item);
-          }}
-          onCheckStock={() => {
-            alert('Checking stock...');
-            handleModal('scannedItem', null);
-          }}
-        />
-      )}
-      {adjustingItem && currentLocation && (
-        <QuantityAdjustModal
-          item={adjustingItem}
-          location={currentLocation}
-          onClose={() => setAdjustingItem(null)}
-          onSuccess={() => {
-            setAdjustingItem(null);
-            fetchItems();
-          }}
         />
       )}
     </div>
