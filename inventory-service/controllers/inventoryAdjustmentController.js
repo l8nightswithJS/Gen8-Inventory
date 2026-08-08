@@ -1,5 +1,5 @@
 const pool = require('../db/pool');
-const { recordMovement } = require('./_movementLedger');
+const { movementActor, recordMovement } = require('./_movementLedger');
 
 function normalizeDecimalText(value) {
   const text = String(value ?? '').trim();
@@ -137,6 +137,7 @@ exports.adjustInventory = async (req, res, next) => {
       uom: item.uom,
       reason: 'Manual inventory adjustment',
       metadata: { signed_change: changeQuantity },
+      ...movementActor(req.user),
     });
 
     await db.query('COMMIT');
@@ -239,6 +240,7 @@ exports.resolveReview = async (req, res, next) => {
         destinationAfter: allocation.quantity,
         uom: effectiveUom,
         reason: 'Imported inventory review resolved',
+        ...movementActor(req.user),
       });
     }
 
