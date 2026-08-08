@@ -2,6 +2,7 @@ const express = require('express');
 const { body, param, query } = require('express-validator');
 const inventoryController = require('../controllers/inventoryController');
 const warehouseImportController = require('../controllers/warehouseImportController');
+const warehouseExportController = require('../controllers/warehouseExportController');
 const inventoryReadController = require('../controllers/inventoryReadController');
 const inventoryAdjustmentController = require('../controllers/inventoryAdjustmentController');
 const warehouseOperationsController = require('../controllers/warehouseOperationsController');
@@ -83,7 +84,7 @@ router.get(
   '/export',
   query('client_id').isInt({ min: 1 }).withMessage('client_id is required').toInt(),
   handleValidation,
-  inventoryController.exportItems,
+  warehouseExportController.exportItems,
 );
 
 router.get(
