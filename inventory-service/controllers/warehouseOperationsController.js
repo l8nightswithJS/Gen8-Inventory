@@ -1,5 +1,6 @@
 const pool = require('../db/pool');
 const {
+  movementActor,
   numeric,
   recordMovement,
   resolveSourceBalance,
@@ -8,13 +9,21 @@ const {
 function parseQuantity(value, field, { allowZero = false } = {}) {
   const normalized = String(value ?? '').trim().replace(/,/g, '');
   if (!/^\d+(?:\.\d{1,3})?$/.test(normalized)) {
-    const error = new Error(`${field} must be a non-negative number with up to 3 decimals.`);
+    const error = new Error(
+      `${field} must be a non-negative number with up to 3 decimals.`,
+    );
     error.status = 400;
     throw error;
   }
   const parsed = Number(normalized);
-  if (!Number.isFinite(parsed) || parsed < 0 || (!allowZero && parsed === 0)) {
-    const error = new Error(`${field} must be ${allowZero ? 'non-negative' : 'greater than zero'}.`);
+  if (
+    !Number.isFinite(parsed) ||
+    parsed < 0 ||
+    (!allowZero && parsed === 0)
+  ) {
+    const error = new Error(
+      `${field} must be ${allowZero ? 'non-negative' : 'greater than zero'}.`,
+    );
     error.status = 400;
     throw error;
   }
@@ -30,7 +39,9 @@ async function activeLocation(db, id) {
     [id],
   );
   if (!result.rows[0]) {
-    const error = new Error('The destination location does not exist or is inactive.');
+    const error = new Error(
+      'The destination location does not exist or is inactive.',
+    );
     error.status = 400;
     throw error;
   }
@@ -40,13 +51,13 @@ async function activeLocation(db, id) {
 async function lockItem(db, itemId) {
   const result = await db.query(
     `SELECT id, client_id, part_number, lot_number, name, description,
-            barcode, uom, review_status, container_status
+            barcode, uom, review_status, container_status, archived_at
      FROM items
      WHERE id = $1
      FOR UPDATE`,
     [itemId],
   );
-  if (!result.rows[0]) {
+  if (!result.rows[0] || result.rows[0].archived_at) {
     const error = new Error('Inventory container not found.');
     error.status = 404;
     throw error;
@@ -62,7 +73,9 @@ function sendOperationError(error, res, next) {
     return res.status(error.status).json(payload);
   }
   if (error.code === '23514') {
-    return res.status(409).json({ message: 'The operation would create a negative inventory balance.' });
+    return res.status(409).json({
+      message: 'The operation would create a negative inventory balance.',
+    });
   }
   return next(error);
 }
@@ -85,7 +98,9 @@ exports.transferItem = async (req, res, next) => {
 
     const item = await lockItem(db, itemId);
     if (item.review_status === 'needs_review') {
-      const error = new Error('Resolve this container before moving inventory.');
+      const error = new Error(
+        'Resolve this container before moving inventory.',
+      );
       error.status = 409;
       error.code = 'ITEM_NEEDS_REVIEW';
       throw error;
@@ -112,7 +127,9 @@ exports.transferItem = async (req, res, next) => {
       : parseQuantity(req.body?.quantity, 'quantity');
 
     if (quantity > source.quantity) {
-      const error = new Error(`Only ${source.quantity} ${item.uom || ''} is available at ${source.code}.`);
+      const error = new Error(
+        `Only ${source.quantity} ${item.uom || ''} is available at ${source.code}.`,
+      );
       error.status = 409;
       throw error;
     }
@@ -169,8 +186,11 @@ exports.transferItem = async (req, res, next) => {
       destinationBefore,
       destinationAfter,
       uom: item.uom,
-      reason: String(req.body?.reason || 'Barcode-directed warehouse transfer').trim(),
+      reason: String(
+        req.body?.reason || 'Barcode-directed warehouse transfer',
+      ).trim(),
       metadata: { move_all: quantity === source.quantity },
+      ...movementActor(req.user),
     });
 
     await db.query('COMMIT');
@@ -178,7 +198,11 @@ exports.transferItem = async (req, res, next) => {
       message: 'Inventory moved successfully.',
       item,
       movement,
-      from: { id: source.location_id, code: source.code, barcode: source.barcode },
+      from: {
+        id: source.location_id,
+        code: source.code,
+        barcode: source.barcode,
+      },
       to: destination,
       quantity,
       source_quantity: sourceAfter,
@@ -201,9 +225,11 @@ exports.setRemainingQuantity = async (req, res, next) => {
 
   let remaining;
   try {
-    remaining = parseQuantity(req.body?.remaining_quantity, 'remaining_quantity', {
-      allowZero: true,
-    });
+    remaining = parseQuantity(
+      req.body?.remaining_quantity,
+      'remaining_quantity',
+      { allowZero: true },
+    );
   } catch (error) {
     return res.status(error.status || 400).json({ message: error.message });
   }
@@ -214,7 +240,9 @@ exports.setRemainingQuantity = async (req, res, next) => {
     await db.query('BEGIN');
     const item = await lockItem(db, itemId);
     if (item.review_status === 'needs_review') {
-      const error = new Error('Resolve this container before updating its remaining quantity.');
+      const error = new Error(
+        'Resolve this container before updating its remaining quantity.',
+      );
       error.status = 409;
       error.code = 'ITEM_NEEDS_REVIEW';
       throw error;
@@ -253,11 +281,12 @@ exports.setRemainingQuantity = async (req, res, next) => {
       );
     }
 
-    const movementType = remaining === 0
-      ? 'empty'
-      : remaining < before
-        ? 'consumption'
-        : 'adjustment';
+    const movementType =
+      remaining === 0
+        ? 'empty'
+        : remaining < before
+          ? 'consumption'
+          : 'adjustment';
     const quantityChanged = Math.abs(remaining - before);
 
     await db.query(
@@ -280,14 +309,20 @@ exports.setRemainingQuantity = async (req, res, next) => {
       uom: item.uom,
       reason: String(
         req.body?.reason ||
-          (remaining === 0 ? 'Container marked empty' : 'Remaining quantity updated'),
+          (remaining === 0
+            ? 'Container marked empty'
+            : 'Remaining quantity updated'),
       ).trim(),
       metadata: { remaining_quantity: remaining },
+      ...movementActor(req.user),
     });
 
     await db.query('COMMIT');
     return res.json({
-      message: remaining === 0 ? 'Container marked empty.' : 'Remaining quantity updated.',
+      message:
+        remaining === 0
+          ? 'Container marked empty.'
+          : 'Remaining quantity updated.',
       item_id: itemId,
       barcode: item.barcode,
       location: source,
