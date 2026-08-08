@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, param } = require('express-validator');
 const ctrl = require('../controllers/locationsController');
+const labelsController = require('../controllers/labelsController');
 const { handleValidation, requireRole } = require('shared-auth');
 
 const router = express.Router();
@@ -33,6 +34,14 @@ router.post(
   ...locationValidators,
   handleValidation,
   ctrl.createLocation,
+);
+
+router.post(
+  '/:id/print-label',
+  requireRole('admin', 'staff'),
+  param('id').isInt({ min: 1 }).withMessage('A valid location ID is required').toInt(),
+  handleValidation,
+  labelsController.printLocation,
 );
 
 router.put(
