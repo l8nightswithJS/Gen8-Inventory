@@ -3,7 +3,6 @@ const WRITABLE_CORE_FIELDS = new Set([
   'lot_number',
   'name',
   'description',
-  'barcode',
   'vendor_barcode',
   'uom',
   'reorder_level',
@@ -16,7 +15,6 @@ const TEXT_FIELDS = new Set([
   'lot_number',
   'name',
   'description',
-  'barcode',
   'vendor_barcode',
   'uom',
 ]);
@@ -26,12 +24,16 @@ const DECIMAL_FIELDS = new Set(['reorder_level', 'low_stock_threshold']);
 const READ_ONLY_FIELDS = new Set([
   'id',
   'client_id',
+  'barcode',
   'attributes',
   'alert_acknowledged_at',
   'created_at',
   'updated_at',
   'last_updated',
   'total_quantity',
+  'initial_quantity',
+  'container_status',
+  'emptied_at',
   'status',
   'threshold_configured',
   'inventory_levels',
@@ -55,6 +57,9 @@ const RESERVED_OPERATIONAL_ATTRIBUTES = new Set([
   'quantity',
   'review_status',
   'review_issues',
+  'barcode',
+  'internal_barcode',
+  'container_barcode',
 ]);
 
 class ItemContractError extends Error {
@@ -108,10 +113,6 @@ function normalizeText(value, field, { required = false } = {}) {
     return null;
   }
 
-  // Spreadsheet libraries commonly return identifier-looking cells as
-  // numbers. Accept finite numeric values and normalize them to text so part
-  // numbers, lot numbers, and barcodes can be imported without weakening the
-  // contract for arrays, objects, or booleans.
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) {
       throw new ItemContractError(`${field} must be a string.`);
@@ -134,11 +135,22 @@ function normalizeText(value, field, { required = false } = {}) {
   return normalized;
 }
 
+function normalizeFormattedDecimalText(value) {
+  const text = String(value).trim();
+  if (!text) return '';
+
+  if (/^\d{1,3}(?:,\d{3})+(?:\.\d{1,3})?$/.test(text)) {
+    return text.replace(/,/g, '');
+  }
+
+  return text;
+}
+
 function normalizeNonNegativeDecimal(value, field) {
   if (value === undefined) return undefined;
   if (value === null || value === '') return null;
 
-  const normalized = String(value).trim();
+  const normalized = normalizeFormattedDecimalText(value);
   if (!/^\d+(?:\.\d{1,3})?$/.test(normalized)) {
     throw new ItemContractError(
       `${field} must be a non-negative number with no more than 3 decimal places.`,
@@ -224,9 +236,6 @@ function normalizeItemPayload(body, { partial = false } = {}) {
   const attributes = normalizeAttributes(body.attributes);
   let legacyAttributesProvided = false;
 
-  // Preserve compatibility with older clients that submitted custom fields at
-  // the top level, while never copying database/read-only or operational fields
-  // such as Location and On Hand into JSON attributes.
   for (const [key, value] of Object.entries(body)) {
     if (isReservedAttributeKey(key) || value === undefined) {
       continue;
@@ -263,6 +272,7 @@ module.exports = {
   WRITABLE_CORE_FIELDS,
   normalizeAttributes,
   normalizeCreateItemPayload,
+  normalizeFormattedDecimalText,
   normalizeNonNegativeDecimal,
   normalizeUpdateItemPayload,
 };
