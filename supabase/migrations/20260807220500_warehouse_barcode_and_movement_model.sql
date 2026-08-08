@@ -1,12 +1,4 @@
--- Warehouse/container model for barcode-driven inventory operations.
--- Existing items remain the physical container records; this migration adds
--- durable container identity, warehouse location metadata, and a movement ledger.
-
 begin;
-
--- ---------------------------------------------------------------------------
--- Physical container identity
--- ---------------------------------------------------------------------------
 
 create sequence if not exists public.g8_item_barcode_seq start with 1;
 
@@ -80,10 +72,6 @@ set barcode = 'G8I-' || lpad(
 )
 where barcode is null or length(trim(barcode)) = 0;
 
--- ---------------------------------------------------------------------------
--- Structured warehouse locations
--- ---------------------------------------------------------------------------
-
 alter table public.locations
   add column if not exists barcode text,
   add column if not exists location_type text not null default 'shelf',
@@ -109,8 +97,6 @@ begin
 end
 $$;
 
--- Give legacy free-form locations collision-safe barcodes. New structured
--- locations use human-readable G8L codes below.
 update public.locations
 set barcode = 'G8L-LEGACY-' || lpad(id::text, 6, '0')
 where barcode is null or length(trim(barcode)) = 0;
@@ -144,7 +130,27 @@ create trigger locations_assign_g8_barcode
 before insert or update of code, barcode on public.locations
 for each row execute function public.assign_g8_location_barcode();
 
--- Permanent staging area for all new imports/receipts before put-away.
+-- Seed STAGING without relying on locations.code being UNIQUE.
+-- If a matching legacy row already exists, promote only the oldest matching row.
+with canonical as (
+  select min(id) as id
+  from public.locations
+  where upper(trim(code)) = 'STAGING'
+)
+update public.locations as location
+set
+  description = 'Temporary receiving and inventory staging area',
+  barcode = 'G8L-STAGING',
+  location_type = 'staging',
+  zone = 'STAGING',
+  rack = null,
+  shelf = null,
+  bin_position = null,
+  is_system = true,
+  active = true
+from canonical
+where location.id = canonical.id;
+
 insert into public.locations (
   code,
   description,
@@ -154,7 +160,7 @@ insert into public.locations (
   is_system,
   active
 )
-values (
+select
   'STAGING',
   'Temporary receiving and inventory staging area',
   'G8L-STAGING',
@@ -162,17 +168,53 @@ values (
   'STAGING',
   true,
   true
-)
-on conflict (code) do update
-set
-  description = excluded.description,
-  barcode = excluded.barcode,
-  location_type = excluded.location_type,
-  zone = excluded.zone,
-  is_system = true,
-  active = true;
+where not exists (
+  select 1
+  from public.locations
+  where upper(trim(code)) = 'STAGING'
+);
 
 -- Resin storage: four equal racks A-D, ten fixed shelf locations each.
+-- Update one canonical matching row per code, then insert only missing codes.
+with seed as (
+  select
+    format('RES-%s-S%s', rack_name, lpad(shelf_number::text, 2, '0')) as code,
+    format('Resin Rack %s Shelf %s', rack_name, lpad(shelf_number::text, 2, '0')) as description,
+    format('G8L-RES-%s-S%s', rack_name, lpad(shelf_number::text, 2, '0')) as barcode,
+    rack_name as rack,
+    lpad(shelf_number::text, 2, '0') as shelf
+  from unnest(array['A','B','C','D']) as rack_name
+  cross join generate_series(1, 10) as shelf_number
+), canonical as (
+  select lower(trim(code)) as code_key, min(id) as id
+  from public.locations
+  group by lower(trim(code))
+)
+update public.locations as location
+set
+  description = seed.description,
+  barcode = seed.barcode,
+  location_type = 'shelf',
+  zone = 'RESIN',
+  rack = seed.rack,
+  shelf = seed.shelf,
+  bin_position = null,
+  is_system = false,
+  active = true
+from seed
+join canonical on canonical.code_key = lower(trim(seed.code))
+where location.id = canonical.id;
+
+with seed as (
+  select
+    format('RES-%s-S%s', rack_name, lpad(shelf_number::text, 2, '0')) as code,
+    format('Resin Rack %s Shelf %s', rack_name, lpad(shelf_number::text, 2, '0')) as description,
+    format('G8L-RES-%s-S%s', rack_name, lpad(shelf_number::text, 2, '0')) as barcode,
+    rack_name as rack,
+    lpad(shelf_number::text, 2, '0') as shelf
+  from unnest(array['A','B','C','D']) as rack_name
+  cross join generate_series(1, 10) as shelf_number
+)
 insert into public.locations (
   code,
   description,
@@ -184,27 +226,61 @@ insert into public.locations (
   active
 )
 select
-  format('RES-%s-S%s', rack_name, lpad(shelf_number::text, 2, '0')),
-  format('Resin Rack %s Shelf %s', rack_name, lpad(shelf_number::text, 2, '0')),
-  format('G8L-RES-%s-S%s', rack_name, lpad(shelf_number::text, 2, '0')),
+  seed.code,
+  seed.description,
+  seed.barcode,
   'shelf',
   'RESIN',
-  rack_name,
-  lpad(shelf_number::text, 2, '0'),
+  seed.rack,
+  seed.shelf,
   true
-from unnest(array['A','B','C','D']) as rack_name
-cross join generate_series(1, 10) as shelf_number
-on conflict (code) do update
-set
-  description = excluded.description,
-  barcode = excluded.barcode,
-  location_type = excluded.location_type,
-  zone = excluded.zone,
-  rack = excluded.rack,
-  shelf = excluded.shelf,
-  active = true;
+from seed
+where not exists (
+  select 1
+  from public.locations as location
+  where lower(trim(location.code)) = lower(trim(seed.code))
+);
 
 -- Upper warehouse racks from the supplied layout: RA-RG, shelves 1-4.
+with seed as (
+  select
+    format('%s-S%s', rack_name, lpad(shelf_number::text, 2, '0')) as code,
+    format('Rack %s Shelf %s', rack_name, lpad(shelf_number::text, 2, '0')) as description,
+    format('G8L-%s-S%s', rack_name, lpad(shelf_number::text, 2, '0')) as barcode,
+    rack_name as rack,
+    lpad(shelf_number::text, 2, '0') as shelf
+  from unnest(array['RA','RB','RC','RD','RE','RF','RG']) as rack_name
+  cross join generate_series(1, 4) as shelf_number
+), canonical as (
+  select lower(trim(code)) as code_key, min(id) as id
+  from public.locations
+  group by lower(trim(code))
+)
+update public.locations as location
+set
+  description = seed.description,
+  barcode = seed.barcode,
+  location_type = 'shelf',
+  zone = 'WAREHOUSE',
+  rack = seed.rack,
+  shelf = seed.shelf,
+  bin_position = null,
+  is_system = false,
+  active = true
+from seed
+join canonical on canonical.code_key = lower(trim(seed.code))
+where location.id = canonical.id;
+
+with seed as (
+  select
+    format('%s-S%s', rack_name, lpad(shelf_number::text, 2, '0')) as code,
+    format('Rack %s Shelf %s', rack_name, lpad(shelf_number::text, 2, '0')) as description,
+    format('G8L-%s-S%s', rack_name, lpad(shelf_number::text, 2, '0')) as barcode,
+    rack_name as rack,
+    lpad(shelf_number::text, 2, '0') as shelf
+  from unnest(array['RA','RB','RC','RD','RE','RF','RG']) as rack_name
+  cross join generate_series(1, 4) as shelf_number
+)
 insert into public.locations (
   code,
   description,
@@ -216,29 +292,20 @@ insert into public.locations (
   active
 )
 select
-  format('%s-S%s', rack_name, lpad(shelf_number::text, 2, '0')),
-  format('Rack %s Shelf %s', rack_name, lpad(shelf_number::text, 2, '0')),
-  format('G8L-%s-S%s', rack_name, lpad(shelf_number::text, 2, '0')),
+  seed.code,
+  seed.description,
+  seed.barcode,
   'shelf',
   'WAREHOUSE',
-  rack_name,
-  lpad(shelf_number::text, 2, '0'),
+  seed.rack,
+  seed.shelf,
   true
-from unnest(array['RA','RB','RC','RD','RE','RF','RG']) as rack_name
-cross join generate_series(1, 4) as shelf_number
-on conflict (code) do update
-set
-  description = excluded.description,
-  barcode = excluded.barcode,
-  location_type = excluded.location_type,
-  zone = excluded.zone,
-  rack = excluded.rack,
-  shelf = excluded.shelf,
-  active = true;
-
--- ---------------------------------------------------------------------------
--- Inventory movement / consumption ledger
--- ---------------------------------------------------------------------------
+from seed
+where not exists (
+  select 1
+  from public.locations as location
+  where lower(trim(location.code)) = lower(trim(seed.code))
+);
 
 create table if not exists public.inventory_movements (
   id bigint generated by default as identity primary key,
@@ -299,7 +366,6 @@ revoke all on table public.inventory_movements from anon, authenticated;
 grant all privileges on table public.inventory_movements to service_role;
 grant usage, select on all sequences in schema public to service_role;
 
--- Establish current balances as the opening audit point without changing them.
 insert into public.inventory_movements (
   item_id,
   movement_type,
@@ -332,7 +398,6 @@ where not exists (
     and movement.metadata ->> 'migration' = '20260807220500'
 );
 
--- Capture the original container quantity from current stock when not already set.
 update public.items as item
 set initial_quantity = balance.total_quantity
 from (
@@ -362,10 +427,6 @@ from (
   group by items.id
 ) as balance
 where item.id = balance.id;
-
--- ---------------------------------------------------------------------------
--- Canonicalize legacy resin attributes so the Phase 2 profile displays them.
--- ---------------------------------------------------------------------------
 
 update public.items as item
 set attributes = (
