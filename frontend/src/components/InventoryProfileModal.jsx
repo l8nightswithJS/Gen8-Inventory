@@ -20,16 +20,20 @@ const COLUMN_LABELS = {
   lot_number: 'Lot Number',
   inventory_location: 'Location',
   total_quantity: 'On Hand',
+  initial_quantity: 'Initial Quantity',
   uom: 'Unit of Measure',
-  status: 'Status',
+  status: 'Stock Status',
+  container_status: 'Container Status',
   reorder_level: 'Reorder Level',
   low_stock_threshold: 'Low-Stock Threshold',
   vendor_barcode: 'Vendor Barcode',
-  barcode: 'Internal Barcode',
+  barcode: 'Internal Container Barcode',
   weeks_on_hand: 'Weeks on Hand',
   suggested_reorder: 'Suggested Reorder',
   priority: 'Priority',
 };
+
+const EXTRA_OPERATIONAL_COLUMNS = ['initial_quantity', 'container_status'];
 
 function displayColumn(key, definitions) {
   const definition = definitions.find((entry) => entry.key === key);
@@ -81,7 +85,11 @@ export default function InventoryProfileModal({
         setProfiles(profileResponse.data?.profiles || []);
         setCoreFields(profileResponse.data?.core_fields || []);
         setDerivedFields(profileResponse.data?.derived_fields || []);
-        setLocations(Array.isArray(locationResponse.data) ? locationResponse.data : []);
+        setLocations(
+          (Array.isArray(locationResponse.data) ? locationResponse.data : []).filter(
+            (location) => location.active !== false,
+          ),
+        );
       } catch (requestError) {
         setError(
           requestError?.response?.data?.message ||
@@ -95,6 +103,7 @@ export default function InventoryProfileModal({
   const selectableColumns = useMemo(() => {
     const values = [
       ...coreFields,
+      ...EXTRA_OPERATIONAL_COLUMNS,
       ...derivedFields,
       ...fieldDefinitions.map((definition) => definition.key),
     ].filter(Boolean);
@@ -194,7 +203,7 @@ export default function InventoryProfileModal({
       isOpen={true}
       onClose={onClose}
       title="Inventory Profile"
-      size="max-w-4xl"
+      size="max-w-5xl"
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose} disabled={saving}>
@@ -212,14 +221,14 @@ export default function InventoryProfileModal({
         </p>
       )}
 
-      <div className="space-y-6">
+      <div className="min-w-0 space-y-6 overflow-x-hidden">
         <div className="grid gap-4 md:grid-cols-3">
-          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+          <label className="min-w-0 text-sm font-medium text-slate-700 dark:text-slate-300">
             Inventory Profile
             <select
               value={profileKey}
               onChange={(event) => applyProfile(event.target.value)}
-              className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800"
+              className="mt-1 w-full min-w-0 rounded border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800"
             >
               {profiles.map((profile) => (
                 <option key={profile.key} value={profile.key}>
@@ -229,22 +238,22 @@ export default function InventoryProfileModal({
             </select>
           </label>
 
-          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+          <label className="min-w-0 text-sm font-medium text-slate-700 dark:text-slate-300">
             Default Unit of Measure
             <input
               value={defaultUom}
               onChange={(event) => setDefaultUom(event.target.value)}
               placeholder="ea, lb, pieces"
-              className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800"
+              className="mt-1 w-full min-w-0 rounded border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800"
             />
           </label>
 
-          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+          <label className="min-w-0 text-sm font-medium text-slate-700 dark:text-slate-300">
             Default Import Location
             <select
               value={defaultLocationId}
               onChange={(event) => setDefaultLocationId(event.target.value)}
-              className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800"
+              className="mt-1 w-full min-w-0 rounded border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800"
             >
               <option value="">No default location</option>
               {locations.map((location) => (
@@ -257,14 +266,14 @@ export default function InventoryProfileModal({
           </label>
         </div>
 
-        <div>
-          <div className="mb-2 flex items-center justify-between">
+        <section>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
               <h3 className="font-semibold text-slate-800 dark:text-white">
                 Typed Profile Fields
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                These fields are shared across users and validated during edits and imports.
+                Shared across users and validated during edits and imports.
               </p>
             </div>
             <Button variant="secondary" size="sm" onClick={addDefinition}>
@@ -276,83 +285,98 @@ export default function InventoryProfileModal({
             {fieldDefinitions.map((definition, index) => (
               <div
                 key={`${definition.key}-${index}`}
-                className="grid gap-2 rounded border border-slate-200 p-3 md:grid-cols-[1fr_1.2fr_0.8fr_1.4fr_auto_auto] dark:border-slate-700"
+                className="rounded-lg border border-slate-200 p-3 dark:border-slate-700"
               >
-                <input
-                  value={definition.key}
-                  onChange={(event) => updateDefinition(index, 'key', event.target.value)}
-                  placeholder="field_key"
-                  className="rounded border border-slate-300 px-2 py-1.5 dark:border-slate-700 dark:bg-slate-800"
-                />
-                <input
-                  value={definition.label}
-                  onChange={(event) => updateDefinition(index, 'label', event.target.value)}
-                  placeholder="Display label"
-                  className="rounded border border-slate-300 px-2 py-1.5 dark:border-slate-700 dark:bg-slate-800"
-                />
-                <select
-                  value={definition.type}
-                  onChange={(event) => updateDefinition(index, 'type', event.target.value)}
-                  className="rounded border border-slate-300 px-2 py-1.5 dark:border-slate-700 dark:bg-slate-800"
-                >
-                  {TYPE_OPTIONS.map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  value={(definition.options || []).join(', ')}
-                  onChange={(event) => updateDefinition(index, 'options', event.target.value)}
-                  placeholder="Select options, comma separated"
-                  disabled={definition.type !== 'select'}
-                  className="rounded border border-slate-300 px-2 py-1.5 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800"
-                />
-                <label className="flex items-center gap-1 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={definition.required}
-                    onChange={(event) =>
-                      updateDefinition(index, 'required', event.target.checked)
-                    }
-                  />
-                  Required
-                </label>
-                <button
-                  type="button"
-                  onClick={() => removeDefinition(index)}
-                  className="text-sm font-medium text-red-600"
-                >
-                  Remove
-                </button>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="text-xs font-medium text-slate-500">
+                    Field Key
+                    <input
+                      value={definition.key}
+                      onChange={(event) => updateDefinition(index, 'key', event.target.value)}
+                      placeholder="field_key"
+                      className="mt-1 w-full rounded border border-slate-300 px-2 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+                    />
+                  </label>
+                  <label className="text-xs font-medium text-slate-500">
+                    Display Label
+                    <input
+                      value={definition.label}
+                      onChange={(event) => updateDefinition(index, 'label', event.target.value)}
+                      placeholder="Display label"
+                      className="mt-1 w-full rounded border border-slate-300 px-2 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+                    />
+                  </label>
+                </div>
+
+                <div className="mt-3 grid gap-3 md:grid-cols-[12rem_1fr_auto_auto] md:items-end">
+                  <label className="text-xs font-medium text-slate-500">
+                    Data Type
+                    <select
+                      value={definition.type}
+                      onChange={(event) => updateDefinition(index, 'type', event.target.value)}
+                      className="mt-1 w-full rounded border border-slate-300 px-2 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+                    >
+                      {TYPE_OPTIONS.map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="min-w-0 text-xs font-medium text-slate-500">
+                    Select Options
+                    <input
+                      value={(definition.options || []).join(', ')}
+                      onChange={(event) => updateDefinition(index, 'options', event.target.value)}
+                      placeholder="Comma-separated options"
+                      disabled={definition.type !== 'select'}
+                      className="mt-1 w-full min-w-0 rounded border border-slate-300 px-2 py-2 text-sm disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800"
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 pb-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={definition.required}
+                      onChange={(event) =>
+                        updateDefinition(index, 'required', event.target.checked)
+                      }
+                    />
+                    Required
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => removeDefinition(index)}
+                    className="pb-2 text-sm font-medium text-red-600"
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
             ))}
           </div>
-        </div>
+        </section>
 
-        <div>
+        <section>
           <h3 className="font-semibold text-slate-800 dark:text-white">
             Shared Inventory Columns
           </h3>
           <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
-            These replace the old browser-only column settings.
+            These settings are stored in the database and apply to all authorized users.
           </p>
-          <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {selectableColumns.map((key) => (
               <label
                 key={key}
-                className="flex items-center gap-2 rounded border border-slate-200 px-3 py-2 text-sm dark:border-slate-700"
+                className="flex min-w-0 items-center gap-2 rounded border border-slate-200 px-3 py-2 text-sm dark:border-slate-700"
               >
                 <input
                   type="checkbox"
                   checked={displayColumns.includes(key)}
                   onChange={() => toggleColumn(key)}
                 />
-                {displayColumn(key, fieldDefinitions)}
+                <span className="truncate">{displayColumn(key, fieldDefinitions)}</span>
               </label>
             ))}
           </div>
-        </div>
+        </section>
       </div>
     </BaseModal>
   );
