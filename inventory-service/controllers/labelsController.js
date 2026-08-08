@@ -1,8 +1,6 @@
-// inventory-service/controllers/labelsController.js
 const net = require('net');
 const pool = require('../db/pool');
 
-// ====== ENV CONFIG (with safe defaults) ======
 const PRINTER_HOST = process.env.ZEBRA_HOST || process.env.PRINTER_HOST;
 const PRINTER_PORT = Number(
   process.env.ZEBRA_PORT || process.env.PRINTER_PORT || 9100,
@@ -12,40 +10,24 @@ const LABEL_HEIGHT = Number(process.env.ZPL_LABEL_HEIGHT || 406);
 const COPIES = Math.max(1, Number(process.env.ZPL_COPIES || 1));
 const BATCH_SIZE = Number(process.env.PRINT_BATCH_SIZE || 100);
 
-// ====== SMALL HELPERS (Unchanged) ======
-const QTY_KEYS = ['quantity', 'on_hand', 'qty_in_stock', 'stock'];
-
-function quantityFrom(attrs = {}) {
-  for (const k of QTY_KEYS) {
-    const v = attrs[k];
-    if (v !== undefined && v !== null && v !== '') return v;
-  }
-  return '';
-}
-
-function escapeZpl(str = '') {
-  return String(str).replace(/[\^~\\]/g, ' ');
+function escapeZpl(value = '') {
+  return String(value).replace(/[\^~\\]/g, ' ');
 }
 
 function fbBlock(text, widthDots, maxLines, lineSpace) {
   return `^FB${widthDots},${maxLines},${lineSpace},L,0^FD${escapeZpl(text)}^FS`;
 }
 
-// ====== ZPL & PRINTER LOGIC (Unchanged) ======
-function buildLabelZpl({ clientName, item }) {
-  const a = item.attributes || {};
-  const part = a.part_number || '';
-  const desc = a.description || '';
-  const barcode = a.barcode || a.part_number || String(item.id);
-  const onHand = quantityFrom(a);
-  const loc = a.location || '';
+function buildContainerLabelZpl({ clientName, item }) {
   const pad = 24;
-  const textW = LABEL_WIDTH - pad * 2 - 320;
-  const y1 = 20;
-  const y2 = 70;
-  const y3 = 140;
-  const bcx = LABEL_WIDTH - 300;
-  const bcy = 30;
+  const textWidth = LABEL_WIDTH - pad * 2 - 315;
+  const part = item.part_number || item.name || item.description || `Item ${item.id}`;
+  const description = item.description || item.name || '';
+  const lot = item.lot_number || 'N/A';
+  const barcode = item.barcode || String(item.id);
+  const location = item.inventory_location || 'UNASSIGNED';
+  const quantity = item.total_quantity == null ? '' : item.total_quantity;
+  const uom = item.uom || '';
 
   return [
     '^XA',
@@ -53,15 +35,45 @@ function buildLabelZpl({ clientName, item }) {
     `^LL${LABEL_HEIGHT}`,
     '^LH0,0',
     '^CI28',
-    `^FO${pad},${y1}^A0N,44,44^FD${escapeZpl(part)}^FS`,
-    `^FO${pad},${y2}^A0N,28,28${fbBlock(desc, textW, 2, 4)}`,
-    `^FO${pad},${y3}^A0N,24,24^FDClient: ${escapeZpl(clientName || '')}^FS`,
-    `^FO${pad},${y3 + 28}^A0N,24,24^FDOn Hand: ${escapeZpl(onHand)}^FS`,
-    `^FO${pad},${y3 + 56}^A0N,24,24^FDLoc: ${escapeZpl(loc)}^FS`,
-    '^BY2,2,120',
-    `^FO${bcx},${bcy}^BCN,120,Y,N,N`,
+    `^FO${pad},20^A0N,42,42^FD${escapeZpl(part)}^FS`,
+    `^FO${pad},68^A0N,25,25${fbBlock(description, textWidth, 2, 3)}`,
+    `^FO${pad},138^A0N,23,23^FDLot: ${escapeZpl(lot)}^FS`,
+    `^FO${pad},168^A0N,23,23^FDQty: ${escapeZpl(quantity)} ${escapeZpl(uom)}^FS`,
+    `^FO${pad},198^A0N,23,23^FDLoc: ${escapeZpl(location)}^FS`,
+    `^FO${pad},228^A0N,21,21^FDClient: ${escapeZpl(clientName || '')}^FS`,
+    '^BY2,2,118',
+    `^FO${LABEL_WIDTH - 300},34^BCN,118,Y,N,N`,
     `^FD${escapeZpl(barcode)}^FS`,
-    `^FO${pad},${LABEL_HEIGHT - 28}^A0N,20,20^FDItem ID: ${item.id}^FS`,
+    `^FO${pad},${LABEL_HEIGHT - 34}^A0N,20,20^FDContainer: ${escapeZpl(barcode)}^FS`,
+    '^XZ',
+  ].join('');
+}
+
+function buildLocationLabelZpl(location) {
+  const code = location.code || '';
+  const barcode = location.barcode || code;
+  const description = location.description || '';
+  const hierarchy = [
+    location.zone ? `Zone ${location.zone}` : '',
+    location.rack ? `Rack ${location.rack}` : '',
+    location.shelf ? `Shelf ${location.shelf}` : '',
+    location.bin_position ? `Bin ${location.bin_position}` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  return [
+    '^XA',
+    `^PW${LABEL_WIDTH}`,
+    `^LL${LABEL_HEIGHT}`,
+    '^LH0,0',
+    '^CI28',
+    `^FO20,22^A0N,56,56^FD${escapeZpl(code)}^FS`,
+    `^FO20,86^A0N,28,28${fbBlock(description, LABEL_WIDTH - 40, 2, 3)}`,
+    `^FO20,150^A0N,24,24^FD${escapeZpl(hierarchy)}^FS`,
+    '^BY3,2,125',
+    `^FO80,205^BCN,125,Y,N,N`,
+    `^FD${escapeZpl(barcode)}^FS`,
     '^XZ',
   ].join('');
 }
@@ -81,10 +93,10 @@ function sendZplRaw(zpl, { host, port }) {
         reject(new Error('Printer connection timed out'));
       }
     });
-    socket.on('error', (err) => {
+    socket.on('error', (error) => {
       if (!settled) {
         settled = true;
-        reject(err);
+        reject(error);
       }
     });
     socket.on('close', () => {
@@ -97,134 +109,165 @@ function sendZplRaw(zpl, { host, port }) {
   });
 }
 
-async function printRowsAsZpl(rows) {
+async function sendLabels(labels) {
   if (!PRINTER_HOST || !PRINTER_PORT) {
-    const e = new Error(
+    const error = new Error(
       'Printer not configured. Set ZEBRA_HOST and ZEBRA_PORT.',
     );
-    e.status = 500;
-    throw e;
+    error.status = 500;
+    throw error;
   }
-  const payload = rows
-    .map((r) => {
-      const base = buildLabelZpl(r);
-      return COPIES <= 1
-        ? base
-        : Array.from({ length: COPIES }, () => base).join('');
-    })
+  const payload = labels
+    .flatMap((label) =>
+      Array.from({ length: COPIES }, () => label),
+    )
     .join('');
-
-  if (!payload) return;
-  await sendZplRaw(payload, { host: PRINTER_HOST, port: PRINTER_PORT });
+  if (payload) await sendZplRaw(payload, { host: PRINTER_HOST, port: PRINTER_PORT });
 }
 
-// ====== REFACTORED CONTROLLERS ======
+async function fetchContainerRows({ clientId = null, ids = null, offset = 0, limit = BATCH_SIZE }) {
+  const conditions = ['item.archived_at IS NULL'];
+  const values = [];
 
-// @desc Print all labels for a given client
-// @route POST /api/labels/print/all
+  if (clientId) {
+    values.push(clientId);
+    conditions.push(`item.client_id = $${values.length}`);
+  }
+  if (ids) {
+    values.push(ids);
+    conditions.push(`item.id = ANY($${values.length}::bigint[])`);
+  }
+
+  values.push(offset, limit);
+  return pool.query(
+    `SELECT
+       item.id,
+       item.client_id,
+       item.part_number,
+       item.name,
+       item.description,
+       item.lot_number,
+       item.barcode,
+       item.uom,
+       item.container_status,
+       client.name AS client_name,
+       COALESCE(SUM(inventory.quantity), 0)::numeric AS total_quantity,
+       COALESCE(
+         string_agg(DISTINCT location.code, ', ' ORDER BY location.code),
+         ''
+       ) AS inventory_location
+     FROM items AS item
+     JOIN clients AS client ON client.id = item.client_id
+     LEFT JOIN inventory ON inventory.item_id = item.id
+     LEFT JOIN locations AS location ON location.id = inventory.location_id
+     WHERE ${conditions.join(' AND ')}
+     GROUP BY item.id, client.id
+     ORDER BY item.id
+     OFFSET $${values.length - 1}
+     LIMIT $${values.length}`,
+    values,
+  );
+}
+
 exports.printAllForClient = async (req, res, next) => {
   try {
-    const clientId = parseInt(req.body.client_id ?? req.query.client_id, 10);
-    if (isNaN(clientId)) {
+    const clientId = Number(req.body?.client_id ?? req.query?.client_id);
+    if (!Number.isSafeInteger(clientId) || clientId < 1) {
       return res.status(400).json({ message: 'client_id is required' });
     }
 
-    const clientResult = await pool.query(
-      'SELECT id, name FROM clients WHERE id = $1',
-      [clientId],
-    );
-    if (clientResult.rows.length === 0) {
-      return res.status(404).json({ message: 'Client not found' });
-    }
-    const client = clientResult.rows[0];
-
-    let page = 0;
+    let offset = 0;
     let totalPrinted = 0;
-
     while (true) {
-      const result = await pool.query(
-        'SELECT id, client_id, attributes FROM items WHERE client_id = $1 ORDER BY id ASC OFFSET $2 LIMIT $3',
-        [clientId, page * BATCH_SIZE, BATCH_SIZE],
+      const result = await fetchContainerRows({ clientId, offset });
+      if (!result.rows.length) break;
+      await sendLabels(
+        result.rows.map((item) =>
+          buildContainerLabelZpl({
+            clientName: item.client_name,
+            item,
+          }),
+        ),
       );
-
-      const items = result.rows;
-      if (items.length === 0) break;
-
-      const rows = items.map((it) => ({ clientName: client.name, item: it }));
-      await printRowsAsZpl(rows);
-
-      totalPrinted += items.length;
-      page++;
+      totalPrinted += result.rows.length;
+      offset += result.rows.length;
     }
 
-    res.json({
+    return res.json({
       ok: true,
       count: totalPrinted,
       copies: COPIES,
-      jobName: `Client ${client.name}`,
-      message: totalPrinted > 0 ? 'Print job completed.' : 'No items to print.',
+      message: totalPrinted ? 'Container labels printed.' : 'No active containers to print.',
     });
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    return next(error);
   }
 };
 
-// @desc Print labels for selected items
-// @route POST /api/labels/print/selected
 exports.printSelected = async (req, res, next) => {
   try {
-    const ids = Array.isArray(req.body.item_ids)
+    const ids = Array.isArray(req.body?.item_ids)
       ? req.body.item_ids
-          .map((id) => parseInt(id, 10))
-          .filter((id) => !isNaN(id))
+          .map(Number)
+          .filter((id) => Number.isSafeInteger(id) && id > 0)
       : [];
     if (!ids.length) {
       return res.status(400).json({ message: 'item_ids array is required' });
     }
 
-    const idBatches = [];
-    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
-      idBatches.push(ids.slice(i, i + BATCH_SIZE));
-    }
-
     let totalPrinted = 0;
-    let clientName = '';
-
-    for (const batch of idBatches) {
-      const result = await pool.query(
-        `SELECT i.id, i.client_id, i.attributes, c.name AS client_name
-         FROM items i
-         JOIN clients c ON c.id = i.client_id
-         WHERE i.id = ANY($1::int[])`,
-        [batch],
+    for (let index = 0; index < ids.length; index += BATCH_SIZE) {
+      const batch = ids.slice(index, index + BATCH_SIZE);
+      const result = await fetchContainerRows({ ids: batch, offset: 0, limit: batch.length });
+      await sendLabels(
+        result.rows.map((item) =>
+          buildContainerLabelZpl({
+            clientName: item.client_name,
+            item,
+          }),
+        ),
       );
-
-      const items = result.rows;
-      if (!items.length) continue;
-
-      if (!clientName && items[0].client_name) {
-        clientName = items[0].client_name;
-      }
-
-      const rows = items.map((it) => ({
-        clientName: it.client_name || clientName,
-        item: it,
-      }));
-      await printRowsAsZpl(rows);
-      totalPrinted += items.length;
+      totalPrinted += result.rows.length;
     }
 
-    res.json({
+    return res.json({
       ok: true,
       count: totalPrinted,
       copies: COPIES,
-      jobName: `Selected (${totalPrinted})`,
-      message:
-        totalPrinted > 0
-          ? 'Print job completed.'
-          : 'No items found for the given IDs.',
+      message: totalPrinted ? 'Selected container labels printed.' : 'No active containers found.',
     });
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    return next(error);
   }
+};
+
+exports.printLocation = async (req, res, next) => {
+  try {
+    const id = Number(req.params?.id);
+    const result = await pool.query(
+      `SELECT id, code, description, barcode, location_type,
+              zone, rack, shelf, bin_position, active
+       FROM locations
+       WHERE id = $1`,
+      [id],
+    );
+    if (!result.rows[0]) {
+      return res.status(404).json({ message: 'Location not found.' });
+    }
+    await sendLabels([buildLocationLabelZpl(result.rows[0])]);
+    return res.json({
+      ok: true,
+      count: 1,
+      copies: COPIES,
+      message: `Location label ${result.rows[0].code} printed.`,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+module.exports._test = {
+  buildContainerLabelZpl,
+  buildLocationLabelZpl,
+  escapeZpl,
 };
