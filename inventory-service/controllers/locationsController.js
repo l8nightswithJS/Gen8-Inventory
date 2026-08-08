@@ -1,108 +1,182 @@
-// In inventory-service/controllers/locationsController.js (Updated)
 const pool = require('../db/pool');
 
 const handleDbError = (res, error, context) => {
   console.error(`Error in ${context}:`, error);
   return res.status(500).json({
     message: `Internal server error during ${context}`,
-    details: error.message,
   });
 };
 
-// @desc    Get all global locations
-// @route   GET /locations
-exports.getLocations = async (req, res) => {
+function normalizeOptional(value) {
+  if (value === undefined || value === null) return null;
+  const text = String(value).trim();
+  return text || null;
+}
+
+function locationPayload(body = {}) {
+  return {
+    code: String(body.code || '').trim().toUpperCase(),
+    description: normalizeOptional(body.description),
+    barcode: normalizeOptional(body.barcode)?.toUpperCase() || null,
+    locationType: String(body.location_type || 'other').trim().toLowerCase(),
+    zone: normalizeOptional(body.zone)?.toUpperCase() || null,
+    rack: normalizeOptional(body.rack)?.toUpperCase() || null,
+    shelf: normalizeOptional(body.shelf)?.toUpperCase() || null,
+    binPosition: normalizeOptional(body.bin_position)?.toUpperCase() || null,
+    active: body.active !== false,
+  };
+}
+
+exports.getLocations = async (_req, res) => {
   try {
-    // Now fetches ALL locations, no longer filtered by client_id
     const result = await pool.query(
-      'SELECT * FROM locations ORDER BY code ASC',
+      `SELECT *
+       FROM locations
+       ORDER BY
+         CASE WHEN location_type = 'staging' THEN 0 ELSE 1 END,
+         coalesce(zone, ''),
+         coalesce(rack, ''),
+         coalesce(shelf, ''),
+         coalesce(bin_position, ''),
+         code`,
     );
-    res.json(result.rows || []);
+    return res.json(result.rows || []);
   } catch (error) {
     return handleDbError(res, error, 'getLocations');
   }
 };
 
-// @desc    Create a new global location
-// @route   POST /locations
 exports.createLocation = async (req, res) => {
   try {
-    // No longer needs a client_id
-    const { code, description } = req.body;
-
+    const payload = locationPayload(req.body);
     const result = await pool.query(
-      'INSERT INTO locations (code, description) VALUES ($1, $2) RETURNING *',
-      [code, description],
+      `INSERT INTO locations (
+         code, description, barcode, location_type,
+         zone, rack, shelf, bin_position, active
+       )
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       RETURNING *`,
+      [
+        payload.code,
+        payload.description,
+        payload.barcode,
+        payload.locationType,
+        payload.zone,
+        payload.rack,
+        payload.shelf,
+        payload.binPosition,
+        payload.active,
+      ],
     );
-
-    res.status(201).json(result.rows[0]);
+    return res.status(201).json(result.rows[0]);
   } catch (error) {
-    // Handle unique constraint violation on the 'code'
     if (error.code === '23505') {
-      return res
-        .status(409)
-        .json({ message: 'A location with this code already exists.' });
+      return res.status(409).json({
+        message: 'A location with this code or barcode already exists.',
+      });
+    }
+    if (error.code === '23514') {
+      return res.status(400).json({ message: 'Invalid location type.' });
     }
     return handleDbError(res, error, 'createLocation');
   }
 };
 
-// In inventory-service/controllers/locationsController.js
-
-// @desc    Update a location
-// @route   PUT /api/locations/:id
 exports.updateLocation = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { code, description } = req.body;
-
-    const result = await pool.query(
-      'UPDATE locations SET code = $1, description = $2 WHERE id = $3 RETURNING *',
-      [code, description, id],
+    const id = Number(req.params.id);
+    const current = await pool.query(
+      'SELECT * FROM locations WHERE id = $1',
+      [id],
     );
-
-    if (result.rowCount === 0) {
+    if (!current.rows[0]) {
       return res.status(404).json({ message: 'Location not found.' });
     }
 
-    res.status(200).json(result.rows[0]);
+    const payload = locationPayload({ ...current.rows[0], ...req.body });
+    const isSystem = current.rows[0].is_system === true;
+    const code = isSystem ? current.rows[0].code : payload.code;
+    const barcode = isSystem ? current.rows[0].barcode : payload.barcode;
+
+    const result = await pool.query(
+      `UPDATE locations
+       SET
+         code = $1,
+         description = $2,
+         barcode = $3,
+         location_type = $4,
+         zone = $5,
+         rack = $6,
+         shelf = $7,
+         bin_position = $8,
+         active = $9
+       WHERE id = $10
+       RETURNING *`,
+      [
+        code,
+        payload.description,
+        barcode,
+        payload.locationType,
+        payload.zone,
+        payload.rack,
+        payload.shelf,
+        payload.binPosition,
+        isSystem ? true : payload.active,
+        id,
+      ],
+    );
+    return res.json(result.rows[0]);
   } catch (error) {
-    // Handle unique constraint violation if renaming to an existing code
     if (error.code === '23505') {
-      return res
-        .status(409)
-        .json({ message: 'A location with this code already exists.' });
+      return res.status(409).json({
+        message: 'A location with this code or barcode already exists.',
+      });
+    }
+    if (error.code === '23514') {
+      return res.status(400).json({ message: 'Invalid location type.' });
     }
     return handleDbError(res, error, 'updateLocation');
   }
 };
 
-// In inventory-service/controllers/locationsController.js
-
-// @desc    Delete a location
-// @route   DELETE /api/locations/:id
 exports.deleteLocation = async (req, res) => {
   try {
-    const { id } = req.params;
-    const result = await pool.query(
-      'DELETE FROM locations WHERE id = $1 RETURNING id',
+    const id = Number(req.params.id);
+    const current = await pool.query(
+      'SELECT id, code, is_system FROM locations WHERE id = $1',
       [id],
     );
-
-    if (result.rowCount === 0) {
+    if (!current.rows[0]) {
       return res.status(404).json({ message: 'Location not found.' });
     }
-
-    res.status(200).json({ message: 'Location deleted successfully.' });
-  } catch (error) {
-    // Handle potential foreign key constraint errors if items are in this location
-    if (error.code === '23503') {
-      // foreign_key_violation
+    if (current.rows[0].is_system) {
       return res.status(409).json({
-        message:
-          'Cannot delete location because it contains inventory. Please move all items first.',
+        message: `${current.rows[0].code} is a system location and cannot be deleted.`,
+      });
+    }
+
+    const balance = await pool.query(
+      `SELECT 1 FROM inventory
+       WHERE location_id = $1 AND quantity > 0
+       LIMIT 1`,
+      [id],
+    );
+    if (balance.rows.length > 0) {
+      return res.status(409).json({
+        message: 'Cannot delete a location that contains inventory. Move all stock first.',
+      });
+    }
+
+    await pool.query('DELETE FROM locations WHERE id = $1', [id]);
+    return res.json({ message: 'Location deleted successfully.' });
+  } catch (error) {
+    if (error.code === '23503') {
+      return res.status(409).json({
+        message: 'This location has inventory history and cannot be deleted. Mark it inactive instead.',
       });
     }
     return handleDbError(res, error, 'deleteLocation');
   }
 };
+
+module.exports._test = { locationPayload };
