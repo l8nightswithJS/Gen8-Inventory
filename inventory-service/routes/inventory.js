@@ -1,9 +1,10 @@
 const express = require('express');
 const { body, param, query } = require('express-validator');
 const inventoryController = require('../controllers/inventoryController');
-const bulkImportController = require('../controllers/bulkImportController');
+const warehouseImportController = require('../controllers/warehouseImportController');
 const inventoryReadController = require('../controllers/inventoryReadController');
 const inventoryAdjustmentController = require('../controllers/inventoryAdjustmentController');
+const warehouseOperationsController = require('../controllers/warehouseOperationsController');
 const profileAlertsController = require('../controllers/profileAlertsController');
 const { requireRole, handleValidation } = require('shared-auth');
 const { requireItemAccess } = require('../middleware/requireItemAccess');
@@ -21,10 +22,14 @@ const optionalText = (field) =>
 
 const isSupportedDecimal = (value, { signed = false } = {}) => {
   if (value === '' || value === null || value === undefined) return true;
-  const expression = signed
+  const text = String(value).trim();
+  const plain = signed
     ? /^-?\d+(?:\.\d{1,3})?$/
     : /^\d+(?:\.\d{1,3})?$/;
-  return expression.test(String(value).trim());
+  const formatted = signed
+    ? /^-?\d{1,3}(?:,\d{3})+(?:\.\d{1,3})?$/
+    : /^\d{1,3}(?:,\d{3})+(?:\.\d{1,3})?$/;
+  return plain.test(text) || formatted.test(text);
 };
 
 const optionalNonNegativeDecimal = (field) =>
@@ -37,7 +42,6 @@ const commonItemValidators = [
   optionalText('lot_number'),
   optionalText('name'),
   optionalText('description'),
-  optionalText('barcode'),
   optionalText('vendor_barcode'),
   optionalText('uom'),
   optionalNonNegativeDecimal('reorder_level'),
@@ -85,6 +89,46 @@ router.get(
   query('client_id').isInt({ min: 1 }).withMessage('client_id is required').toInt(),
   handleValidation,
   inventoryReadController.listItems,
+);
+
+router.post(
+  '/transfer',
+  body('item_id').isInt({ min: 1 }).withMessage('item_id is required').toInt(),
+  body('to_location_id')
+    .isInt({ min: 1 })
+    .withMessage('to_location_id is required')
+    .toInt(),
+  body('from_location_id').optional({ nullable: true }).isInt({ min: 1 }).toInt(),
+  body('quantity')
+    .optional({ nullable: true })
+    .custom((value) => isSupportedDecimal(value))
+    .withMessage('quantity must be positive with up to 3 decimals'),
+  body('move_all').optional().isBoolean(),
+  body('reason').optional().isString().isLength({ max: 500 }),
+  handleValidation,
+  requireItemAccess({ source: 'body', key: 'item_id' }),
+  warehouseOperationsController.transferItem,
+);
+
+router.post(
+  '/:id/remaining',
+  param('id').isInt({ min: 1 }).withMessage('Invalid id').toInt(),
+  body('location_id').optional({ nullable: true }).isInt({ min: 1 }).toInt(),
+  body('remaining_quantity')
+    .custom((value) => isSupportedDecimal(value))
+    .withMessage('remaining_quantity must be non-negative with up to 3 decimals'),
+  body('reason').optional().isString().isLength({ max: 500 }),
+  handleValidation,
+  requireItemAccess(),
+  warehouseOperationsController.setRemainingQuantity,
+);
+
+router.get(
+  '/:id/movements',
+  param('id').isInt({ min: 1 }).withMessage('Invalid id').toInt(),
+  handleValidation,
+  requireItemAccess(),
+  warehouseOperationsController.getMovementHistory,
 );
 
 router.post(
@@ -182,6 +226,10 @@ const bulkValidators = [
     .optional({ nullable: true })
     .isInt({ min: 1 })
     .toInt(),
+  body('location_strategy')
+    .optional()
+    .isIn(['staging', 'file', 'selected'])
+    .withMessage('location_strategy must be staging, file, or selected'),
   body('template').optional().isObject(),
   handleValidation,
 ];
@@ -190,14 +238,14 @@ router.post(
   '/bulk',
   requireRole('admin'),
   bulkValidators,
-  bulkImportController.bulkImportItems,
+  warehouseImportController.bulkImportItems,
 );
 
 router.post(
   '/import',
   requireRole('admin'),
   bulkValidators,
-  bulkImportController.bulkImportItems,
+  warehouseImportController.bulkImportItems,
 );
 
 module.exports = router;
