@@ -12,8 +12,12 @@ function normalizeClientId(value) {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+function normalizeScan(value) {
+  return String(value || '').trim();
+}
+
 exports.processScan = async (req, res) => {
-  const barcode = String(req.body?.barcode || '').trim();
+  const barcode = normalizeScan(req.body?.barcode);
   const clientId = normalizeClientId(req.body?.client_id);
 
   if (!barcode) {
@@ -21,11 +25,14 @@ exports.processScan = async (req, res) => {
   }
 
   try {
-    // Locations are global and are scanned by their unique code.
+    // Fixed warehouse locations can be scanned by their human code or G8L barcode.
     const locationResult = await pool.query(
-      `SELECT id, code, description
+      `SELECT
+         id, code, description, barcode, location_type,
+         zone, rack, shelf, bin_position, is_system, active
        FROM locations
-       WHERE code = $1
+       WHERE active = true
+         AND (upper(code) = upper($1) OR upper(barcode) = upper($1))
        LIMIT 1`,
       [barcode],
     );
@@ -43,6 +50,8 @@ exports.processScan = async (req, res) => {
            JOIN items AS item ON item.id = inventory.item_id
            WHERE inventory.location_id = $1
              AND item.client_id = $2
+             AND item.archived_at IS NULL
+             AND inventory.quantity > 0
            ORDER BY item.part_number, item.lot_number, item.id`,
           [location.id, clientId],
         );
@@ -50,7 +59,11 @@ exports.processScan = async (req, res) => {
         inventoryItems = inventoryResult.rows.map((row) => {
           const { quantity, ...item } = row;
           return {
-            item,
+            item: {
+              ...item,
+              initial_quantity:
+                item.initial_quantity == null ? null : Number(item.initial_quantity),
+            },
             quantity: Number(quantity),
           };
         });
@@ -64,12 +77,12 @@ exports.processScan = async (req, res) => {
 
     if (!clientId) {
       return res.status(400).json({
-        message: 'client_id is required when scanning an inventory item.',
+        message: 'client_id is required when scanning an inventory container.',
       });
     }
 
-    // Only the unique internal/container barcode resolves a single item.
-    // Vendor barcodes are intentionally non-unique and are not used here.
+    // Only the permanent internal G8I/container barcode resolves an item.
+    // Vendor/manufacturer barcodes are intentionally non-unique.
     const itemResult = await pool.query(
       `SELECT
          item.*,
@@ -77,12 +90,25 @@ exports.processScan = async (req, res) => {
          COALESCE(
            string_agg(DISTINCT location.code, ', ' ORDER BY location.code),
            ''
-         ) AS inventory_location
+         ) AS inventory_location,
+         COALESCE(
+           jsonb_agg(
+             DISTINCT jsonb_build_object(
+               'location_id', location.id,
+               'location_code', location.code,
+               'location_barcode', location.barcode,
+               'location_type', location.location_type,
+               'quantity', inventory.quantity
+             )
+           ) FILTER (WHERE inventory.id IS NOT NULL AND inventory.quantity > 0),
+           '[]'::jsonb
+         ) AS inventory_levels
        FROM items AS item
        LEFT JOIN inventory ON inventory.item_id = item.id
        LEFT JOIN locations AS location ON location.id = inventory.location_id
        WHERE item.client_id = $1
-         AND item.barcode = $2
+         AND upper(item.barcode) = upper($2)
+         AND item.archived_at IS NULL
        GROUP BY item.id
        LIMIT 1`,
       [clientId, barcode],
@@ -95,6 +121,12 @@ exports.processScan = async (req, res) => {
         data: {
           ...item,
           total_quantity: Number(item.total_quantity),
+          initial_quantity:
+            item.initial_quantity == null ? null : Number(item.initial_quantity),
+          inventory_levels: (item.inventory_levels || []).map((level) => ({
+            ...level,
+            quantity: Number(level.quantity),
+          })),
         },
       });
     }
@@ -105,4 +137,4 @@ exports.processScan = async (req, res) => {
   }
 };
 
-module.exports._test = { normalizeClientId };
+module.exports._test = { normalizeClientId, normalizeScan };
