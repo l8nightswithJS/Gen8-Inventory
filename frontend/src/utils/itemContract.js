@@ -3,7 +3,6 @@ export const ITEM_CORE_FIELDS = new Set([
   'lot_number',
   'name',
   'description',
-  'barcode',
   'vendor_barcode',
   'uom',
   'reorder_level',
@@ -14,12 +13,16 @@ export const ITEM_CORE_FIELDS = new Set([
 const RESERVED_FIELDS = new Set([
   'id',
   'client_id',
+  'barcode',
   'attributes',
   'alert_acknowledged_at',
   'created_at',
   'updated_at',
   'last_updated',
   'total_quantity',
+  'initial_quantity',
+  'container_status',
+  'emptied_at',
   'status',
   'threshold_configured',
   'inventory_levels',
@@ -46,7 +49,10 @@ function normalizeOptionalText(value) {
 function normalizeOptionalDecimal(value, label) {
   if (value === undefined || value === null || value === '') return null;
 
-  const normalized = String(value).trim();
+  const raw = String(value).trim();
+  const normalized = /^\d{1,3}(?:,\d{3})+(?:\.\d{1,3})?$/.test(raw)
+    ? raw.replace(/,/g, '')
+    : raw;
   if (!/^\d+(?:\.\d{1,3})?$/.test(normalized)) {
     throw new Error(
       `${label} must be a non-negative number with no more than 3 decimal places.`,
@@ -115,7 +121,6 @@ export function buildItemPayload({ form, customKeys = [], clientId }) {
     lot_number: normalizeOptionalText(form.lot_number),
     name: normalizeOptionalText(form.name),
     description: normalizeOptionalText(form.description),
-    barcode: normalizeOptionalText(form.barcode),
     vendor_barcode: normalizeOptionalText(form.vendor_barcode),
     uom: normalizeOptionalText(form.uom),
     reorder_level: normalizeOptionalDecimal(
