@@ -5,6 +5,8 @@ const warehouseImportController = require('../controllers/warehouseImportControl
 const inventoryReadController = require('../controllers/inventoryReadController');
 const inventoryAdjustmentController = require('../controllers/inventoryAdjustmentController');
 const warehouseOperationsController = require('../controllers/warehouseOperationsController');
+const masterWarehouseController = require('../controllers/masterWarehouseController');
+const itemLifecycleController = require('../controllers/itemLifecycleController');
 const profileAlertsController = require('../controllers/profileAlertsController');
 const { requireRole, handleValidation } = require('shared-auth');
 const { requireItemAccess } = require('../middleware/requireItemAccess');
@@ -59,7 +61,7 @@ const commonItemValidators = [
 router.get(
   '/by-location',
   requireRole('admin'),
-  inventoryController.getMasterInventoryByLocation,
+  masterWarehouseController.getMasterInventoryByLocation,
 );
 
 router.get(
@@ -160,7 +162,7 @@ router.get(
   param('id').isInt({ min: 1 }).withMessage('Invalid id').toInt(),
   handleValidation,
   requireItemAccess(),
-  inventoryController.getItemById,
+  itemLifecycleController.getItemById,
 );
 
 router.post(
@@ -195,10 +197,11 @@ router.put(
 
 router.delete(
   '/:id',
+  requireRole('admin'),
   param('id').isInt({ min: 1 }).withMessage('Invalid id').toInt(),
   handleValidation,
   requireItemAccess(),
-  inventoryController.deleteItem,
+  itemLifecycleController.archiveItem,
 );
 
 router.post(
