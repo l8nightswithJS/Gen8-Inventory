@@ -24,6 +24,9 @@ const DECIMAL_FIELDS = new Set(['reorder_level', 'low_stock_threshold']);
 const READ_ONLY_FIELDS = new Set([
   'id',
   'client_id',
+  'product_id',
+  'receipt_line_id',
+  'source_container_id',
   'barcode',
   'attributes',
   'alert_acknowledged_at',
@@ -33,7 +36,12 @@ const READ_ONLY_FIELDS = new Set([
   'total_quantity',
   'initial_quantity',
   'container_status',
+  'quality_status',
+  'quality_updated_at',
+  'quality_notes',
+  'package_type',
   'emptied_at',
+  'archived_at',
   'status',
   'threshold_configured',
   'inventory_levels',
@@ -60,6 +68,13 @@ const RESERVED_OPERATIONAL_ATTRIBUTES = new Set([
   'barcode',
   'internal_barcode',
   'container_barcode',
+  'product_id',
+  'receipt_line_id',
+  'source_container_id',
+  'quality_status',
+  'quality_updated_at',
+  'quality_notes',
+  'package_type',
 ]);
 
 class ItemContractError extends Error {
