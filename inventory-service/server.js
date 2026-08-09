@@ -15,6 +15,7 @@ const masterWarehouseController = require('./controllers/masterWarehouseControll
 const inventoryRouter = require('./routes/inventory');
 const labelsRouter = require('./routes/labels');
 const locationsRouter = require('./routes/locations');
+const receivingRouter = require('./routes/receiving');
 
 const app = express();
 app.set('etag', false);
@@ -44,6 +45,7 @@ app.get(
 );
 
 app.use('/api/locations', requireRole('admin'), locationsRouter);
+app.use('/api/receiving', receivingRouter);
 
 app.use('/api/items', requireClientMatch, inventoryRouter);
 app.use('/api/inventory', requireClientMatch, inventoryRouter);
