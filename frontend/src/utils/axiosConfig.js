@@ -67,6 +67,23 @@ api.interceptors.response.use(
   async (error) => {
     const config = error?.config || {};
     const status = error?.response?.status;
+    const responseData = error?.response?.data;
+
+    if (
+      responseData &&
+      !responseData.message &&
+      Array.isArray(responseData.errors)
+    ) {
+      const validationMessage = responseData.errors
+        .map((entry) => entry?.message || entry?.msg)
+        .filter(Boolean)
+        .join(' ');
+
+      if (validationMessage) {
+        responseData.message = validationMessage;
+      }
+    }
+
     const responseMessage =
       error?.response?.data?.error || error?.response?.data?.message || '';
     const isClientScopeDenial =
@@ -118,6 +135,22 @@ api.interceptors.request.use((config) => {
   } else if (config.headers && 'Authorization' in config.headers) {
     delete config.headers.Authorization;
   }
+
+  const isInventoryImport = ['/api/items/import', '/api/items/bulk'].some(
+    (path) => String(config.url || '').includes(path),
+  );
+
+  if (
+    isInventoryImport &&
+    config.data &&
+    typeof config.data === 'object' &&
+    !Array.isArray(config.data) &&
+    config.data.template == null
+  ) {
+    const { template: _unusedTemplate, ...requestData } = config.data;
+    config.data = requestData;
+  }
+
   return config;
 });
 
