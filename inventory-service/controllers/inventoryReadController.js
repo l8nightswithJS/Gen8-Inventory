@@ -13,6 +13,8 @@ const LEGACY_OPERATIONAL_ATTRIBUTE_KEYS = new Set([
   'on_hand_review',
   'quantity',
   'total_quantity',
+  'physical_on_hand',
+  'available_to_production',
 ]);
 
 function normalizeAttributeKey(value) {
@@ -121,12 +123,24 @@ exports.listItems = async (req, res, next) => {
       );
       const item = { ...rawItem, attributes };
       const quantity = Number(rawItem.total_quantity);
-      const totalQuantity = Number.isFinite(quantity) ? quantity : 0;
-      const lowState = computeLowState(item, totalQuantity);
-      const profiled = applyProfileToItem(item, totalQuantity, settings);
+      const physicalOnHand = Number.isFinite(quantity) ? quantity : 0;
+      const availableToProduction =
+        (item.quality_status || 'released') === 'released' ? physicalOnHand : 0;
+
+      // Stock/reorder status reflects material actually released for use, while
+      // total_quantity remains the physical quantity present in the building.
+      const lowState = computeLowState(item, availableToProduction);
+      const profiled = applyProfileToItem(
+        item,
+        availableToProduction,
+        settings,
+      );
 
       return {
         ...profiled,
+        total_quantity: physicalOnHand,
+        physical_on_hand: physicalOnHand,
+        available_to_production: availableToProduction,
         initial_quantity:
           item.initial_quantity == null ? null : Number(item.initial_quantity),
         inventory_levels: (item.inventory_levels || []).map((level) => ({
