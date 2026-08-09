@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FiCamera, FiCheckCircle, FiFileText, FiPrinter, FiSearch, FiUploadCloud } from 'react-icons/fi';
+import { FiCamera, FiCheckCircle, FiFileText, FiPrinter, FiUploadCloud } from 'react-icons/fi';
 import api from '../utils/axiosConfig';
 import Button from '../components/ui/Button';
 
@@ -10,13 +10,47 @@ function normalizeClients(payload) {
   return [];
 }
 
+function parseNumberToken(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const plain = /^\d+(?:\.\d{1,3})?$/;
+  const thousands = /^\d{1,3}(?:,\d{3})+(?:\.\d{1,3})?$/;
+  const normalized = thousands.test(raw)
+    ? raw.replace(/,/g, '')
+    : plain.test(raw)
+      ? raw
+      : null;
+  if (normalized === null) return null;
+  const number = Number(normalized);
+  return Number.isFinite(number) && number > 0 ? number : null;
+}
+
 function splitQuantities(text) {
-  return String(text || '')
-    .split(/[,;\n]+/)
+  const raw = String(text || '').trim();
+  if (!raw) return [];
+
+  const explicitSegments = raw
+    .split(/[;\n]+/)
     .map((value) => value.trim())
-    .filter(Boolean)
-    .map((value) => Number(value.replace(/,/g, '')))
-    .filter((value) => Number.isFinite(value) && value >= 0);
+    .filter(Boolean);
+  if (explicitSegments.length > 1) {
+    const parsed = explicitSegments.map(parseNumberToken);
+    return parsed.every((value) => value !== null) ? parsed : [];
+  }
+
+  const single = parseNumberToken(raw);
+  if (single !== null) return [single];
+
+  const commaSegments = raw
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const parsed = commaSegments.map((value) => {
+    if (!/^\d+(?:\.\d{1,3})?$/.test(value)) return null;
+    const number = Number(value);
+    return Number.isFinite(number) && number > 0 ? number : null;
+  });
+  return parsed.length && parsed.every((value) => value !== null) ? parsed : [];
 }
 
 function initialContainerText(line) {
@@ -125,7 +159,11 @@ export default function ReceivingPage() {
     try {
       const payloadLines = lines.map((line, index) => {
         const quantities = splitQuantities(line.container_quantities_text);
-        if (!quantities.length) throw new Error(`Line ${index + 1}: enter at least one physical-container quantity.`);
+        if (!quantities.length) {
+          throw new Error(
+            `Line ${index + 1}: enter valid positive quantities for each physical container.`,
+          );
+        }
         if (!line.part_number && line.selected_product_id === 'new') {
           throw new Error(`Line ${index + 1}: confirm a part/material number.`);
         }
@@ -420,10 +458,10 @@ export default function ReceivingPage() {
                             rows={2}
                             value={line.container_quantities_text || ''}
                             onChange={(event) => updateLine(index, { container_quantities_text: event.target.value })}
-                            placeholder="Example: 55, 55, 42"
+                            placeholder="Resin: 55, 55, 42 · Parts: 161, 161, 100 · Thousands: 1,000; 500"
                             className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 font-mono dark:border-slate-700 dark:bg-slate-800"
                           />
-                          <span className="text-xs text-slate-500">One number = one physical bag, box, bin, drum, tray, or Gaylord = one new G8I.</span>
+                          <span className="text-xs text-slate-500">One positive number = one physical bag, box, bin, drum, tray, or Gaylord = one new G8I. Use semicolons or new lines when a quantity itself contains a thousands comma.</span>
                         </label>
                         <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800/60">
                           <p className="text-xs uppercase text-slate-500">Will Create</p>
