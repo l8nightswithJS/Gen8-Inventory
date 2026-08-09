@@ -16,6 +16,8 @@ import UsbScannerInput from '../components/UsbScannerInput';
 import TransferInventoryModal from '../components/TransferInventoryModal';
 import RemainingQuantityModal from '../components/RemainingQuantityModal';
 import MovementHistoryModal from '../components/MovementHistoryModal';
+import RepackContainerModal from '../components/RepackContainerModal';
+import QualityStatusModal from '../components/QualityStatusModal';
 import {
   FiCamera,
   FiChevronLeft,
@@ -42,6 +44,7 @@ const DEFAULT_SETTINGS = {
     'total_quantity',
     'uom',
     'container_status',
+    'quality_status',
     'status',
   ],
   field_definitions: [],
@@ -95,6 +98,8 @@ export default function ClientPage() {
     transferItem: null,
     remainingItem: null,
     historyItem: null,
+    repackItem: null,
+    qualityItem: null,
   });
   const [sortConfig, setSortConfig] = useState({
     key: 'part_number',
@@ -172,6 +177,26 @@ export default function ClientPage() {
     if (scannedItem?.review_status === 'needs_review') {
       if (isAdmin) handleModal('reviewItem', scannedItem);
       else setError('This container needs inventory review before warehouse operations.');
+      return;
+    }
+
+    const qualityStatus = scannedItem?.quality_status || 'released';
+    if (!currentLocation && qualityStatus !== 'released') {
+      handleModal('qualityItem', scannedItem);
+      return;
+    }
+
+    if (
+      currentLocation &&
+      qualityStatus !== 'released' &&
+      !['RECEIVING-QC', 'COMPONENTS-HOLD', 'QUARANTINE'].includes(
+        String(currentLocation.code || '').toUpperCase(),
+      )
+    ) {
+      setError(
+        `${scannedItem.barcode || 'This container'} is ${qualityStatus.replace(/_/g, ' ')}. Release it before put-away to a production/storage shelf.`,
+      );
+      handleModal('qualityItem', scannedItem);
       return;
     }
 
@@ -272,6 +297,7 @@ export default function ClientPage() {
         item.inventory_location,
         item.status,
         item.container_status,
+        item.quality_status,
         item.priority,
         ...Object.values(item.attributes || {}),
       ];
@@ -340,10 +366,10 @@ export default function ClientPage() {
           </div>
           <button
             onClick={() => setCurrentLocation(null)}
-            className="rounded p-2 text-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/30"
-            title="Clear destination"
+            className="inline-flex items-center gap-2 rounded-md border border-blue-300 bg-white px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-500/40 dark:bg-slate-900 dark:text-blue-300 dark:hover:bg-blue-900/30"
+            title="End this destination scan session"
           >
-            <FiX />
+            <FiX /> Clear Location
           </button>
         </div>
       )}
@@ -392,6 +418,8 @@ export default function ClientPage() {
           onResolveReview={(item) => handleModal('reviewItem', item)}
           onRemaining={(item) => handleModal('remainingItem', item)}
           onHistory={(item) => handleModal('historyItem', item)}
+          onRepack={(item) => handleModal('repackItem', item)}
+          onQuality={(item) => handleModal('qualityItem', item)}
           role={isAdmin ? 'admin' : 'viewer'}
           rowsPerPage={rowsPerPage}
           onRowsPerPageChange={(number) => {
@@ -459,6 +487,10 @@ export default function ClientPage() {
           destination={currentLocation}
           onClose={() => handleModal('transferItem', null)}
           onTransferred={fetchItems}
+          onRepack={(item) => {
+            handleModal('transferItem', null);
+            handleModal('repackItem', item);
+          }}
         />
       )}
       {modalState.remainingItem && (
@@ -466,6 +498,20 @@ export default function ClientPage() {
           item={modalState.remainingItem}
           preferredLocation={currentLocation}
           onClose={() => handleModal('remainingItem', null)}
+          onUpdated={fetchItems}
+        />
+      )}
+      {modalState.repackItem && (
+        <RepackContainerModal
+          item={modalState.repackItem}
+          onClose={() => handleModal('repackItem', null)}
+          onRepacked={fetchItems}
+        />
+      )}
+      {modalState.qualityItem && (
+        <QualityStatusModal
+          item={modalState.qualityItem}
+          onClose={() => handleModal('qualityItem', null)}
           onUpdated={fetchItems}
         />
       )}
