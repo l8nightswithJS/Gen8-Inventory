@@ -5,9 +5,11 @@ import {
   Navigate,
 } from 'react-router-dom';
 
-import { useTheme } from './hooks/useTheme'; // Import the theme hook
+import { useTheme } from './hooks/useTheme';
 import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
+import HelpPage from './pages/HelpPage';
+import ReportProblemPage from './pages/ReportProblemPage';
 import Dashboard from './pages/Dashboard';
 import ClientPage from './pages/ClientPage';
 import AlertsPage from './pages/AlertsPage';
@@ -20,7 +22,7 @@ import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 
 export default function App() {
-  useTheme(); // Call the hook to activate theme management
+  useTheme();
 
   return (
     <Router>
@@ -28,6 +30,8 @@ export default function App() {
         {/* Public routes */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/help" element={<HelpPage />} />
+        <Route path="/report-problem" element={<ReportProblemPage />} />
 
         {/* Private routes */}
         <Route
