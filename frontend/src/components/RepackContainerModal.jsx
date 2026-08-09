@@ -4,13 +4,44 @@ import api from '../utils/axiosConfig';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
 
+function parseNumberToken(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const plain = /^\d+(?:\.\d{1,3})?$/;
+  const thousands = /^\d{1,3}(?:,\d{3})+(?:\.\d{1,3})?$/;
+  const normalized = thousands.test(raw)
+    ? raw.replace(/,/g, '')
+    : plain.test(raw)
+      ? raw
+      : null;
+  if (normalized === null) return null;
+  const number = Number(normalized);
+  return Number.isFinite(number) && number > 0 ? number : null;
+}
+
 function parseQuantities(text) {
-  return String(text || '')
-    .split(/[,;\n]+/)
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .map((value) => Number(value.replace(/,/g, '')))
-    .filter((value) => Number.isFinite(value) && value > 0);
+  const raw = String(text || '').trim();
+  if (!raw) return [];
+
+  // Semicolons/newlines are unambiguous list delimiters and allow values such
+  // as "1,000; 500". If the entire text is one valid number, keep it as one
+  // container. Otherwise commas represent separate small-container quantities.
+  const explicitSegments = raw.split(/[;\n]+/).map((value) => value.trim()).filter(Boolean);
+  if (explicitSegments.length > 1) {
+    const parsed = explicitSegments.map(parseNumberToken);
+    return parsed.every((value) => value !== null) ? parsed : [];
+  }
+
+  const single = parseNumberToken(raw);
+  if (single !== null) return [single];
+
+  const commaSegments = raw.split(',').map((value) => value.trim()).filter(Boolean);
+  const parsed = commaSegments.map((value) => {
+    if (!/^\d+(?:\.\d{1,3})?$/.test(value)) return null;
+    const number = Number(value);
+    return Number.isFinite(number) && number > 0 ? number : null;
+  });
+  return parsed.length && parsed.every((value) => value !== null) ? parsed : [];
 }
 
 export default function RepackContainerModal({ item, onClose, onRepacked }) {
@@ -43,7 +74,7 @@ export default function RepackContainerModal({ item, onClose, onRepacked }) {
       return;
     }
     if (!quantities.length) {
-      setError('Enter at least one new physical-container quantity.');
+      setError('Enter valid positive quantities for each new physical container.');
       return;
     }
     if (total > available + 0.0005) {
@@ -175,11 +206,11 @@ export default function RepackContainerModal({ item, onClose, onRepacked }) {
               rows={3}
               value={quantitiesText}
               onChange={(event) => setQuantitiesText(event.target.value)}
-              placeholder="Resin example: 55, 55, 42\nParts example: 161, 161, 100"
+              placeholder="Resin: 55, 55, 42\nParts: 161, 161, 100\nThousands: 1,000; 500"
               className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 font-mono dark:border-slate-700 dark:bg-slate-800"
               required
             />
-            <span className="text-xs text-slate-500">Each number creates a separate physical container and permanent new G8I barcode.</span>
+            <span className="text-xs text-slate-500">Each positive number creates a separate physical container and permanent new G8I. Use semicolons or new lines when a quantity itself uses a thousands comma.</span>
           </label>
 
           <label className="block text-sm font-medium">
