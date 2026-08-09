@@ -7,6 +7,8 @@ import {
   FiEdit2,
   FiPackage,
   FiPrinter,
+  FiScissors,
+  FiShield,
   FiTrash2,
 } from 'react-icons/fi';
 import api from '../utils/axiosConfig';
@@ -22,6 +24,8 @@ const LABELS = {
   barcode: 'Container Barcode',
   vendor_barcode: 'Vendor Barcode',
   container_status: 'Container',
+  quality_status: 'Quality',
+  package_type: 'Package',
   manufacturer_part_number: 'Mfg Material #',
   vendor_item_number: 'Vendor Item #',
   minimum_quantity: 'Minimum Qty',
@@ -71,6 +75,27 @@ const CONTAINER_LABELS = {
   quarantine: 'Quarantine',
 };
 
+const QUALITY_LABELS = {
+  pending_inspection: 'Pending Inspection',
+  released: 'Released',
+  hold: 'Hold',
+  quarantine: 'Quarantine',
+  rejected: 'Rejected',
+};
+
+const QUALITY_CLASSES = {
+  pending_inspection:
+    'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+  released:
+    'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
+  hold:
+    'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
+  quarantine:
+    'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
+  rejected:
+    'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+};
+
 const isNumeric = (key) =>
   /\b(level|qty|quantity|threshold|count|weeks|demand|reorder|target|minimum|_id)\b/i.test(
     key,
@@ -106,6 +131,17 @@ function Badge({ status }) {
   );
 }
 
+function QualityBadge({ status }) {
+  const normalized = QUALITY_LABELS[status] ? status : 'released';
+  return (
+    <span
+      className={`inline-flex whitespace-nowrap rounded-full px-2 py-1 text-xs font-semibold ${QUALITY_CLASSES[normalized]}`}
+    >
+      {QUALITY_LABELS[normalized]}
+    </span>
+  );
+}
+
 function SortHeader({ label, sortKey, onSort, sortConfig }) {
   const active = sortConfig.key === sortKey;
   return (
@@ -133,6 +169,8 @@ function MobileCard({
   onResolveReview,
   onRemaining,
   onHistory,
+  onRepack,
+  onQuality,
 }) {
   return (
     <div className="mb-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -149,6 +187,7 @@ function MobileCard({
           )}
           <div className="mt-2 flex flex-wrap gap-2">
             <Badge status={item.status} />
+            <QualityBadge status={item.quality_status} />
             <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
               {CONTAINER_LABELS[item.container_status] ||
                 item.container_status ||
@@ -171,6 +210,7 @@ function MobileCard({
           ['Description', item.description],
           ['Location', item.inventory_location],
           ['Initial Qty', item.initial_quantity],
+          ['Package', item.package_type],
           ...Object.entries(item.attributes || {}),
         ]
           .filter(
@@ -203,6 +243,22 @@ function MobileCard({
           leftIcon={FiPackage}
         >
           Remaining
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => onRepack?.(item)}
+          leftIcon={FiScissors}
+        >
+          Repack
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => onQuality?.(item)}
+          leftIcon={FiShield}
+        >
+          Quality
         </Button>
         <Button
           variant="secondary"
@@ -261,6 +317,8 @@ export default function InventoryTable({
   onResolveReview,
   onRemaining,
   onHistory,
+  onRepack,
+  onQuality,
   role = 'viewer',
   rowsPerPage,
   onRowsPerPageChange,
@@ -277,6 +335,7 @@ export default function InventoryTable({
 
   const cell = (item, key) => {
     if (key === 'status') return <Badge status={item.status} />;
+    if (key === 'quality_status') return <QualityBadge status={item.quality_status} />;
     if (key === 'container_status') {
       return (
         CONTAINER_LABELS[item.container_status] ||
@@ -314,7 +373,7 @@ export default function InventoryTable({
                 />
               </th>
             ))}
-            <th className="sticky right-0 z-20 min-w-[225px] bg-slate-50 px-3 py-3 text-center text-xs font-semibold uppercase text-slate-600 shadow-[-2px_0_0_rgba(148,163,184,0.15)] dark:bg-slate-900 dark:text-slate-400">
+            <th className="sticky right-0 z-20 min-w-[285px] bg-slate-50 px-3 py-3 text-center text-xs font-semibold uppercase text-slate-600 shadow-[-2px_0_0_rgba(148,163,184,0.15)] dark:bg-slate-900 dark:text-slate-400">
               Actions
             </th>
           </tr>
@@ -357,28 +416,19 @@ export default function InventoryTable({
                 ))}
                 <td className="sticky right-0 z-10 bg-white px-2 py-2 shadow-[-2px_0_0_rgba(148,163,184,0.12)] dark:bg-slate-900">
                   <div className="flex items-center justify-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      title="Print container label"
-                      onClick={() => printContainerLabel(item)}
-                    >
+                    <Button variant="ghost" size="sm" title="Print container label" onClick={() => printContainerLabel(item)}>
                       <FiPrinter size={16} />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      title="Update remaining quantity"
-                      onClick={() => onRemaining?.(item)}
-                    >
+                    <Button variant="ghost" size="sm" title="Update remaining quantity" onClick={() => onRemaining?.(item)}>
                       <FiPackage size={16} />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      title="Movement history"
-                      onClick={() => onHistory?.(item)}
-                    >
+                    <Button variant="ghost" size="sm" title="Split / repack into new G8I containers" onClick={() => onRepack?.(item)}>
+                      <FiScissors size={16} />
+                    </Button>
+                    <Button variant="ghost" size="sm" title="Quality disposition" onClick={() => onQuality?.(item)}>
+                      <FiShield size={16} />
+                    </Button>
+                    <Button variant="ghost" size="sm" title="Movement history" onClick={() => onHistory?.(item)}>
                       <FiClock size={16} />
                     </Button>
                     {role === 'admin' && item.status === 'needs_review' && (
@@ -394,12 +444,7 @@ export default function InventoryTable({
                     )}
                     {role === 'admin' && (
                       <>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          title="Edit"
-                          onClick={() => onEdit?.(item)}
-                        >
+                        <Button variant="ghost" size="sm" title="Edit" onClick={() => onEdit?.(item)}>
                           <FiEdit2 size={16} />
                         </Button>
                         <Button
@@ -435,6 +480,8 @@ export default function InventoryTable({
           onResolveReview={onResolveReview}
           onRemaining={onRemaining}
           onHistory={onHistory}
+          onRepack={onRepack}
+          onQuality={onQuality}
         />
       ))}
     </div>
