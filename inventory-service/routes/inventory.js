@@ -9,6 +9,7 @@ const warehouseOperationsController = require('../controllers/warehouseOperation
 const masterWarehouseController = require('../controllers/masterWarehouseController');
 const itemLifecycleController = require('../controllers/itemLifecycleController');
 const profileAlertsController = require('../controllers/profileAlertsController');
+const containerWorkflowController = require('../controllers/containerWorkflowController');
 const { requireRole, handleValidation } = require('shared-auth');
 const { requireItemAccess } = require('../middleware/requireItemAccess');
 const {
@@ -135,6 +136,42 @@ router.get(
 );
 
 router.post(
+  '/:id/quality',
+  requireRole('admin', 'staff'),
+  param('id').isInt({ min: 1 }).withMessage('Invalid id').toInt(),
+  body('quality_status')
+    .isIn(['pending_inspection', 'released', 'hold', 'quarantine', 'rejected'])
+    .withMessage('Invalid quality_status'),
+  body('notes').optional({ nullable: true }).isString().isLength({ max: 1000 }),
+  handleValidation,
+  requireItemAccess(),
+  containerWorkflowController.setQualityStatus,
+);
+
+router.post(
+  '/:id/repack',
+  requireRole('admin', 'staff'),
+  param('id').isInt({ min: 1 }).withMessage('Invalid id').toInt(),
+  body('source_location_id').optional({ nullable: true }).isInt({ min: 1 }).toInt(),
+  body('containers').isArray({ min: 1 }).withMessage('containers must be a non-empty array'),
+  body('containers.*.quantity')
+    .custom((value) => isSupportedDecimal(value) && Number(String(value).replace(/,/g, '')) > 0)
+    .withMessage('each new container quantity must be greater than zero'),
+  body('containers.*.package_type').optional({ nullable: true }).isString().isLength({ max: 120 }),
+  handleValidation,
+  requireItemAccess(),
+  containerWorkflowController.repackContainer,
+);
+
+router.get(
+  '/:id/trace',
+  param('id').isInt({ min: 1 }).withMessage('Invalid id').toInt(),
+  handleValidation,
+  requireItemAccess(),
+  containerWorkflowController.getTraceability,
+);
+
+router.post(
   '/:id/review/resolve',
   requireRole('admin'),
   param('id').isInt({ min: 1 }).withMessage('Invalid id').toInt(),
@@ -234,7 +271,7 @@ const bulkValidators = [
     .optional()
     .isIn(['staging', 'file', 'selected'])
     .withMessage('location_strategy must be staging, file, or selected'),
-  body('template').optional().isObject(),
+  body('template').optional({ nullable: true }).isObject(),
   handleValidation,
 ];
 
