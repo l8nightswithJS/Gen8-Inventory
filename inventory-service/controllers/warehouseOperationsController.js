@@ -51,7 +51,8 @@ async function activeLocation(db, id) {
 async function lockItem(db, itemId) {
   const result = await db.query(
     `SELECT id, client_id, part_number, lot_number, name, description,
-            barcode, uom, review_status, container_status, archived_at
+            barcode, uom, review_status, container_status, quality_status,
+            archived_at
      FROM items
      WHERE id = $1
      FOR UPDATE`,
@@ -121,19 +122,60 @@ exports.transferItem = async (req, res, next) => {
       throw error;
     }
 
-    const moveAll = req.body?.move_all !== false && req.body?.quantity == null;
-    const quantity = moveAll
-      ? source.quantity
-      : parseQuantity(req.body?.quantity, 'quantity');
-
-    if (quantity > source.quantity) {
-      const error = new Error(
-        `Only ${source.quantity} ${item.uom || ''} is available at ${source.code}.`,
-      );
-      error.status = 409;
-      throw error;
+    // A G8I identifies one physical container. Moving less than the entire
+    // container would create two physical containers under one barcode, so
+    // partial moves are rejected and must use Split / Repack instead.
+    if (req.body?.move_all === false || req.body?.quantity != null) {
+      const requested = req.body?.quantity == null
+        ? null
+        : parseQuantity(req.body.quantity, 'quantity');
+      if (requested === null || Math.abs(requested - source.quantity) > 0.0005) {
+        const error = new Error(
+          'A G8I physical container must move as one unit. Use Split / Repack to create a second physical container and new G8I.',
+        );
+        error.status = 409;
+        error.code = 'PARTIAL_CONTAINER_MOVE_REQUIRES_REPACK';
+        throw error;
+      }
     }
 
+    const actor = movementActor(req.user);
+    const originalSourceQuantity = source.quantity;
+    let measuredQuantity = source.quantity;
+    if (
+      req.body?.actual_remaining_quantity !== undefined &&
+      req.body?.actual_remaining_quantity !== null &&
+      req.body?.actual_remaining_quantity !== ''
+    ) {
+      measuredQuantity = parseQuantity(
+        req.body.actual_remaining_quantity,
+        'actual_remaining_quantity',
+      );
+    }
+
+    if (Math.abs(measuredQuantity - source.quantity) > 0.0005) {
+      await db.query(
+        `UPDATE inventory
+         SET quantity = $3, updated_at = NOW()
+         WHERE item_id = $1 AND location_id = $2`,
+        [itemId, source.location_id, measuredQuantity],
+      );
+      await recordMovement(db, {
+        itemId,
+        movementType: measuredQuantity < source.quantity ? 'consumption' : 'adjustment',
+        fromLocationId: source.location_id,
+        quantity: Math.abs(measuredQuantity - source.quantity),
+        sourceBefore: source.quantity,
+        sourceAfter: measuredQuantity,
+        uom: item.uom,
+        reason: 'Actual container quantity captured before relocation',
+        metadata: { captured_during_transfer: true },
+        ...actor,
+      });
+      source.quantity = measuredQuantity;
+    }
+
+    const quantity = source.quantity;
     const destinationResult = await db.query(
       `SELECT quantity::numeric AS quantity
        FROM inventory
@@ -142,23 +184,13 @@ exports.transferItem = async (req, res, next) => {
       [itemId, destination.id],
     );
     const destinationBefore = numeric(destinationResult.rows[0]?.quantity);
-    const sourceAfter = source.quantity - quantity;
     const destinationAfter = destinationBefore + quantity;
 
-    if (sourceAfter <= 0) {
-      await db.query(
-        `DELETE FROM inventory
-         WHERE item_id = $1 AND location_id = $2`,
-        [itemId, source.location_id],
-      );
-    } else {
-      await db.query(
-        `UPDATE inventory
-         SET quantity = $3, updated_at = NOW()
-         WHERE item_id = $1 AND location_id = $2`,
-        [itemId, source.location_id, sourceAfter],
-      );
-    }
+    await db.query(
+      `DELETE FROM inventory
+       WHERE item_id = $1 AND location_id = $2`,
+      [itemId, source.location_id],
+    );
 
     await db.query(
       `INSERT INTO inventory (item_id, location_id, quantity)
@@ -181,21 +213,25 @@ exports.transferItem = async (req, res, next) => {
       fromLocationId: source.location_id,
       toLocationId: destination.id,
       quantity,
-      sourceBefore: source.quantity,
-      sourceAfter,
+      sourceBefore: quantity,
+      sourceAfter: 0,
       destinationBefore,
       destinationAfter,
       uom: item.uom,
       reason: String(
-        req.body?.reason || 'Barcode-directed warehouse transfer',
+        req.body?.reason || 'Barcode-directed whole-container relocation',
       ).trim(),
-      metadata: { move_all: quantity === source.quantity },
-      ...movementActor(req.user),
+      metadata: {
+        whole_container: true,
+        original_source_quantity: originalSourceQuantity,
+        measured_before_move: measuredQuantity,
+      },
+      ...actor,
     });
 
     await db.query('COMMIT');
     return res.json({
-      message: 'Inventory moved successfully.',
+      message: 'Physical container moved successfully.',
       item,
       movement,
       from: {
@@ -205,8 +241,9 @@ exports.transferItem = async (req, res, next) => {
       },
       to: destination,
       quantity,
-      source_quantity: sourceAfter,
+      source_quantity: 0,
       destination_quantity: destinationAfter,
+      measured_quantity: measuredQuantity,
     });
   } catch (error) {
     if (db) await db.query('ROLLBACK').catch(() => undefined);
