@@ -25,6 +25,12 @@ export default function Navbar() {
         Clients
       </NavLink>
 
+      {isAdmin && (
+        <NavLink to="/receiving" className={navClass} onClick={closeMenu}>
+          Receiving
+        </NavLink>
+      )}
+
       {clientId && (
         <NavLink
           to={`/clients/${clientId}/alerts`}
