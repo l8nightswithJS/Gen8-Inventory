@@ -15,6 +15,7 @@ import UsersPage from './pages/UsersPage';
 import StandaloneScanPage from './pages/StandaloneScanPage';
 import MasterInventoryPage from './pages/MasterInventoryPage';
 import LocationsPage from './pages/LocationsPage';
+import ReceivingPage from './pages/ReceivingPage';
 import PrivateRoute from './components/PrivateRoute';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
@@ -57,6 +58,7 @@ function PrivateLayout() {
             path="clients/:clientId/scan"
             element={<StandaloneScanPage />}
           />
+          <Route path="receiving" element={<ReceivingPage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="inventory/master" element={<MasterInventoryPage />} />
           <Route path="locations" element={<LocationsPage />} />
