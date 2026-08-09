@@ -32,7 +32,7 @@ function parseQuantity(value, field, { allowZero = false } = {}) {
 
 async function activeLocation(db, id) {
   const result = await db.query(
-    `SELECT id, code, barcode, description, location_type
+    `SELECT id, code, barcode, description, location_type, zone
      FROM locations
      WHERE id = $1 AND active = true
      LIMIT 1`,
@@ -108,6 +108,31 @@ exports.transferItem = async (req, res, next) => {
     }
 
     const destination = await activeLocation(db, toLocationId);
+    const destinationCode = String(destination.code || '').toUpperCase();
+    const destinationZone = String(destination.zone || '').toUpperCase();
+    const controlledQualityLocations = new Set([
+      'RECEIVING-QC',
+      'COMPONENTS-HOLD',
+      'QUARANTINE',
+    ]);
+    const controlledQualityZones = new Set([
+      'RECEIVING_QC',
+      'COMPONENTS_HOLD',
+      'QUARANTINE',
+    ]);
+    if (
+      (item.quality_status || 'released') !== 'released' &&
+      !controlledQualityLocations.has(destinationCode) &&
+      !controlledQualityZones.has(destinationZone)
+    ) {
+      const error = new Error(
+        `Container ${item.barcode} is ${(item.quality_status || 'pending_inspection').replace(/_/g, ' ')}. Release it before put-away to a normal production/storage location.`,
+      );
+      error.status = 409;
+      error.code = 'QUALITY_RELEASE_REQUIRED';
+      throw error;
+    }
+
     const source = await resolveSourceBalance(
       db,
       itemId,
