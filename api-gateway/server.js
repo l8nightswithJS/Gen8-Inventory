@@ -178,6 +178,32 @@ const proxyRequest = (targetUrl) => async (req, res) => {
   }
 };
 
+const publicWarmupTargets = [
+  {
+    name: 'Auth',
+    url: new URL('/healthz', AUTH_URL).toString(),
+  },
+  {
+    name: 'Inventory',
+    url: new URL('/healthz', INVENTORY_URL).toString(),
+  },
+  {
+    name: 'Clients',
+    url: new URL('/readyz', CLIENT_URL).toString(),
+  },
+  {
+    name: 'Barcode',
+    url: new URL('/healthz', BARCODE_URL).toString(),
+  },
+];
+
+// Public, non-secret service readiness targets. The browser calls these URLs
+// directly so Render sees inbound traffic for every sleeping free service.
+app.get('/bootstrap/services', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({ services: publicWarmupTargets });
+});
+
 app.use('/api/auth', proxyRequest(AUTH_URL));
 app.use('/api/users', proxyRequest(AUTH_URL));
 app.use('/api/items', proxyRequest(INVENTORY_URL));
