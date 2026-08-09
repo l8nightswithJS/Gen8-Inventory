@@ -48,11 +48,11 @@ async function warmGateway(onStatus) {
         return;
       }
     } catch {
-      // Render free services can reject the first request while waking.
+      // A sleeping Render gateway can reject/hold the first request while waking.
     }
 
     if (attempt === 1) {
-      onStatus?.('Starting the server. This can take about a minute…');
+      onStatus?.('Starting the API gateway…');
     }
 
     if (attempt < maxAttempts) {
@@ -61,16 +61,110 @@ async function warmGateway(onStatus) {
   }
 
   throw new Error(
-    'The server did not finish starting. Please wait a moment and try again.',
+    'The API gateway did not finish starting. Please wait a moment and try again.',
+  );
+}
+
+async function getWarmupTargets() {
+  const response = await fetchWithTimeout(
+    `${api.defaults.baseURL}/bootstrap/services`,
+    {
+      method: 'GET',
+      cache: 'no-store',
+    },
+    15000,
+  );
+
+  if (!response.ok) {
+    throw new Error('The API gateway could not provide its service startup list.');
+  }
+
+  const payload = await response.json();
+  if (!Array.isArray(payload?.services) || payload.services.length === 0) {
+    throw new Error('The API gateway returned an invalid service startup list.');
+  }
+
+  return payload.services.filter(
+    (service) =>
+      service &&
+      typeof service.name === 'string' &&
+      typeof service.url === 'string' &&
+      /^https:\/\//i.test(service.url),
+  );
+}
+
+async function waitForService(service) {
+  const maxAttempts = 15;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await fetchWithTimeout(
+        service.url,
+        {
+          method: 'GET',
+          cache: 'no-store',
+        },
+        15000,
+      );
+
+      const contentType = response.headers.get('content-type') || '';
+      if (response.ok && contentType.includes('application/json')) {
+        const body = await response.json().catch(() => null);
+        if (body?.ok === true || body?.ready === true) {
+          return;
+        }
+      } else {
+        await response.text().catch(() => '');
+      }
+    } catch {
+      // Render's temporary loading response can surface as a CORS/network error
+      // until the actual service process is running. Retry the public endpoint.
+    }
+
+    if (attempt < maxAttempts) {
+      await sleep(4000);
+    }
+  }
+
+  throw new Error(`${service.name} did not finish starting.`);
+}
+
+async function warmBackendServices(onStatus) {
+  const services = await getWarmupTargets();
+  const readyNames = new Set();
+
+  const updateStatus = () => {
+    const waiting = services
+      .filter((service) => !readyNames.has(service.name))
+      .map((service) => service.name);
+
+    if (waiting.length === 0) {
+      onStatus?.('All backend services are ready. Signing in…');
+      return;
+    }
+
+    onStatus?.(
+      `Starting backend services (${readyNames.size}/${services.length}) — waiting for ${waiting.join(', ')}…`,
+    );
+  };
+
+  updateStatus();
+
+  await Promise.all(
+    services.map(async (service) => {
+      await waitForService(service);
+      readyNames.add(service.name);
+      updateStatus();
+    }),
   );
 }
 
 async function requestLogin(email, password, onStatus) {
   await warmGateway(onStatus);
-  onStatus?.('Signing in…');
+  await warmBackendServices(onStatus);
 
   const loginUrl = `${api.defaults.baseURL}/api/auth/login`;
-  const maxAttempts = 3;
+  const maxAttempts = 2;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
@@ -81,7 +175,7 @@ async function requestLogin(email, password, onStatus) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password }),
         },
-        90000,
+        30000,
       );
 
       const rawBody = await response.text();
@@ -90,19 +184,14 @@ async function requestLogin(email, password, onStatus) {
       try {
         body = rawBody ? JSON.parse(rawBody) : {};
       } catch {
-        if (response.status >= 500 && attempt < maxAttempts) {
-          onStatus?.('The login service is still starting…');
-          await sleep(5000);
-          continue;
-        }
         throw new Error('The login service returned an unreadable response.');
       }
 
       if (response.ok) return body;
 
       if (response.status >= 500 && attempt < maxAttempts) {
-        onStatus?.('The login service is still starting…');
-        await sleep(5000);
+        onStatus?.('Authentication service reconnecting…');
+        await sleep(3000);
         continue;
       }
 
@@ -112,8 +201,7 @@ async function requestLogin(email, password, onStatus) {
         error?.name === 'TypeError' || error?.name === 'AbortError';
 
       if (retryableNetworkError && attempt < maxAttempts) {
-        onStatus?.('The login service is still starting…');
-        await warmGateway(onStatus);
+        onStatus?.('Authentication service reconnecting…');
         await sleep(3000);
         continue;
       }
@@ -143,8 +231,8 @@ export default function Login() {
     }
   }, [navigate]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     if (submitting) return;
 
     setError('');
@@ -240,7 +328,7 @@ export default function Login() {
                   required
                   disabled={submitting}
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(event) => setEmail(event.target.value)}
                   className="w-full border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white pl-10 pr-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
                   placeholder="Email address"
                 />
@@ -256,7 +344,7 @@ export default function Login() {
                   required
                   disabled={submitting}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(event) => setPassword(event.target.value)}
                   className="w-full border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white pl-10 pr-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
                   placeholder="Password"
                 />
