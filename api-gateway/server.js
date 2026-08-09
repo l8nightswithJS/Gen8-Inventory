@@ -209,6 +209,8 @@ app.use('/api/users', proxyRequest(AUTH_URL));
 app.use('/api/items', proxyRequest(INVENTORY_URL));
 app.use('/api/inventory', proxyRequest(INVENTORY_URL));
 app.use('/api/locations', proxyRequest(INVENTORY_URL));
+app.use('/api/labels', proxyRequest(INVENTORY_URL));
+app.use('/api/receiving', proxyRequest(INVENTORY_URL));
 app.use('/api/clients', proxyRequest(CLIENT_URL));
 app.use('/api/barcodes', proxyRequest(BARCODE_URL));
 app.use('/api/scan', proxyRequest(BARCODE_URL));
