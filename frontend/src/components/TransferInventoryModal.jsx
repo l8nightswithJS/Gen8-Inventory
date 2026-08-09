@@ -8,6 +8,7 @@ export default function TransferInventoryModal({
   destination,
   onClose,
   onTransferred,
+  onRepack,
 }) {
   const balances = Array.isArray(item?.inventory_levels) ? item.inventory_levels : [];
   const sourceOptions = balances.filter(
@@ -22,19 +23,31 @@ export default function TransferInventoryModal({
     ),
     [sourceOptions, sourceLocationId],
   );
-  const [moveAll, setMoveAll] = useState(true);
-  const [quantity, setQuantity] = useState('');
+  const [actualQuantity, setActualQuantity] = useState(
+    sourceOptions.length === 1 ? String(sourceOptions[0].quantity) : '',
+  );
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const available = Number(selectedSource?.quantity || 0);
   const displayName = item?.name || item?.description || item?.part_number || 'Container';
 
+  const changeSource = (value) => {
+    setSourceLocationId(value);
+    const balance = sourceOptions.find((entry) => String(entry.location_id) === String(value));
+    setActualQuantity(balance ? String(balance.quantity) : '');
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (!destination?.id) return;
     if (sourceOptions.length > 1 && !sourceLocationId) {
       setError('Select the source location for this container.');
+      return;
+    }
+    const measured = Number(actualQuantity);
+    if (!Number.isFinite(measured) || measured <= 0) {
+      setError('Enter the actual quantity remaining in this physical container.');
       return;
     }
 
@@ -45,15 +58,15 @@ export default function TransferInventoryModal({
         item_id: item.id,
         from_location_id: sourceLocationId ? Number(sourceLocationId) : null,
         to_location_id: Number(destination.id),
-        move_all: moveAll,
-        quantity: moveAll ? null : quantity,
-        reason: 'Barcode-directed warehouse put-away / transfer',
+        move_all: true,
+        actual_remaining_quantity: actualQuantity,
+        reason: 'Barcode-directed whole-container put-away / relocation',
       });
       await onTransferred?.();
       onClose?.();
     } catch (requestError) {
       setError(
-        requestError?.response?.data?.message || 'Failed to move inventory.',
+        requestError?.response?.data?.message || 'Failed to move physical container.',
       );
     } finally {
       setSubmitting(false);
@@ -64,10 +77,15 @@ export default function TransferInventoryModal({
     <BaseModal
       isOpen={!!item && !!destination}
       onClose={onClose}
-      title="Move Inventory Container"
+      title="Move Physical Container"
       size="max-w-lg"
       footer={
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
+          {onRepack && (
+            <Button variant="secondary" onClick={() => onRepack(item)} disabled={submitting}>
+              Split / Repack Instead
+            </Button>
+          )}
           <Button variant="secondary" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
@@ -77,7 +95,7 @@ export default function TransferInventoryModal({
             form="transfer-inventory-form"
             disabled={submitting || sourceOptions.length === 0}
           >
-            {submitting ? 'Moving…' : 'Confirm Move'}
+            {submitting ? 'Moving…' : `Move Container to ${destination.code}`}
           </Button>
         </div>
       }
@@ -95,9 +113,7 @@ export default function TransferInventoryModal({
             {item.part_number || 'No part number'}
             {item.lot_number ? ` · Lot ${item.lot_number}` : ''}
           </p>
-          <p className="mt-1 font-mono text-xs text-slate-500">
-            {item.barcode}
-          </p>
+          <p className="mt-1 font-mono text-xs text-slate-500">{item.barcode}</p>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
@@ -105,7 +121,7 @@ export default function TransferInventoryModal({
             From
             <select
               value={sourceLocationId}
-              onChange={(event) => setSourceLocationId(event.target.value)}
+              onChange={(event) => changeSource(event.target.value)}
               required={sourceOptions.length > 1}
               disabled={sourceOptions.length <= 1}
               className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800"
@@ -132,32 +148,27 @@ export default function TransferInventoryModal({
             This container has no positive balance outside the selected destination.
           </p>
         ) : (
-          <div className="space-y-3">
-            <label className="flex items-center gap-2 text-sm">
+          <>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+              Actual Quantity Remaining in This Container
               <input
-                type="checkbox"
-                checked={moveAll}
-                onChange={(event) => setMoveAll(event.target.checked)}
+                type="number"
+                min="0.001"
+                step="0.001"
+                value={actualQuantity}
+                onChange={(event) => setActualQuantity(event.target.value)}
+                required
+                className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-lg font-semibold dark:border-slate-700 dark:bg-slate-800"
               />
-              Move entire available balance ({available} {item.uom || ''})
+              <span className="text-xs text-slate-500">
+                Current system quantity: {available} {item.uom || ''}. If you weighed/count this container, enter the actual value; the app records the adjustment and moves the whole remaining container in one submit.
+              </span>
             </label>
 
-            {!moveAll && (
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                Quantity to Move
-                <input
-                  type="number"
-                  min="0.001"
-                  max={available || undefined}
-                  step="0.001"
-                  value={quantity}
-                  onChange={(event) => setQuantity(event.target.value)}
-                  required
-                  className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800"
-                />
-              </label>
-            )}
-          </div>
+            <div className="rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800 dark:border-blue-500/30 dark:bg-blue-950/20 dark:text-blue-300">
+              One G8I represents one physical container. To leave some material here and create another bin/box, use <strong>Split / Repack</strong> so the new physical container receives its own G8I.
+            </div>
+          </>
         )}
       </form>
     </BaseModal>
