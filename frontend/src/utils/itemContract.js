@@ -23,6 +23,8 @@ const RESERVED_FIELDS = new Set([
   'updated_at',
   'last_updated',
   'total_quantity',
+  'physical_on_hand',
+  'available_to_production',
   'initial_quantity',
   'container_status',
   'quality_status',
