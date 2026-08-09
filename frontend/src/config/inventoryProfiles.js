@@ -11,6 +11,8 @@ export const PROFILE_PRESETS = {
       'inventory_location',
       'total_quantity',
       'uom',
+      'container_status',
+      'quality_status',
       'status',
     ],
     field_definitions: [],
@@ -31,6 +33,7 @@ export const PROFILE_PRESETS = {
       'total_quantity',
       'uom',
       'container_status',
+      'quality_status',
       'status',
     ],
     field_definitions: [
@@ -67,6 +70,7 @@ export const PROFILE_PRESETS = {
       'total_quantity',
       'uom',
       'container_status',
+      'quality_status',
       'status',
     ],
     field_definitions: [
@@ -116,6 +120,7 @@ export const PROFILE_PRESETS = {
       'inventory_location',
       'total_quantity',
       'uom',
+      'quality_status',
       'minimum_quantity',
       'reorder_level',
       'weekly_demand',
@@ -169,6 +174,9 @@ export const PROFILE_PRESETS = {
   },
 };
 
+// Receiving/quality/package identity is managed by Smart Receiving and
+// container workflow screens, so those system fields are intentionally not
+// writable through generic bulk import.
 export const CORE_IMPORT_FIELDS = [
   { key: 'part_number', label: 'Part Number' },
   { key: 'name', label: 'Name' },
