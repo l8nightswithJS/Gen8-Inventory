@@ -15,8 +15,15 @@ function cleanText(value) {
 
 function numberOrNull(value) {
   if (value === undefined || value === null || value === '') return null;
-  const normalized = String(value).trim().replace(/,/g, '');
-  if (!/^\d+(?:\.\d{1,3})?$/.test(normalized)) return null;
+  const raw = String(value).trim();
+  const plain = /^\d+(?:\.\d{1,3})?$/;
+  const thousands = /^\d{1,3}(?:,\d{3})+(?:\.\d{1,3})?$/;
+  const normalized = thousands.test(raw)
+    ? raw.replace(/,/g, '')
+    : plain.test(raw)
+      ? raw
+      : null;
+  if (normalized === null) return null;
   const number = Number(normalized);
   return Number.isFinite(number) && number >= 0 ? number : null;
 }
@@ -84,7 +91,7 @@ function extractionPrompt() {
     "confidence":{"part_number":"high|medium|low|unknown","lot_number":"high|medium|low|unknown","quantity":"high|medium|low|unknown","uom":"high|medium|low|unknown","container_count":"high|medium|low|unknown"}
   }]
 }
-If packaging such as 20 CTNS x 100 EA or 4 Gaylords x 550 LB is explicitly shown, capture container_count and quantity_per_container. Do not divide totals unless the document supports the packaging split.`;
+If packaging such as 20 CTNS x 100 EA or 4 Gaylords x 550 LB is explicitly shown, capture container_count and quantity_per_container. Do not divide totals unless the document supports the packaging split. If punctuation makes a number ambiguous, return null instead of guessing.`;
 }
 
 function normalizeExtractedData(raw) {
