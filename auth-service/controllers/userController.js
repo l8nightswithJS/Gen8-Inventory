@@ -1,6 +1,7 @@
-// In auth-service/controllers/userController.js (Complete File)
-
 const { sbAdmin } = require('../lib/supabaseClient');
+
+const ROLES = ['admin', 'inventory_staff', 'project_user', 'external_viewer'];
+const ACCESS_LEVELS = ['read', 'edit'];
 
 const handleSupabaseError = (res, error, context) => {
   console.error(`Error in ${context}:`, error);
@@ -10,7 +11,52 @@ const handleSupabaseError = (res, error, context) => {
   });
 };
 
-exports.getAllUsers = async (req, res) => {
+function normalizeAssignments(value) {
+  if (!Array.isArray(value)) return [];
+
+  const assignments = new Map();
+  for (const entry of value) {
+    const clientId = Number(
+      typeof entry === 'object' && entry !== null ? entry.client_id : entry,
+    );
+    const accessLevel =
+      typeof entry === 'object' && entry !== null
+        ? entry.access_level || 'edit'
+        : 'edit';
+
+    if (!Number.isSafeInteger(clientId) || clientId < 1) continue;
+    if (!ACCESS_LEVELS.includes(accessLevel)) continue;
+    assignments.set(clientId, accessLevel);
+  }
+
+  return [...assignments.entries()].map(([client_id, access_level]) => ({
+    client_id,
+    access_level,
+  }));
+}
+
+async function replaceUserAssignments(userId, assignments) {
+  const normalized = normalizeAssignments(assignments);
+
+  const { error: deleteError } = await sbAdmin
+    .from('user_clients')
+    .delete()
+    .eq('user_id', userId);
+  if (deleteError) throw deleteError;
+
+  if (normalized.length === 0) return;
+
+  const { error: insertError } = await sbAdmin.from('user_clients').insert(
+    normalized.map((entry) => ({
+      user_id: userId,
+      client_id: entry.client_id,
+      access_level: entry.access_level,
+    })),
+  );
+  if (insertError) throw insertError;
+}
+
+exports.getAllUsers = async (_req, res) => {
   const { data, error } = await sbAdmin
     .from('users')
     .select('id, email, role, approved')
@@ -19,7 +65,7 @@ exports.getAllUsers = async (req, res) => {
   res.json(data || []);
 };
 
-exports.getPendingUsers = async (req, res) => {
+exports.getPendingUsers = async (_req, res) => {
   const { data, error } = await sbAdmin
     .from('users')
     .select('id, email, role, approved')
@@ -31,15 +77,61 @@ exports.getPendingUsers = async (req, res) => {
 
 exports.getUserClients = async (req, res) => {
   const { id } = req.params;
+  const { data, error } = await sbAdmin
+    .from('user_clients')
+    .select('client_id, access_level')
+    .eq('user_id', id)
+    .order('client_id', { ascending: true });
+  if (error) return handleSupabaseError(res, error, 'getUserClients');
+  return res.json(data || []);
+};
+
+exports.createUser = async (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const password = String(req.body?.password || '');
+  const role = req.body?.role || 'project_user';
+  const assignedClients = req.body?.assigned_clients || [];
+
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Email and password are required.' });
+  }
+  if (!ROLES.includes(role)) {
+    return res.status(400).json({ message: 'Invalid role.' });
+  }
+
+  let createdAuthUser = null;
   try {
-    const { data, error } = await sbAdmin
-      .from('user_clients')
-      .select('client_id')
-      .eq('user_id', id);
-    if (error) throw error;
-    res.json(data || []);
+    const { data: authData, error: authError } = await sbAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
+    if (authError || !authData?.user) throw authError || new Error('User creation failed');
+    createdAuthUser = authData.user;
+
+    const { error: profileError } = await sbAdmin.from('users').insert({
+      id: createdAuthUser.id,
+      email,
+      role,
+      approved: true,
+    });
+    if (profileError) throw profileError;
+
+    await replaceUserAssignments(createdAuthUser.id, assignedClients);
+
+    return res.status(201).json({
+      id: createdAuthUser.id,
+      email,
+      role,
+      approved: true,
+    });
   } catch (error) {
-    return handleSupabaseError(res, error, 'getUserClients');
+    if (createdAuthUser?.id) {
+      try {
+        await sbAdmin.auth.admin.deleteUser(createdAuthUser.id);
+      } catch {}
+    }
+    return handleSupabaseError(res, error, 'createUser');
   }
 };
 
@@ -56,51 +148,58 @@ exports.approveUser = async (req, res) => {
 
 exports.updateUser = async (req, res) => {
   const { id } = req.params;
-  const { role } = req.body;
-  const { data, error } = await sbAdmin
-    .from('users')
-    .update({ role })
-    .eq('id', id)
-    .select();
-  if (error) return handleSupabaseError(res, error, 'updateUserRole');
-  res.json({ message: 'User updated successfully', user: data[0] });
+  const { role, assigned_clients: assignedClients } = req.body;
+
+  if (id === req.user?.id && role && role !== 'admin') {
+    return res.status(400).json({
+      message: 'Administrators cannot remove their own administrator role.',
+    });
+  }
+
+  if (role && !ROLES.includes(role)) {
+    return res.status(400).json({ message: 'Invalid role.' });
+  }
+
+  try {
+    let updatedUser = null;
+    if (role) {
+      const { data, error } = await sbAdmin
+        .from('users')
+        .update({ role })
+        .eq('id', id)
+        .select('id, email, role, approved')
+        .single();
+      if (error) throw error;
+      updatedUser = data;
+    }
+
+    if (Array.isArray(assignedClients)) {
+      await replaceUserAssignments(id, assignedClients);
+    }
+
+    if (!updatedUser) {
+      const { data, error } = await sbAdmin
+        .from('users')
+        .select('id, email, role, approved')
+        .eq('id', id)
+        .single();
+      if (error) throw error;
+      updatedUser = data;
+    }
+
+    return res.json({ message: 'User updated successfully', user: updatedUser });
+  } catch (error) {
+    return handleSupabaseError(res, error, 'updateUser');
+  }
 };
 
 exports.updateUserClients = async (req, res) => {
   const { id } = req.params;
-  const { client_ids } = req.body;
-
-  if (!Array.isArray(client_ids)) {
-    return res.status(400).json({ message: 'client_ids must be an array.' });
-  }
-
-  // --- ADD THIS LINE TO SANITIZE THE INPUT ---
-  // This creates a Set to automatically remove duplicates and then converts it back to an array.
-  const uniqueClientIds = [
-    ...new Set(client_ids.map((id) => parseInt(id, 10))),
-  ];
+  const assignments = req.body?.assignments || req.body?.client_ids || [];
 
   try {
-    // First, delete all existing client associations for this user.
-    const { error: deleteError } = await sbAdmin
-      .from('user_clients')
-      .delete()
-      .eq('user_id', id);
-    if (deleteError) throw deleteError;
-
-    // If the new list is not empty, insert the new, unique associations.
-    if (uniqueClientIds.length > 0) {
-      const linksToInsert = uniqueClientIds.map((clientId) => ({
-        user_id: id,
-        client_id: clientId,
-      }));
-      const { error: insertError } = await sbAdmin
-        .from('user_clients')
-        .insert(linksToInsert);
-      if (insertError) throw insertError;
-    }
-
-    res.json({ message: `User's client access updated successfully.` });
+    await replaceUserAssignments(id, assignments);
+    return res.json({ message: "User's project access updated successfully." });
   } catch (error) {
     return handleSupabaseError(res, error, 'updateUserClients');
   }
@@ -108,9 +207,11 @@ exports.updateUserClients = async (req, res) => {
 
 exports.deleteUser = async (req, res) => {
   const { id } = req.params;
-  const { error } = await sbAdmin.auth.admin.deleteUser(id);
-  if (error) {
-    return handleSupabaseError(res, error, 'deleteUser');
+  if (id === req.user?.id) {
+    return res.status(400).json({ message: 'You cannot delete your own account.' });
   }
-  res.status(204).send();
+
+  const { error } = await sbAdmin.auth.admin.deleteUser(id);
+  if (error) return handleSupabaseError(res, error, 'deleteUser');
+  return res.status(204).send();
 };
