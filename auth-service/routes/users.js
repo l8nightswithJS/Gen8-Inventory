@@ -5,6 +5,12 @@ const { requireRole, handleValidation } = require('shared-auth');
 
 const router = express.Router();
 const roles = ['admin', 'inventory_staff', 'project_user', 'external_viewer'];
+const optionalName = (field) =>
+  body(field)
+    .optional({ nullable: true })
+    .isString()
+    .trim()
+    .isLength({ max: 100 });
 
 router.use(requireRole('admin'));
 
@@ -15,6 +21,8 @@ router.post(
   '/',
   body('email').isEmail().normalizeEmail(),
   body('password').isString().isLength({ min: 8 }),
+  body('first_name').isString().trim().notEmpty().isLength({ max: 100 }),
+  optionalName('last_name'),
   body('role').isIn(roles),
   body('assigned_clients').optional().isArray(),
   handleValidation,
@@ -47,6 +55,8 @@ router.put(
 router.put(
   '/:id',
   param('id').isUUID(),
+  optionalName('first_name'),
+  optionalName('last_name'),
   body('role').optional().isIn(roles),
   body('assigned_clients').optional().isArray(),
   handleValidation,
