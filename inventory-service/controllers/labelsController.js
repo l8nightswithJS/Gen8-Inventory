@@ -41,11 +41,11 @@ function normalizeItemIds(rawIds) {
 // ====== ZPL & PRINTER LOGIC ======
 function buildLabelZpl({ clientName, item }) {
   const a = item.attributes || {};
-  const part = a.part_number || '';
-  const desc = a.description || '';
-  const barcode = a.barcode || a.part_number || String(item.id);
-  const onHand = quantityFrom(a);
-  const loc = a.location || '';
+  const part = item.part_number || a.part_number || '';
+  const desc = item.description || item.name || a.description || a.name || '';
+  const barcode = item.barcode || a.barcode || part || String(item.id);
+  const onHand = item.total_quantity ?? quantityFrom(a);
+  const loc = item.location || a.location || '';
   const pad = 24;
   const textW = LABEL_WIDTH - pad * 2 - 320;
   const y1 = 20;
@@ -143,7 +143,15 @@ async function getAllRowsForClient(clientId, clientName) {
 
   while (true) {
     const result = await pool.query(
-      'SELECT id, client_id, attributes FROM items WHERE client_id = $1 ORDER BY id ASC OFFSET $2 LIMIT $3',
+      `SELECT
+         i.*,
+         COALESCE(SUM(inv.quantity), 0)::int AS total_quantity
+       FROM items i
+       LEFT JOIN inventory inv ON inv.item_id = i.id
+       WHERE i.client_id = $1
+       GROUP BY i.id
+       ORDER BY i.id ASC
+       OFFSET $2 LIMIT $3`,
       [clientId, page * BATCH_SIZE, BATCH_SIZE],
     );
 
@@ -166,10 +174,15 @@ async function getRowsForSelected(ids) {
   for (let i = 0; i < ids.length; i += BATCH_SIZE) {
     const batch = ids.slice(i, i + BATCH_SIZE);
     const result = await pool.query(
-      `SELECT i.id, i.client_id, i.attributes, c.name AS client_name
+      `SELECT
+         i.*,
+         c.name AS client_name,
+         COALESCE(SUM(inv.quantity), 0)::int AS total_quantity
        FROM items i
        JOIN clients c ON c.id = i.client_id
+       LEFT JOIN inventory inv ON inv.item_id = i.id
        WHERE i.id = ANY($1::int[])
+       GROUP BY i.id, c.name
        ORDER BY i.id ASC`,
       [batch],
     );
@@ -213,7 +226,10 @@ exports.getAllZplForClient = async (req, res, next) => {
       copies: COPIES,
       jobName: `Client ${client.name}`,
       zpl,
-      message: rows.length > 0 ? 'Labels ready for local printing.' : 'No items to print.',
+      message:
+        rows.length > 0
+          ? 'Labels ready for local printing.'
+          : 'No items to print.',
     });
   } catch (err) {
     next(err);
@@ -238,7 +254,10 @@ exports.getSelectedZpl = async (req, res, next) => {
       copies: COPIES,
       jobName: `Selected (${rows.length})`,
       zpl,
-      message: rows.length > 0 ? 'Labels ready for local printing.' : 'No items found for the given IDs.',
+      message:
+        rows.length > 0
+          ? 'Labels ready for local printing.'
+          : 'No items found for the given IDs.',
     });
   } catch (err) {
     next(err);
