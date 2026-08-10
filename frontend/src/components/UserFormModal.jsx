@@ -1,242 +1,173 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import BaseModal from './ui/BaseModal';
 import Button from './ui/Button';
 
-export default function UserFormModal({
-  isOpen,
-  onSuccess,
-  userToEdit,
-  onClose,
-  api, // The authApi instance passed from UsersPage.jsx
-}) {
+const ROLE_OPTIONS = [
+  ['admin', 'Administrator'],
+  ['inventory_staff', 'Inventory Staff'],
+  ['project_user', 'Project User'],
+  ['external_viewer', 'External Viewer'],
+];
+
+export default function UserFormModal({ isOpen, onSuccess, userToEdit, onClose, api }) {
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState('staff');
+  const [role, setRole] = useState('project_user');
   const [password, setPassword] = useState('');
   const [feedback, setFeedback] = useState({ type: '', message: '' });
   const [loading, setLoading] = useState(false);
   const [allClients, setAllClients] = useState([]);
-  const [assignedClientIDs, setAssignedClientIDs] = useState(new Set());
+  const [accessByClient, setAccessByClient] = useState(new Map());
 
   useEffect(() => {
-    if (isOpen) {
-      setLoading(true);
-      setPassword('');
-      setFeedback({ type: '', message: '' });
+    if (!isOpen) return;
 
-      if (userToEdit) {
-        setEmail(userToEdit.email || '');
-        setRole(userToEdit.role || 'staff');
-      } else {
-        setEmail('');
-        setRole('staff');
-      }
+    setLoading(true);
+    setPassword('');
+    setFeedback({ type: '', message: '' });
+    setEmail(userToEdit?.email || '');
+    setRole(userToEdit?.role || 'project_user');
 
-      const fetchInitialData = async () => {
-        try {
-          const clientsPromise = api.get('/api/clients');
-          const assignmentsPromise = userToEdit
-            ? api.get(`/api/users/${userToEdit.id}/clients`)
-            : Promise.resolve({ data: [] });
+    const fetchInitialData = async () => {
+      try {
+        const [clientsRes, assignmentsRes] = await Promise.all([
+          api.get('/api/clients'),
+          userToEdit ? api.get(`/api/users/${userToEdit.id}/clients`) : Promise.resolve({ data: [] }),
+        ]);
 
-          const [clientsRes, assignmentsRes] = await Promise.all([
-            clientsPromise,
-            assignmentsPromise,
-          ]);
-
-          setAllClients(clientsRes.data || []);
-          setAssignedClientIDs(
-            new Set((assignmentsRes.data || []).map((c) => c.client_id)),
-          );
-        } catch (error) {
-          setFeedback({
-            type: 'error',
-            message: 'Failed to load initial data.',
-          });
-        } finally {
-          setLoading(false);
+        setAllClients(clientsRes.data || []);
+        const next = new Map();
+        for (const assignment of assignmentsRes.data || []) {
+          next.set(Number(assignment.client_id), assignment.access_level === 'read' ? 'read' : 'edit');
         }
-      };
+        setAccessByClient(next);
+      } catch {
+        setFeedback({ type: 'error', message: 'Failed to load project access.' });
+      } finally {
+        setLoading(false);
+      }
+    };
 
-      fetchInitialData();
-    }
+    fetchInitialData();
   }, [isOpen, userToEdit, api]);
 
-  const handleClientCheckboxChange = (clientId, isChecked) => {
-    setAssignedClientIDs((prev) => {
-      const newSet = new Set(prev);
-      if (isChecked) {
-        newSet.add(clientId);
-      } else {
-        newSet.delete(clientId);
-      }
-      return newSet;
+  const setClientEnabled = (clientId, enabled) => {
+    setAccessByClient((previous) => {
+      const next = new Map(previous);
+      if (!enabled) next.delete(clientId);
+      else next.set(clientId, role === 'external_viewer' ? 'read' : next.get(clientId) || 'read');
+      return next;
     });
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const setClientLevel = (clientId, level) => {
+    setAccessByClient((previous) => {
+      const next = new Map(previous);
+      next.set(clientId, role === 'external_viewer' ? 'read' : level);
+      return next;
+    });
+  };
+
+  const handleRoleChange = (value) => {
+    setRole(value);
+    if (value === 'external_viewer') {
+      setAccessByClient((previous) => new Map([...previous.keys()].map((id) => [id, 'read'])));
+    }
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     setLoading(true);
     setFeedback({ type: '', message: '' });
 
-    const userData = {
-      email,
-      role,
-      assigned_clients: Array.from(assignedClientIDs),
-    };
-    if (password) {
-      userData.password = password;
-    }
+    const assignedClients = [...accessByClient.entries()].map(([client_id, access_level]) => ({
+      client_id,
+      access_level: role === 'external_viewer' ? 'read' : access_level,
+    }));
+
+    const userData = { email, role, assigned_clients: assignedClients };
+    if (password) userData.password = password;
 
     try {
-      if (userToEdit) {
-        await api.put(`/api/users/${userToEdit.id}`, userData);
-      } else {
-        await api.post('/api/users', userData);
-      }
+      if (userToEdit) await api.put(`/api/users/${userToEdit.id}`, userData);
+      else await api.post('/api/users', userData);
       onSuccess();
     } catch (err) {
-      setFeedback({
-        type: 'error',
-        message: err.response?.data?.message || 'An error occurred.',
-      });
+      setFeedback({ type: 'error', message: err.response?.data?.message || 'Unable to save user.' });
     } finally {
       setLoading(false);
     }
   };
 
   const isCreating = !userToEdit;
-  const inputStyles =
-    'w-full border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
-  const title = isCreating
-    ? 'Create New User'
-    : `Edit User: ${userToEdit?.email}`;
+  const inputStyles = 'w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white';
 
   return (
     <BaseModal
       isOpen={isOpen}
       onClose={onClose}
-      title={title}
-      size="max-w-lg"
+      title={isCreating ? 'Create User' : `Edit User: ${userToEdit?.email}`}
+      size="max-w-2xl"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={loading}>
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            form="user-form"
-            variant="primary"
-            disabled={loading}
-          >
-            {loading
-              ? 'Saving...'
-              : isCreating
-              ? 'Create User'
-              : 'Save Changes'}
+          <Button variant="secondary" onClick={onClose} disabled={loading}>Cancel</Button>
+          <Button type="submit" form="user-form" variant="primary" disabled={loading}>
+            {loading ? 'Saving...' : isCreating ? 'Create User' : 'Save Access'}
           </Button>
         </>
       }
     >
-      <form id="user-form" onSubmit={handleSubmit} className="space-y-4">
+      <form id="user-form" onSubmit={handleSubmit} className="space-y-5">
         {feedback.message && (
-          <p
-            className={`rounded p-3 text-sm ${
-              feedback.type === 'error'
-                ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'
-                : 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400'
-            }`}
-          >
+          <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-300">
             {feedback.message}
           </p>
         )}
+
         <div>
-          <label
-            htmlFor="email"
-            className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
-          >
-            Email
-          </label>
-          <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className={inputStyles}
-            required
-            disabled={loading}
-          />
+          <label htmlFor="email" className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-300">Email</label>
+          <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputStyles} required disabled={loading} />
         </div>
+
         <div>
-          <label
-            htmlFor="password"
-            className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
-          >
-            Password
-          </label>
-          <input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className={inputStyles}
-            placeholder={
-              isCreating ? 'Required' : 'Optional: Leave blank to keep current'
-            }
-            required={isCreating}
-            disabled={loading}
-          />
+          <label htmlFor="password" className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-300">{isCreating ? 'Temporary password' : 'New password (optional)'}</label>
+          <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputStyles} minLength={8} required={isCreating} disabled={loading} autoComplete="new-password" />
         </div>
+
         <div>
-          <label
-            htmlFor="role"
-            className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
-          >
-            Role
-          </label>
-          <select
-            id="role"
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-            className={inputStyles}
-            disabled={loading}
-          >
-            <option value="admin">Admin</option>
-            <option value="staff">Staff</option>
+          <label htmlFor="role" className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-300">Global role</label>
+          <select id="role" value={role} onChange={(e) => handleRoleChange(e.target.value)} className={inputStyles} disabled={loading}>
+            {ROLE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
+          <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
+            Only Administrators can create clients, manage users, or change access. External Viewers are always read-only.
+          </p>
         </div>
-        <fieldset>
-          <legend className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-            Assign to Clients
-          </legend>
-          <div className="max-h-40 overflow-y-auto border border-slate-300 dark:border-slate-700 rounded-md p-2 space-y-1">
-            {allClients.length > 0 ? (
-              allClients.map((client) => (
-                <div key={client.id} className="flex items-center">
-                  <input
-                    id={`client-${client.id}`}
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-blue-600 focus:ring-blue-500"
-                    checked={assignedClientIDs.has(client.id)}
-                    onChange={(e) =>
-                      handleClientCheckboxChange(client.id, e.target.checked)
-                    }
-                    disabled={loading}
-                  />
-                  <label
-                    htmlFor={`client-${client.id}`}
-                    className="ml-2 text-sm text-gray-700 dark:text-slate-300"
-                  >
-                    {client.name}
-                  </label>
-                </div>
-              ))
-            ) : (
-              <p className="text-sm text-gray-500 dark:text-slate-400">
-                No clients to display.
-              </p>
-            )}
-          </div>
-        </fieldset>
+
+        {role !== 'admin' && (
+          <fieldset>
+            <legend className="mb-2 block text-sm font-medium text-gray-700 dark:text-slate-300">Project access</legend>
+            <div className="max-h-72 space-y-2 overflow-y-auto rounded-lg border border-slate-300 p-2 dark:border-slate-700">
+              {allClients.length > 0 ? allClients.map((client) => {
+                const enabled = accessByClient.has(Number(client.id));
+                const level = accessByClient.get(Number(client.id)) || 'read';
+                return (
+                  <div key={client.id} className="flex flex-col gap-2 rounded-md p-2 hover:bg-slate-50 dark:hover:bg-slate-800 sm:flex-row sm:items-center sm:justify-between">
+                    <label className="flex min-h-10 items-center gap-3 text-sm text-gray-700 dark:text-slate-300">
+                      <input type="checkbox" className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" checked={enabled} onChange={(e) => setClientEnabled(Number(client.id), e.target.checked)} disabled={loading} />
+                      <span className="font-medium">{client.name}</span>
+                    </label>
+                    {enabled && (
+                      <select value={role === 'external_viewer' ? 'read' : level} onChange={(e) => setClientLevel(Number(client.id), e.target.value)} disabled={loading || role === 'external_viewer'} aria-label={`${client.name} access level`} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white">
+                        <option value="read">Read Only</option>
+                        <option value="edit">Edit</option>
+                      </select>
+                    )}
+                  </div>
+                );
+              }) : <p className="p-2 text-sm text-gray-500 dark:text-slate-400">No projects available.</p>}
+            </div>
+          </fieldset>
+        )}
       </form>
     </BaseModal>
   );
