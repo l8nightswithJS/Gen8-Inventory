@@ -11,6 +11,7 @@ export function clearToken() {
   localStorage.removeItem('role');
   localStorage.removeItem('client_access');
   localStorage.removeItem('user_email');
+  localStorage.removeItem('displayName');
 }
 
 export function decodeJwtPayload(token) {
@@ -30,16 +31,27 @@ export function decodeJwtPayload(token) {
 }
 
 export function inspectToken(token) {
-  if (typeof token !== 'string' || token.trim() === '') return { valid: false, reason: 'missing token' };
-  if (token.split('.').length !== 3) return { valid: false, reason: 'malformed token' };
+  if (typeof token !== 'string' || token.trim() === '') {
+    return { valid: false, reason: 'missing token' };
+  }
+  if (token.split('.').length !== 3) {
+    return { valid: false, reason: 'malformed token' };
+  }
 
   const payload = decodeJwtPayload(token);
   if (!payload) return { valid: false, reason: 'unreadable token payload' };
-  if (typeof payload.exp !== 'number') return { valid: false, reason: 'token has no numeric expiration' };
+  if (typeof payload.exp !== 'number') {
+    return { valid: false, reason: 'token has no numeric expiration' };
+  }
 
   const nowSeconds = Math.floor(Date.now() / 1000);
   if (payload.exp <= nowSeconds) {
-    return { valid: false, reason: 'token is already expired', expiresAt: payload.exp, now: nowSeconds };
+    return {
+      valid: false,
+      reason: 'token is already expired',
+      expiresAt: payload.exp,
+      now: nowSeconds,
+    };
   }
 
   return { valid: true, payload };
