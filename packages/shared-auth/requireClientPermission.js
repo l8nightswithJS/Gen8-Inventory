@@ -15,7 +15,6 @@ function accessMapFromUser(user) {
     if (id && (level === 'read' || level === 'edit')) map.set(id, level);
   }
 
-  // Backward compatibility for tokens issued before per-client access levels.
   if (map.size === 0 && Array.isArray(user?.client_ids)) {
     for (const value of user.client_ids) {
       const id = parseClientId(value);
@@ -43,10 +42,12 @@ function requireClientPermission(required = 'read') {
         });
       }
 
-      const level = accessMapFromUser(req.user).get(clientId);
-      if (!level) {
-        return res.status(404).json({ message: 'Resource not found.' });
-      }
+      let level = accessMapFromUser(req.user).get(clientId);
+      if (!level) return res.status(404).json({ message: 'Resource not found.' });
+
+      // External partner accounts are always read-only even if a database row
+      // is accidentally configured with edit access.
+      if (req.user?.role === 'external_viewer') level = 'read';
 
       if (required === 'edit' && level !== 'edit') {
         return res.status(403).json({
