@@ -2,62 +2,66 @@ const pool = require('../db/pool');
 
 function parsePositiveInteger(value) {
   if (value === undefined || value === null || value === '') return null;
-
   const normalized = String(value).trim();
   if (!/^[1-9]\d*$/.test(normalized)) return Number.NaN;
-
   const parsed = Number(normalized);
   return Number.isSafeInteger(parsed) ? parsed : Number.NaN;
 }
 
-function getAllowedClientIds(req) {
-  const clientIds = req.user?.client_ids;
-  if (!Array.isArray(clientIds)) return null;
+function getAccessMap(req) {
+  const map = new Map();
+  const entries = Array.isArray(req.user?.client_access) ? req.user.client_access : [];
+  for (const entry of entries) {
+    const id = parsePositiveInteger(entry?.client_id);
+    const level = entry?.access_level;
+    if (Number.isSafeInteger(id) && (level === 'read' || level === 'edit')) {
+      map.set(id, level);
+    }
+  }
 
-  return new Set(
-    clientIds
-      .map(parsePositiveInteger)
-      .filter((value) => Number.isSafeInteger(value)),
-  );
+  // Backward compatibility for tokens issued before access_level existed.
+  if (map.size === 0 && Array.isArray(req.user?.client_ids)) {
+    for (const value of req.user.client_ids) {
+      const id = parsePositiveInteger(value);
+      if (Number.isSafeInteger(id)) map.set(id, 'edit');
+    }
+  }
+  return map;
 }
 
 function sendNotFound(res) {
   return res.status(404).json({ message: 'Item not found' });
 }
 
-function requireItemAccess({ source = 'params', key = 'id' } = {}) {
+function requireItemAccess({ source = 'params', key = 'id', permission = 'read' } = {}) {
   return async function itemAccessMiddleware(req, res, next) {
-    const allowedClientIds = getAllowedClientIds(req);
-
-    if (!allowedClientIds) {
-      return res.status(403).json({
-        message: 'Forbidden: Missing client scope in token.',
-      });
-    }
-
+    const accessMap = getAccessMap(req);
     const itemId = parsePositiveInteger(req[source]?.[key]);
-
     if (!Number.isSafeInteger(itemId)) {
       return res.status(400).json({ message: 'Invalid item ID' });
     }
 
     try {
-      const result = await pool.query(
-        'SELECT id, client_id FROM items WHERE id = $1',
-        [itemId],
-      );
-
+      const result = await pool.query('SELECT id, client_id FROM items WHERE id = $1', [itemId]);
       const item = result.rows?.[0];
       const itemClientId = parsePositiveInteger(item?.client_id);
 
-      // Use the same response for missing and unauthorized records so callers
-      // cannot enumerate item IDs belonging to another client.
-      if (!item || !allowedClientIds.has(itemClientId)) {
+      if (!item) return sendNotFound(res);
+      if (req.user?.role !== 'admin' && !accessMap.has(itemClientId)) {
         return sendNotFound(res);
+      }
+
+      const level = req.user?.role === 'admin' ? 'edit' : accessMap.get(itemClientId);
+      if (permission === 'edit' && level !== 'edit') {
+        return res.status(403).json({
+          message: 'Read-only access: this account cannot change this project.',
+        });
       }
 
       req.itemId = itemId;
       req.itemClientId = itemClientId;
+      req.clientId = itemClientId;
+      req.clientAccessLevel = level;
       return next();
     } catch (err) {
       return next(err);
@@ -65,16 +69,9 @@ function requireItemAccess({ source = 'params', key = 'id' } = {}) {
   };
 }
 
-function requireItemListAccess({ source = 'body', key = 'item_ids' } = {}) {
+function requireItemListAccess({ source = 'body', key = 'item_ids', permission = 'read' } = {}) {
   return async function itemListAccessMiddleware(req, res, next) {
-    const allowedClientIds = getAllowedClientIds(req);
-
-    if (!allowedClientIds) {
-      return res.status(403).json({
-        message: 'Forbidden: Missing client scope in token.',
-      });
-    }
-
+    const accessMap = getAccessMap(req);
     const submittedIds = req[source]?.[key];
     if (!Array.isArray(submittedIds) || submittedIds.length === 0) {
       return res.status(400).json({ message: 'item_ids array is required' });
@@ -86,27 +83,24 @@ function requireItemListAccess({ source = 'body', key = 'item_ids' } = {}) {
     }
 
     const uniqueItemIds = [...new Set(parsedIds)];
-
     try {
       const result = await pool.query(
         'SELECT id, client_id FROM items WHERE id = ANY($1::bigint[])',
         [uniqueItemIds],
       );
 
-      const accessibleItemIds = new Set(
-        (result.rows || [])
-          .filter((row) =>
-            allowedClientIds.has(parsePositiveInteger(row.client_id)),
-          )
-          .map((row) => parsePositiveInteger(row.id)),
-      );
+      if ((result.rows || []).length !== uniqueItemIds.length) return sendNotFound(res);
 
-      const everyItemIsAccessible = uniqueItemIds.every((id) =>
-        accessibleItemIds.has(id),
-      );
-
-      if (!everyItemIsAccessible) {
-        return sendNotFound(res);
+      for (const row of result.rows || []) {
+        const clientId = parsePositiveInteger(row.client_id);
+        if (req.user?.role === 'admin') continue;
+        const level = accessMap.get(clientId);
+        if (!level) return sendNotFound(res);
+        if (permission === 'edit' && level !== 'edit') {
+          return res.status(403).json({
+            message: 'Read-only access: this account cannot change this project.',
+          });
+        }
       }
 
       req.itemIds = uniqueItemIds;
@@ -117,7 +111,4 @@ function requireItemListAccess({ source = 'body', key = 'item_ids' } = {}) {
   };
 }
 
-module.exports = {
-  requireItemAccess,
-  requireItemListAccess,
-};
+module.exports = { requireItemAccess, requireItemListAccess };
