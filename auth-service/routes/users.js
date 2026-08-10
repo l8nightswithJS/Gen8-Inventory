@@ -58,6 +58,7 @@ router.put(
   optionalName('first_name'),
   optionalName('last_name'),
   body('role').optional().isIn(roles),
+  body('password').optional().isString().isLength({ min: 8 }),
   body('assigned_clients').optional().isArray(),
   handleValidation,
   userController.updateUser,
