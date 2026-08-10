@@ -12,7 +12,7 @@ const LABEL_HEIGHT = Number(process.env.ZPL_LABEL_HEIGHT || 406);
 const COPIES = Math.max(1, Number(process.env.ZPL_COPIES || 1));
 const BATCH_SIZE = Number(process.env.PRINT_BATCH_SIZE || 100);
 
-// ====== SMALL HELPERS (Unchanged) ======
+// ====== SMALL HELPERS ======
 const QTY_KEYS = ['quantity', 'on_hand', 'qty_in_stock', 'stock'];
 
 function quantityFrom(attrs = {}) {
@@ -31,7 +31,14 @@ function fbBlock(text, widthDots, maxLines, lineSpace) {
   return `^FB${widthDots},${maxLines},${lineSpace},L,0^FD${escapeZpl(text)}^FS`;
 }
 
-// ====== ZPL & PRINTER LOGIC (Unchanged) ======
+function normalizeItemIds(rawIds) {
+  if (!Array.isArray(rawIds)) return [];
+  return rawIds
+    .map((id) => parseInt(id, 10))
+    .filter((id) => !Number.isNaN(id));
+}
+
+// ====== ZPL & PRINTER LOGIC ======
 function buildLabelZpl({ clientName, item }) {
   const a = item.attributes || {};
   const part = a.part_number || '';
@@ -64,6 +71,17 @@ function buildLabelZpl({ clientName, item }) {
     `^FO${pad},${LABEL_HEIGHT - 28}^A0N,20,20^FDItem ID: ${item.id}^FS`,
     '^XZ',
   ].join('');
+}
+
+function buildZplPayload(rows) {
+  return rows
+    .map((row) => {
+      const base = buildLabelZpl(row);
+      return COPIES <= 1
+        ? base
+        : Array.from({ length: COPIES }, () => base).join('');
+    })
+    .join('');
 }
 
 function sendZplRaw(zpl, { host, port }) {
@@ -105,64 +123,155 @@ async function printRowsAsZpl(rows) {
     e.status = 500;
     throw e;
   }
-  const payload = rows
-    .map((r) => {
-      const base = buildLabelZpl(r);
-      return COPIES <= 1
-        ? base
-        : Array.from({ length: COPIES }, () => base).join('');
-    })
-    .join('');
 
+  const payload = buildZplPayload(rows);
   if (!payload) return;
   await sendZplRaw(payload, { host: PRINTER_HOST, port: PRINTER_PORT });
 }
 
-// ====== REFACTORED CONTROLLERS ======
+async function getClient(clientId) {
+  const clientResult = await pool.query(
+    'SELECT id, name FROM clients WHERE id = $1',
+    [clientId],
+  );
+  return clientResult.rows[0] || null;
+}
+
+async function getAllRowsForClient(clientId, clientName) {
+  const rows = [];
+  let page = 0;
+
+  while (true) {
+    const result = await pool.query(
+      'SELECT id, client_id, attributes FROM items WHERE client_id = $1 ORDER BY id ASC OFFSET $2 LIMIT $3',
+      [clientId, page * BATCH_SIZE, BATCH_SIZE],
+    );
+
+    if (!result.rows.length) break;
+    rows.push(
+      ...result.rows.map((item) => ({
+        clientName,
+        item,
+      })),
+    );
+    page += 1;
+  }
+
+  return rows;
+}
+
+async function getRowsForSelected(ids) {
+  const rows = [];
+
+  for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+    const batch = ids.slice(i, i + BATCH_SIZE);
+    const result = await pool.query(
+      `SELECT i.id, i.client_id, i.attributes, c.name AS client_name
+       FROM items i
+       JOIN clients c ON c.id = i.client_id
+       WHERE i.id = ANY($1::int[])
+       ORDER BY i.id ASC`,
+      [batch],
+    );
+
+    rows.push(
+      ...result.rows.map((item) => ({
+        clientName: item.client_name || '',
+        item,
+      })),
+    );
+  }
+
+  return rows;
+}
+
+// ====== LOCAL BROWSER PRINT CONTROLLERS ======
+// These endpoints do not contact a printer. They return ZPL to the authenticated
+// browser, which can send it to a Zebra connected to that workstation through
+// Zebra Browser Print.
+
+// @desc Build all labels for a client and return ZPL
+// @route POST /api/labels/zpl/all
+exports.getAllZplForClient = async (req, res, next) => {
+  try {
+    const clientId = parseInt(req.body.client_id ?? req.query.client_id, 10);
+    if (Number.isNaN(clientId)) {
+      return res.status(400).json({ message: 'client_id is required' });
+    }
+
+    const client = await getClient(clientId);
+    if (!client) {
+      return res.status(404).json({ message: 'Client not found' });
+    }
+
+    const rows = await getAllRowsForClient(clientId, client.name);
+    const zpl = buildZplPayload(rows);
+
+    return res.json({
+      ok: true,
+      count: rows.length,
+      copies: COPIES,
+      jobName: `Client ${client.name}`,
+      zpl,
+      message: rows.length > 0 ? 'Labels ready for local printing.' : 'No items to print.',
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc Build selected labels and return ZPL
+// @route POST /api/labels/zpl/selected
+exports.getSelectedZpl = async (req, res, next) => {
+  try {
+    const ids = normalizeItemIds(req.body.item_ids);
+    if (!ids.length) {
+      return res.status(400).json({ message: 'item_ids array is required' });
+    }
+
+    const rows = await getRowsForSelected(ids);
+    const zpl = buildZplPayload(rows);
+
+    return res.json({
+      ok: true,
+      count: rows.length,
+      copies: COPIES,
+      jobName: `Selected (${rows.length})`,
+      zpl,
+      message: rows.length > 0 ? 'Labels ready for local printing.' : 'No items found for the given IDs.',
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ====== LEGACY / NETWORK PRINT CONTROLLERS ======
+// Retained as a fallback for sites that intentionally expose a Zebra to the
+// inventory service over TCP 9100.
 
 // @desc Print all labels for a given client
 // @route POST /api/labels/print/all
 exports.printAllForClient = async (req, res, next) => {
   try {
     const clientId = parseInt(req.body.client_id ?? req.query.client_id, 10);
-    if (isNaN(clientId)) {
+    if (Number.isNaN(clientId)) {
       return res.status(400).json({ message: 'client_id is required' });
     }
 
-    const clientResult = await pool.query(
-      'SELECT id, name FROM clients WHERE id = $1',
-      [clientId],
-    );
-    if (clientResult.rows.length === 0) {
+    const client = await getClient(clientId);
+    if (!client) {
       return res.status(404).json({ message: 'Client not found' });
     }
-    const client = clientResult.rows[0];
 
-    let page = 0;
-    let totalPrinted = 0;
-
-    while (true) {
-      const result = await pool.query(
-        'SELECT id, client_id, attributes FROM items WHERE client_id = $1 ORDER BY id ASC OFFSET $2 LIMIT $3',
-        [clientId, page * BATCH_SIZE, BATCH_SIZE],
-      );
-
-      const items = result.rows;
-      if (items.length === 0) break;
-
-      const rows = items.map((it) => ({ clientName: client.name, item: it }));
-      await printRowsAsZpl(rows);
-
-      totalPrinted += items.length;
-      page++;
-    }
+    const rows = await getAllRowsForClient(clientId, client.name);
+    await printRowsAsZpl(rows);
 
     res.json({
       ok: true,
-      count: totalPrinted,
+      count: rows.length,
       copies: COPIES,
       jobName: `Client ${client.name}`,
-      message: totalPrinted > 0 ? 'Print job completed.' : 'No items to print.',
+      message: rows.length > 0 ? 'Print job completed.' : 'No items to print.',
     });
   } catch (err) {
     next(err);
@@ -173,54 +282,21 @@ exports.printAllForClient = async (req, res, next) => {
 // @route POST /api/labels/print/selected
 exports.printSelected = async (req, res, next) => {
   try {
-    const ids = Array.isArray(req.body.item_ids)
-      ? req.body.item_ids
-          .map((id) => parseInt(id, 10))
-          .filter((id) => !isNaN(id))
-      : [];
+    const ids = normalizeItemIds(req.body.item_ids);
     if (!ids.length) {
       return res.status(400).json({ message: 'item_ids array is required' });
     }
 
-    const idBatches = [];
-    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
-      idBatches.push(ids.slice(i, i + BATCH_SIZE));
-    }
-
-    let totalPrinted = 0;
-    let clientName = '';
-
-    for (const batch of idBatches) {
-      const result = await pool.query(
-        `SELECT i.id, i.client_id, i.attributes, c.name AS client_name
-         FROM items i
-         JOIN clients c ON c.id = i.client_id
-         WHERE i.id = ANY($1::int[])`,
-        [batch],
-      );
-
-      const items = result.rows;
-      if (!items.length) continue;
-
-      if (!clientName && items[0].client_name) {
-        clientName = items[0].client_name;
-      }
-
-      const rows = items.map((it) => ({
-        clientName: it.client_name || clientName,
-        item: it,
-      }));
-      await printRowsAsZpl(rows);
-      totalPrinted += items.length;
-    }
+    const rows = await getRowsForSelected(ids);
+    await printRowsAsZpl(rows);
 
     res.json({
       ok: true,
-      count: totalPrinted,
+      count: rows.length,
       copies: COPIES,
-      jobName: `Selected (${totalPrinted})`,
+      jobName: `Selected (${rows.length})`,
       message:
-        totalPrinted > 0
+        rows.length > 0
           ? 'Print job completed.'
           : 'No items found for the given IDs.',
     });
