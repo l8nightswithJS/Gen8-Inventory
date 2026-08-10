@@ -173,11 +173,12 @@ exports.approveUser = async (req, res) => {
 
 exports.updateUser = async (req, res) => {
   const { id } = req.params;
-  const { role, assigned_clients: assignedClients } = req.body;
+  const { role, password, assigned_clients: assignedClients } = req.body;
   const hasFirstName = Object.prototype.hasOwnProperty.call(req.body || {}, 'first_name');
   const hasLastName = Object.prototype.hasOwnProperty.call(req.body || {}, 'last_name');
   const firstName = hasFirstName ? cleanName(req.body.first_name) : undefined;
   const lastName = hasLastName ? cleanName(req.body.last_name) : undefined;
+  const hasPassword = typeof password === 'string' && password.length > 0;
 
   if (id === req.user?.id && role && role !== 'admin') {
     return res.status(400).json({
@@ -209,6 +210,20 @@ exports.updateUser = async (req, res) => {
         .single();
       if (error) throw error;
       updatedUser = data;
+    }
+
+    if (hasFirstName || hasLastName || hasPassword) {
+      if (!updatedUser) {
+        const { data, error } = await sbAdmin
+          .from('users')
+          .select(USER_SELECT)
+          .eq('id', id)
+          .single();
+        if (error) throw error;
+        updatedUser = data;
+      }
+
+      const authUpdates = {};
 
       if (hasFirstName || hasLastName) {
         const effectiveFirstName = hasFirstName
@@ -218,18 +233,25 @@ exports.updateUser = async (req, res) => {
           ? lastName
           : cleanName(updatedUser.last_name);
 
-        const { error: metadataError } = await sbAdmin.auth.admin.updateUserById(id, {
-          user_metadata: {
-            first_name: effectiveFirstName,
-            last_name: effectiveLastName,
-            display_name: effectiveFirstName || '',
-            full_name: [effectiveFirstName, effectiveLastName]
-              .filter(Boolean)
-              .join(' '),
-          },
-        });
-        if (metadataError) throw metadataError;
+        authUpdates.user_metadata = {
+          first_name: effectiveFirstName,
+          last_name: effectiveLastName,
+          display_name: effectiveFirstName || '',
+          full_name: [effectiveFirstName, effectiveLastName]
+            .filter(Boolean)
+            .join(' '),
+        };
       }
+
+      if (hasPassword) {
+        authUpdates.password = password;
+      }
+
+      const { error: authUpdateError } = await sbAdmin.auth.admin.updateUserById(
+        id,
+        authUpdates,
+      );
+      if (authUpdateError) throw authUpdateError;
     }
 
     if (Array.isArray(assignedClients)) {
