@@ -2,6 +2,7 @@ const { sbAdmin } = require('../lib/supabaseClient');
 
 const ROLES = ['admin', 'inventory_staff', 'project_user', 'external_viewer'];
 const ACCESS_LEVELS = ['read', 'edit'];
+const USER_SELECT = 'id, email, first_name, last_name, role, approved';
 
 const handleSupabaseError = (res, error, context) => {
   console.error(`Error in ${context}:`, error);
@@ -10,6 +11,11 @@ const handleSupabaseError = (res, error, context) => {
     details: error.message,
   });
 };
+
+function cleanName(value) {
+  const name = String(value || '').trim();
+  return name || null;
+}
 
 function normalizeAssignments(value) {
   if (!Array.isArray(value)) return [];
@@ -59,20 +65,20 @@ async function replaceUserAssignments(userId, assignments) {
 exports.getAllUsers = async (_req, res) => {
   const { data, error } = await sbAdmin
     .from('users')
-    .select('id, email, role, approved')
+    .select(USER_SELECT)
     .order('email', { ascending: true });
   if (error) return handleSupabaseError(res, error, 'getAllUsers');
-  res.json(data || []);
+  return res.json(data || []);
 };
 
 exports.getPendingUsers = async (_req, res) => {
   const { data, error } = await sbAdmin
     .from('users')
-    .select('id, email, role, approved')
+    .select(USER_SELECT)
     .eq('approved', false)
     .order('email', { ascending: true });
   if (error) return handleSupabaseError(res, error, 'getPendingUsers');
-  res.json(data || []);
+  return res.json(data || []);
 };
 
 exports.getUserClients = async (req, res) => {
@@ -89,11 +95,16 @@ exports.getUserClients = async (req, res) => {
 exports.createUser = async (req, res) => {
   const email = String(req.body?.email || '').trim().toLowerCase();
   const password = String(req.body?.password || '');
+  const firstName = cleanName(req.body?.first_name);
+  const lastName = cleanName(req.body?.last_name);
   const role = req.body?.role || 'project_user';
   const assignedClients = req.body?.assigned_clients || [];
 
   if (!email || !password) {
     return res.status(400).json({ message: 'Email and password are required.' });
+  }
+  if (!firstName) {
+    return res.status(400).json({ message: 'First name is required.' });
   }
   if (!ROLES.includes(role)) {
     return res.status(400).json({ message: 'Invalid role.' });
@@ -101,17 +112,29 @@ exports.createUser = async (req, res) => {
 
   let createdAuthUser = null;
   try {
-    const { data: authData, error: authError } = await sbAdmin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-    });
-    if (authError || !authData?.user) throw authError || new Error('User creation failed');
+    const { data: authData, error: authError } =
+      await sbAdmin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: {
+          first_name: firstName,
+          last_name: lastName,
+          display_name: firstName,
+          full_name: [firstName, lastName].filter(Boolean).join(' '),
+        },
+      });
+
+    if (authError || !authData?.user) {
+      throw authError || new Error('User creation failed');
+    }
     createdAuthUser = authData.user;
 
     const { error: profileError } = await sbAdmin.from('users').insert({
       id: createdAuthUser.id,
       email,
+      first_name: firstName,
+      last_name: lastName,
       role,
       approved: true,
     });
@@ -122,6 +145,8 @@ exports.createUser = async (req, res) => {
     return res.status(201).json({
       id: createdAuthUser.id,
       email,
+      first_name: firstName,
+      last_name: lastName,
       role,
       approved: true,
     });
@@ -141,14 +166,18 @@ exports.approveUser = async (req, res) => {
     .from('users')
     .update({ approved: true })
     .eq('id', id)
-    .select();
+    .select(USER_SELECT);
   if (error) return handleSupabaseError(res, error, 'approveUser');
-  res.json({ message: 'User approved successfully', user: data[0] });
+  return res.json({ message: 'User approved successfully', user: data[0] });
 };
 
 exports.updateUser = async (req, res) => {
   const { id } = req.params;
   const { role, assigned_clients: assignedClients } = req.body;
+  const hasFirstName = Object.prototype.hasOwnProperty.call(req.body || {}, 'first_name');
+  const hasLastName = Object.prototype.hasOwnProperty.call(req.body || {}, 'last_name');
+  const firstName = hasFirstName ? cleanName(req.body.first_name) : undefined;
+  const lastName = hasLastName ? cleanName(req.body.last_name) : undefined;
 
   if (id === req.user?.id && role && role !== 'admin') {
     return res.status(400).json({
@@ -160,17 +189,47 @@ exports.updateUser = async (req, res) => {
     return res.status(400).json({ message: 'Invalid role.' });
   }
 
+  if (hasFirstName && !firstName) {
+    return res.status(400).json({ message: 'First name is required.' });
+  }
+
   try {
+    const updates = {};
+    if (role) updates.role = role;
+    if (hasFirstName) updates.first_name = firstName;
+    if (hasLastName) updates.last_name = lastName;
+
     let updatedUser = null;
-    if (role) {
+    if (Object.keys(updates).length > 0) {
       const { data, error } = await sbAdmin
         .from('users')
-        .update({ role })
+        .update(updates)
         .eq('id', id)
-        .select('id, email, role, approved')
+        .select(USER_SELECT)
         .single();
       if (error) throw error;
       updatedUser = data;
+
+      if (hasFirstName || hasLastName) {
+        const effectiveFirstName = hasFirstName
+          ? firstName
+          : cleanName(updatedUser.first_name);
+        const effectiveLastName = hasLastName
+          ? lastName
+          : cleanName(updatedUser.last_name);
+
+        const { error: metadataError } = await sbAdmin.auth.admin.updateUserById(id, {
+          user_metadata: {
+            first_name: effectiveFirstName,
+            last_name: effectiveLastName,
+            display_name: effectiveFirstName || '',
+            full_name: [effectiveFirstName, effectiveLastName]
+              .filter(Boolean)
+              .join(' '),
+          },
+        });
+        if (metadataError) throw metadataError;
+      }
     }
 
     if (Array.isArray(assignedClients)) {
@@ -180,7 +239,7 @@ exports.updateUser = async (req, res) => {
     if (!updatedUser) {
       const { data, error } = await sbAdmin
         .from('users')
-        .select('id, email, role, approved')
+        .select(USER_SELECT)
         .eq('id', id)
         .single();
       if (error) throw error;
