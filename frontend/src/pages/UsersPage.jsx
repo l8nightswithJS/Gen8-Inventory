@@ -5,27 +5,37 @@ import UserFormModal from '../components/UserFormModal';
 import Button from '../components/ui/Button';
 import { FiEdit2, FiTrash2 } from 'react-icons/fi';
 
-const normalizeUser = (u) => ({
-  ...u,
-  email: u.email || u.username,
+const normalizeUser = (user) => ({
+  ...user,
+  email: user.email || user.username,
+  fullName: [user.first_name, user.last_name].filter(Boolean).join(' '),
 });
 
+const roleLabel = (role = '') =>
+  role
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+
 const UserCard = ({ user, onApprove, onDeny, onEdit, onDelete, isPending }) => (
-  <div
-    className={`rounded-lg border bg-white dark:bg-slate-900 shadow-md p-4 mb-4 ${
+  <article
+    className={`mb-4 rounded-lg border bg-white p-4 shadow-md dark:bg-slate-900 ${
       isPending
         ? 'border-amber-300 dark:border-amber-500/30'
         : 'border-slate-200 dark:border-slate-800'
     }`}
   >
-    <div className="flex items-start justify-between">
-      <div>
-        <p className="font-bold text-lg text-slate-800 dark:text-white">
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-lg font-bold text-slate-800 dark:text-white">
+          {user.fullName || 'Name not set'}
+        </p>
+        <p className="truncate text-sm text-slate-500 dark:text-slate-400">
           {user.email}
         </p>
-        <p className="text-sm font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 inline-block px-2 py-0.5 rounded-full mt-1 capitalize">
-          {user.role}
-        </p>
+        <span className="mt-2 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-sm font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+          {roleLabel(user.role)}
+        </span>
       </div>
       {isPending ? (
         <div className="flex items-center gap-2">
@@ -42,23 +52,23 @@ const UserCard = ({ user, onApprove, onDeny, onEdit, onDelete, isPending }) => (
             onClick={() => onEdit(user)}
             variant="ghost"
             size="sm"
-            title="Edit"
+            aria-label={`Edit ${user.fullName || user.email}`}
           >
-            <FiEdit2 />
+            <FiEdit2 aria-hidden="true" />
           </Button>
           <Button
             onClick={() => onDelete(user)}
             variant="ghost"
             size="sm"
-            title="Delete"
+            aria-label={`Delete ${user.fullName || user.email}`}
             className="text-rose-600"
           >
-            <FiTrash2 />
+            <FiTrash2 aria-hidden="true" />
           </Button>
         </div>
       )}
     </div>
-  </div>
+  </article>
 );
 
 export default function UsersPage() {
@@ -69,16 +79,15 @@ export default function UsersPage() {
   const [confirm, setConfirm] = useState({
     type: '',
     id: null,
-    email: '',
+    label: '',
     open: false,
     loading: false,
   });
   const [viewMode, setViewMode] = useState('desktop');
 
   useEffect(() => {
-    const handleResize = () => {
-      window.innerWidth < 768 ? setViewMode('mobile') : setViewMode('desktop');
-    };
+    const handleResize = () =>
+      setViewMode(window.innerWidth < 768 ? 'mobile' : 'desktop');
     handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
@@ -90,8 +99,8 @@ export default function UsersPage() {
         api.get('/api/users'),
         api.get('/api/users/pending'),
       ]);
-      setUsers(usersRes.data.map(normalizeUser));
-      setPendingUsers(pendingRes.data.map(normalizeUser));
+      setUsers((usersRes.data || []).map(normalizeUser));
+      setPendingUsers((pendingRes.data || []).map(normalizeUser));
     } catch (err) {
       console.error('Error fetching users:', err);
     }
@@ -110,17 +119,17 @@ export default function UsersPage() {
     setConfirm({
       type,
       id: user.id,
-      email: user.email,
+      label: user.fullName || user.email,
       open: true,
       loading: false,
     });
   };
 
   const closeConfirm = () =>
-    setConfirm({ type: '', id: null, email: '', open: false, loading: false });
+    setConfirm({ type: '', id: null, label: '', open: false, loading: false });
 
   const handleConfirm = async () => {
-    setConfirm((c) => ({ ...c, loading: true }));
+    setConfirm((current) => ({ ...current, loading: true }));
     try {
       if (confirm.type === 'approve') {
         await api.post(`/api/users/${confirm.id}/approve`);
@@ -137,10 +146,13 @@ export default function UsersPage() {
   };
 
   const UserTable = () => (
-    <div className="overflow-x-auto bg-white dark:bg-slate-900 shadow-md rounded-lg border border-slate-200 dark:border-slate-800">
-      <table className="min-w-full text-sm border-collapse">
-        <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-800">
+    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-md dark:border-slate-800 dark:bg-slate-900">
+      <table className="min-w-full border-collapse text-sm">
+        <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800">
           <tr>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-600 dark:text-slate-300">
+              Name
+            </th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-600 dark:text-slate-300">
               Email
             </th>
@@ -153,63 +165,55 @@ export default function UsersPage() {
           </tr>
         </thead>
         <tbody>
-          {pendingUsers.map((u) => (
+          {pendingUsers.map((user) => (
             <tr
-              key={`p-${u.id}`}
-              className="border-b border-slate-100 dark:border-slate-800 last:border-b-0 bg-amber-50 dark:bg-amber-900/10"
+              key={`pending-${user.id}`}
+              className="border-b border-slate-100 bg-amber-50 last:border-b-0 dark:border-slate-800 dark:bg-amber-900/10"
             >
-              <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">
-                {u.email}{' '}
-                <span className="text-amber-600 dark:text-amber-400 font-normal">
+              <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200">
+                {user.fullName || 'Name not set'}
+                <span className="ml-2 font-normal text-amber-600 dark:text-amber-400">
                   (Pending)
                 </span>
               </td>
-              <td className="px-4 py-3 capitalize text-slate-600 dark:text-slate-400">
-                {u.role}
-              </td>
+              <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{user.email}</td>
+              <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{roleLabel(user.role)}</td>
               <td className="px-4 py-3 text-center">
                 <div className="flex items-center justify-center gap-2">
-                  <Button
-                    onClick={() => openConfirm('approve', u)}
-                    size="sm"
-                    variant="primary"
-                  >
-                    Approve
-                  </Button>
-                  <Button
-                    onClick={() => openConfirm('deny', u)}
-                    size="sm"
-                    variant="danger"
-                  >
-                    Deny
-                  </Button>
+                  <Button onClick={() => openConfirm('approve', user)} size="sm" variant="primary">Approve</Button>
+                  <Button onClick={() => openConfirm('deny', user)} size="sm" variant="danger">Deny</Button>
                 </div>
               </td>
             </tr>
           ))}
-          {users.map((u) => (
+          {users.map((user) => (
             <tr
-              key={u.id}
-              className="border-b border-slate-100 dark:border-slate-800 last:border-b-0 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+              key={user.id}
+              className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"
             >
-              <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">
-                {u.email}
+              <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200">
+                {user.fullName || 'Name not set'}
               </td>
-              <td className="px-4 py-3 capitalize text-slate-600 dark:text-slate-400">
-                {u.role}
-              </td>
+              <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{user.email}</td>
+              <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{roleLabel(user.role)}</td>
               <td className="px-4 py-3 text-center">
                 <div className="flex items-center justify-center gap-1">
-                  <Button onClick={() => openForm(u)} variant="ghost" size="sm">
-                    <FiEdit2 />
+                  <Button
+                    onClick={() => openForm(user)}
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Edit ${user.fullName || user.email}`}
+                  >
+                    <FiEdit2 aria-hidden="true" />
                   </Button>
                   <Button
-                    onClick={() => openConfirm('delete', u)}
+                    onClick={() => openConfirm('delete', user)}
                     variant="ghost"
                     size="sm"
                     className="text-rose-600"
+                    aria-label={`Delete ${user.fullName || user.email}`}
                   >
-                    <FiTrash2 />
+                    <FiTrash2 aria-hidden="true" />
                   </Button>
                 </div>
               </td>
@@ -221,11 +225,16 @@ export default function UsersPage() {
   );
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
-        <h1 className="text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-          Manage Users
-        </h1>
+    <div className="mx-auto max-w-5xl">
+      <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div>
+          <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+            Manage Users
+          </h1>
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+            Manage user identity, global roles, and project-specific access.
+          </p>
+        </div>
         <Button variant="secondary" onClick={() => openForm(null)}>
           + Add User
         </Button>
@@ -233,19 +242,19 @@ export default function UsersPage() {
 
       {viewMode === 'mobile' ? (
         <div>
-          {pendingUsers.map((u) => (
+          {pendingUsers.map((user) => (
             <UserCard
-              key={`p-${u.id}`}
-              user={u}
+              key={`pending-${user.id}`}
+              user={user}
               onApprove={openConfirm.bind(null, 'approve')}
               onDeny={openConfirm.bind(null, 'deny')}
               isPending
             />
           ))}
-          {users.map((u) => (
+          {users.map((user) => (
             <UserCard
-              key={u.id}
-              user={u}
+              key={user.id}
+              user={user}
               onEdit={openForm}
               onDelete={openConfirm.bind(null, 'delete')}
             />
@@ -261,17 +270,19 @@ export default function UsersPage() {
         onSuccess={() => {
           fetchAllUsers();
           setShowForm(false);
+          setEditingUser(null);
         }}
-        onClose={() => setShowForm(false)}
+        onClose={() => {
+          setShowForm(false);
+          setEditingUser(null);
+        }}
         api={api}
       />
 
       {confirm.open && (
         <ConfirmModal
-          title={`${
-            confirm.type.charAt(0).toUpperCase() + confirm.type.slice(1)
-          } User`}
-          message={`Are you sure you want to ${confirm.type} "${confirm.email}"?`}
+          title={`${confirm.type.charAt(0).toUpperCase() + confirm.type.slice(1)} User`}
+          message={`Are you sure you want to ${confirm.type} "${confirm.label}"?`}
           variant={confirm.type === 'approve' ? 'primary' : 'danger'}
           onCancel={closeConfirm}
           onConfirm={handleConfirm}
