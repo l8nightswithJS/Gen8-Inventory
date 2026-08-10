@@ -14,199 +14,33 @@ import {
 const sleep = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    return await fetch(url, {
-      ...options,
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function warmGateway(onStatus) {
-  const healthUrl = `${api.defaults.baseURL}/healthz`;
-  const maxAttempts = 10;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    try {
-      const response = await fetchWithTimeout(
-        healthUrl,
-        {
-          method: 'GET',
-          cache: 'no-store',
-        },
-        12000,
-      );
-
-      if (response.ok) {
-        await response.text().catch(() => '');
-        return;
-      }
-    } catch {
-      // A sleeping Render gateway can reject/hold the first request while waking.
-    }
-
-    if (attempt === 1) {
-      onStatus?.('Starting the API gateway…');
-    }
-
-    if (attempt < maxAttempts) {
-      await sleep(5000);
-    }
-  }
-
-  throw new Error(
-    'The API gateway did not finish starting. Please wait a moment and try again.',
-  );
-}
-
-async function getWarmupTargets() {
-  const response = await fetchWithTimeout(
-    `${api.defaults.baseURL}/bootstrap/services`,
-    {
-      method: 'GET',
-      cache: 'no-store',
-    },
-    15000,
-  );
-
-  if (!response.ok) {
-    throw new Error('The API gateway could not provide its service startup list.');
-  }
-
-  const payload = await response.json();
-  if (!Array.isArray(payload?.services) || payload.services.length === 0) {
-    throw new Error('The API gateway returned an invalid service startup list.');
-  }
-
-  return payload.services.filter(
-    (service) =>
-      service &&
-      typeof service.name === 'string' &&
-      typeof service.url === 'string' &&
-      /^https:\/\//i.test(service.url),
-  );
-}
-
-async function waitForService(service) {
-  const maxAttempts = 15;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    try {
-      const response = await fetchWithTimeout(
-        service.url,
-        {
-          method: 'GET',
-          cache: 'no-store',
-        },
-        15000,
-      );
-
-      const contentType = response.headers.get('content-type') || '';
-      if (response.ok && contentType.includes('application/json')) {
-        const body = await response.json().catch(() => null);
-        if (body?.ok === true || body?.ready === true) {
-          return;
-        }
-      } else {
-        await response.text().catch(() => '');
-      }
-    } catch {
-      // Render's temporary loading response can surface as a CORS/network error
-      // until the actual service process is running. Retry the public endpoint.
-    }
-
-    if (attempt < maxAttempts) {
-      await sleep(4000);
-    }
-  }
-
-  throw new Error(`${service.name} did not finish starting.`);
-}
-
-async function warmBackendServices(onStatus) {
-  const services = await getWarmupTargets();
-  const readyNames = new Set();
-
-  const updateStatus = () => {
-    const waiting = services
-      .filter((service) => !readyNames.has(service.name))
-      .map((service) => service.name);
-
-    if (waiting.length === 0) {
-      onStatus?.('All backend services are ready. Signing in…');
-      return;
-    }
-
-    onStatus?.(
-      `Starting backend services (${readyNames.size}/${services.length}) — waiting for ${waiting.join(', ')}…`,
-    );
-  };
-
-  updateStatus();
-
-  await Promise.all(
-    services.map(async (service) => {
-      await waitForService(service);
-      readyNames.add(service.name);
-      updateStatus();
-    }),
-  );
-}
-
 async function requestLogin(email, password, onStatus) {
-  await warmGateway(onStatus);
-  await warmBackendServices(onStatus);
-
-  const loginUrl = `${api.defaults.baseURL}/api/auth/login`;
   const maxAttempts = 2;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      const response = await fetchWithTimeout(
-        loginUrl,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
-        },
-        30000,
+      const { data } = await api.post(
+        '/api/auth/login',
+        { email, password },
+        { timeout: 15000 },
       );
-
-      const rawBody = await response.text();
-      let body;
-
-      try {
-        body = rawBody ? JSON.parse(rawBody) : {};
-      } catch {
-        throw new Error('The login service returned an unreadable response.');
-      }
-
-      if (response.ok) return body;
-
-      if (response.status >= 500 && attempt < maxAttempts) {
-        onStatus?.('Authentication service reconnecting…');
-        await sleep(3000);
-        continue;
-      }
-
-      throw new Error(body?.message || 'Invalid email or password.');
+      return data;
     } catch (error) {
-      const retryableNetworkError =
-        error?.name === 'TypeError' || error?.name === 'AbortError';
+      const status = error?.response?.status;
+      const retryable = !status || status >= 500 || error?.code === 'ECONNABORTED';
 
-      if (retryableNetworkError && attempt < maxAttempts) {
-        onStatus?.('Authentication service reconnecting…');
-        await sleep(3000);
+      if (retryable && attempt < maxAttempts) {
+        onStatus?.('Reconnecting…');
+        await sleep(1000);
         continue;
       }
 
-      throw error;
+      throw new Error(
+        error?.response?.data?.message ||
+          error?.response?.data?.error ||
+          error?.message ||
+          'Invalid email or password.',
+      );
     }
   }
 
