@@ -1,0 +1,17 @@
+FROM node:22-alpine AS build
+
+WORKDIR /app
+COPY . .
+
+ARG REACT_APP_API_BASE_URL
+ENV REACT_APP_API_BASE_URL=${REACT_APP_API_BASE_URL}
+
+RUN npm ci --include=dev
+RUN npm run build -w frontend
+
+FROM caddy:2-alpine
+
+COPY frontend/Caddyfile.railway /etc/caddy/Caddyfile
+COPY --from=build /app/frontend/build /srv
+
+CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
