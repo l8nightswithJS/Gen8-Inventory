@@ -1,0 +1,19 @@
+{
+  admin off
+  persist_config off
+  auto_https off
+
+  servers {
+    trusted_proxies static private_ranges 100.0.0.0/8
+  }
+}
+
+:{$PORT} {
+  @health path /healthz
+  respond @health "ok" 200
+
+  root * /srv
+  encode gzip
+  try_files {path} /index.html
+  file_server
+}
