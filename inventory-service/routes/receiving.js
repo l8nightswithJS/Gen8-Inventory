@@ -3,7 +3,7 @@ const multer = require('multer');
 const { body, query } = require('express-validator');
 const {
   handleValidation,
-  requireClientMatch,
+  requireClientPermission,
   requireRole,
 } = require('shared-auth');
 const controller = require('../controllers/smartReceivingController');
@@ -14,16 +14,14 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 },
 });
 
-router.use(requireRole('admin'));
+router.use(requireRole('admin', 'inventory_staff'));
 
 router.post(
   '/extract',
-  // Multipart fields are not available until Multer parses the request, so
-  // client-scope enforcement intentionally follows upload.single().
   upload.single('document'),
   body('client_id').isInt({ min: 1 }).withMessage('client_id is required').toInt(),
   handleValidation,
-  requireClientMatch,
+  ...requireClientPermission('edit'),
   controller.extractDocument,
 );
 
@@ -32,7 +30,7 @@ router.get(
   query('client_id').isInt({ min: 1 }).withMessage('client_id is required').toInt(),
   query('q').optional().isString().isLength({ max: 200 }),
   handleValidation,
-  requireClientMatch,
+  ...requireClientPermission('read'),
   controller.searchProducts,
 );
 
@@ -40,7 +38,7 @@ router.get(
   '/receipts',
   query('client_id').isInt({ min: 1 }).withMessage('client_id is required').toInt(),
   handleValidation,
-  requireClientMatch,
+  ...requireClientPermission('read'),
   controller.listReceipts,
 );
 
@@ -54,7 +52,7 @@ router.post(
   body('coc_number').optional({ nullable: true }).isString().isLength({ max: 150 }),
   body('receiving_location_code').optional().isString().isLength({ max: 120 }),
   handleValidation,
-  requireClientMatch,
+  ...requireClientPermission('edit'),
   controller.createReceipt,
 );
 
