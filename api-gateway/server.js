@@ -43,66 +43,6 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '2mb' }));
 app.use(morgan('tiny'));
 
-const readyUntil = new Map();
-const READY_CACHE_MS = 10 * 60 * 1000;
-const WAKE_ATTEMPTS = 13;
-const WAKE_DELAY_MS = 5000;
-
-const sleep = (milliseconds) =>
-  new Promise((resolve) => setTimeout(resolve, milliseconds));
-
-async function ensureUpstreamReady(targetUrl) {
-  const cachedUntil = readyUntil.get(targetUrl) || 0;
-  if (cachedUntil > Date.now()) return;
-
-  const healthUrl = new URL('/healthz', targetUrl);
-
-  for (let attempt = 1; attempt <= WAKE_ATTEMPTS; attempt += 1) {
-    try {
-      const response = await fetch(healthUrl, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-          'Cache-Control': 'no-cache',
-          'Accept-Encoding': 'identity',
-        },
-        signal: AbortSignal.timeout(10000),
-      });
-
-      const contentType = response.headers.get('content-type') || '';
-      const isReady = response.ok && contentType.includes('application/json');
-      await response.arrayBuffer().catch(() => undefined);
-
-      if (isReady) {
-        readyUntil.set(targetUrl, Date.now() + READY_CACHE_MS);
-        if (attempt > 1) {
-          console.log(
-            `[GW] Upstream ${healthUrl.hostname} became ready on attempt ${attempt}.`,
-          );
-        }
-        return;
-      }
-    } catch (error) {
-      if (attempt === WAKE_ATTEMPTS) {
-        console.error(
-          `[GW] Upstream health check failed for ${healthUrl.hostname}:`,
-          error.message,
-        );
-      }
-    }
-
-    if (attempt === 1) {
-      console.log(`[GW] Waiting for sleeping upstream ${healthUrl.hostname}...`);
-    }
-
-    if (attempt < WAKE_ATTEMPTS) {
-      await sleep(WAKE_DELAY_MS);
-    }
-  }
-
-  throw new Error(`Upstream ${healthUrl.hostname} is unavailable.`);
-}
-
 const skippedResponseHeaders = new Set([
   'access-control-allow-credentials',
   'access-control-allow-headers',
@@ -118,8 +58,6 @@ const skippedResponseHeaders = new Set([
 
 const proxyRequest = (targetUrl) => async (req, res) => {
   try {
-    await ensureUpstreamReady(targetUrl);
-
     const target = new URL(req.originalUrl, targetUrl);
     const headers = { ...req.headers };
     delete headers.host;
@@ -132,6 +70,7 @@ const proxyRequest = (targetUrl) => async (req, res) => {
       method: req.method,
       headers,
       redirect: 'manual',
+      signal: AbortSignal.timeout(30000),
     };
 
     const isJsonRequest = req.headers['content-type']?.includes(
@@ -148,10 +87,6 @@ const proxyRequest = (targetUrl) => async (req, res) => {
     }
 
     const response = await fetch(target, options);
-
-    if ([502, 503, 504].includes(response.status)) {
-      readyUntil.delete(targetUrl);
-    }
 
     res.status(response.status);
     response.headers.forEach((value, name) => {
@@ -170,39 +105,13 @@ const proxyRequest = (targetUrl) => async (req, res) => {
     if (!res.headersSent) {
       res.status(503).json({
         error: 'Service temporarily unavailable',
-        message: 'A backend service is starting. Please try again shortly.',
+        message: 'A backend service could not be reached. Please try again.',
       });
     } else {
       res.end();
     }
   }
 };
-
-const publicWarmupTargets = [
-  {
-    name: 'Auth',
-    url: new URL('/healthz', AUTH_URL).toString(),
-  },
-  {
-    name: 'Inventory',
-    url: new URL('/healthz', INVENTORY_URL).toString(),
-  },
-  {
-    name: 'Clients',
-    url: new URL('/readyz', CLIENT_URL).toString(),
-  },
-  {
-    name: 'Barcode',
-    url: new URL('/healthz', BARCODE_URL).toString(),
-  },
-];
-
-// Public, non-secret service readiness targets. The browser calls these URLs
-// directly so Render sees inbound traffic for every sleeping free service.
-app.get('/bootstrap/services', (_req, res) => {
-  res.setHeader('Cache-Control', 'no-store');
-  return res.json({ services: publicWarmupTargets });
-});
 
 app.use('/api/auth', proxyRequest(AUTH_URL));
 app.use('/api/users', proxyRequest(AUTH_URL));
