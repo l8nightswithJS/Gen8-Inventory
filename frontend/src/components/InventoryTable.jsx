@@ -21,7 +21,7 @@ const humanLabel = (k) =>
   LABEL_OVERRIDES[k] ||
   k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
-function MobileCard({ item, onEdit, onDelete }) {
+function MobileCard({ item, onEdit, onDelete, selectable, selected, onToggleSelect }) {
   const part = item.part_number || item.name || '—';
   const onHand = item.total_quantity ?? '—';
   const isLow = item.total_quantity <= item.reorder_level && item.alert_enabled;
@@ -29,20 +29,31 @@ function MobileCard({ item, onEdit, onDelete }) {
   return (
     <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-md p-4 mb-4">
       <div className="flex items-start justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-3">
-        <div>
-          <p className="font-bold text-lg text-slate-800 dark:text-white">
-            {part}
-          </p>
-          {item.lot_number && (
-            <p className="text-sm font-mono text-slate-500 dark:text-slate-400">
-              Lot: {item.lot_number}
-            </p>
+        <div className="flex min-w-0 items-start gap-3">
+          {selectable && (
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={(event) => onToggleSelect?.(item.id, event.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-slate-300"
+              aria-label={`Select ${part} for label printing`}
+            />
           )}
-          {item.description && (
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
-              {item.description}
+          <div>
+            <p className="font-bold text-lg text-slate-800 dark:text-white">
+              {part}
             </p>
-          )}
+            {item.lot_number && (
+              <p className="text-sm font-mono text-slate-500 dark:text-slate-400">
+                Lot: {item.lot_number}
+              </p>
+            )}
+            {item.description && (
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
+                {item.description}
+              </p>
+            )}
+          </div>
         </div>
         <div className="text-right flex-shrink-0">
           <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -145,14 +156,33 @@ export default function InventoryTable({
   rowsPerPage,
   onRowsPerPageChange,
   viewMode = 'desktop',
+  selectable = false,
+  selectedIds = [],
+  onToggleSelect,
+  onToggleSelectAll,
 }) {
   const safeItems = useMemo(() => (Array.isArray(items) ? items : []), [items]);
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const pageIds = useMemo(() => safeItems.map((item) => item.id), [safeItems]);
+  const allPageSelected =
+    selectable && pageIds.length > 0 && pageIds.every((id) => selectedSet.has(id));
 
   const ResponsiveTable = () => (
     <div className="overflow-x-auto bg-white dark:bg-slate-900 shadow-md rounded-lg">
       <table className="w-full table-auto border-collapse text-sm">
         <thead className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
           <tr>
+            {selectable && (
+              <th scope="col" className="w-12 px-3 py-3 text-center">
+                <input
+                  type="checkbox"
+                  checked={allPageSelected}
+                  onChange={(event) => onToggleSelectAll?.(pageIds, event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300"
+                  aria-label="Select all items on this page for label printing"
+                />
+              </th>
+            )}
             {columns.map((key) => (
               <th
                 key={key}
@@ -185,7 +215,7 @@ export default function InventoryTable({
           {safeItems.length === 0 ? (
             <tr>
               <td
-                colSpan={columns.length + (role === 'admin' ? 1 : 0)}
+                colSpan={columns.length + (role === 'admin' ? 1 : 0) + (selectable ? 1 : 0)}
                 className="px-6 py-5 text-center text-gray-500 dark:text-gray-400 italic"
               >
                 No items to display.
@@ -200,6 +230,17 @@ export default function InventoryTable({
                   key={item.id}
                   className="border-b last:border-b-0 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                 >
+                  {selectable && (
+                    <td className="w-12 px-3 py-3 text-center align-top">
+                      <input
+                        type="checkbox"
+                        checked={selectedSet.has(item.id)}
+                        onChange={(event) => onToggleSelect?.(item.id, event.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300"
+                        aria-label={`Select ${item.part_number || item.name || `item ${item.id}`} for label printing`}
+                      />
+                    </td>
+                  )}
                   {columns.map((key) => {
                     const value = item[key] ?? item.attributes?.[key];
                     const isNumeric = isNumericLike(key);
@@ -285,6 +326,9 @@ export default function InventoryTable({
             item={it}
             onEdit={onEdit}
             onDelete={onDelete}
+            selectable={selectable}
+            selected={selectedSet.has(it.id)}
+            onToggleSelect={onToggleSelect}
           />
         ))
       )}
@@ -295,6 +339,11 @@ export default function InventoryTable({
     <div className="my-4 flex flex-col sm:flex-row items-center sm:justify-between gap-3 text-sm text-gray-700 dark:text-gray-300">
       <div className="font-medium">
         Total items: <span className="font-bold">{totalItems}</span>
+        {selectable && selectedIds.length > 0 && (
+          <span className="ml-3 text-blue-700 dark:text-blue-400">
+            Selected: <span className="font-bold">{selectedIds.length}</span>
+          </span>
+        )}
       </div>
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">

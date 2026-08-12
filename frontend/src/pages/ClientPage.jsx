@@ -14,6 +14,7 @@ import ScanModal from '../components/ScanModal';
 import LocationViewModal from '../components/LocationViewModal';
 import ItemActionModal from '../components/ItemActionModal';
 import UsbScannerInput from '../components/UsbScannerInput';
+import LocalZebraPrinter from '../components/LocalZebraPrinter';
 import { getSavedSchema, saveSchema } from '../context/SchemaContext';
 import {
   FiPlus,
@@ -27,7 +28,9 @@ import {
 export default function ClientPage() {
   const { clientId } = useParams();
   const navigate = useNavigate();
-  const isAdmin = localStorage.getItem('role') === 'admin';
+  const role = localStorage.getItem('role') || 'viewer';
+  const isAdmin = role === 'admin';
+  const canPrintLabels = role === 'admin' || role === 'staff';
 
   // --- State Hooks ---
   const [client, setClient] = useState(null);
@@ -37,6 +40,7 @@ export default function ClientPage() {
   const [viewMode, setViewMode] = useState('desktop');
   const [currentLocation, setCurrentLocation] = useState(null);
   const [adjustingItem, setAdjustingItem] = useState(null);
+  const [selectedLabelIds, setSelectedLabelIds] = useState([]);
   const [modalState, setModalState] = useState({
     addItem: false,
     import: false,
@@ -54,6 +58,10 @@ export default function ClientPage() {
   });
   const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(15);
+
+  useEffect(() => {
+    setSelectedLabelIds([]);
+  }, [clientId]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -134,11 +142,32 @@ export default function ClientPage() {
     if (!modalState.deleteItem) return;
     try {
       await api.delete(`/api/items/${modalState.deleteItem.id}`);
+      setSelectedLabelIds((prev) =>
+        prev.filter((id) => id !== modalState.deleteItem.id),
+      );
       handleModal('deleteItem', null);
       fetchItems();
     } catch (err) {
       setError(err?.response?.data?.message || 'Failed to delete item.');
     }
+  };
+
+  const toggleLabelSelection = (itemId, checked) => {
+    setSelectedLabelIds((prev) => {
+      if (checked) return prev.includes(itemId) ? prev : [...prev, itemId];
+      return prev.filter((id) => id !== itemId);
+    });
+  };
+
+  const togglePageLabelSelection = (itemIds, checked) => {
+    setSelectedLabelIds((prev) => {
+      const next = new Set(prev);
+      itemIds.forEach((id) => {
+        if (checked) next.add(id);
+        else next.delete(id);
+      });
+      return Array.from(next);
+    });
   };
 
   // --- Memoized Calculations ---
@@ -302,6 +331,14 @@ export default function ClientPage() {
           </div>
         </div>
 
+        {canPrintLabels && (
+          <LocalZebraPrinter
+            clientId={clientId}
+            selectedIds={selectedLabelIds}
+            totalItems={items.length}
+          />
+        )}
+
         {error && (
           <p className="text-red-600 dark:text-red-400 my-3">{error}</p>
         )}
@@ -323,13 +360,17 @@ export default function ClientPage() {
           totalPages={Math.max(1, Math.ceil(sortedItems.length / rowsPerPage))}
           onEdit={(item) => handleModal('editItem', item)}
           onDelete={(item) => handleModal('deleteItem', item)}
-          role={isAdmin ? 'admin' : 'viewer'}
+          role={role}
           rowsPerPage={rowsPerPage}
           onRowsPerPageChange={(n) => {
             setRowsPerPage(n);
             setPage(1);
           }}
           viewMode={viewMode}
+          selectable={canPrintLabels}
+          selectedIds={selectedLabelIds}
+          onToggleSelect={toggleLabelSelection}
+          onToggleSelectAll={togglePageLabelSelection}
         />
       </div>
 

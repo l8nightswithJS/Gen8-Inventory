@@ -9,10 +9,12 @@ const { requireRole } = require('shared-auth');
 // 2. User must be an 'admin' or 'staff'.
 router.use(requireRole('admin', 'staff'));
 
-// Print ALL labels for a client { client_id }
-router.post('/print/all', ctrl.printAllForClient);
+// Build ZPL for local Browser Print without contacting a printer from the server.
+router.post('/zpl/all', ctrl.getAllZplForClient);
+router.post('/zpl/selected', ctrl.getSelectedZpl);
 
-// Print labels for selected items { item_ids: number[] }
+// Legacy/network printing retained as a fallback.
+router.post('/print/all', ctrl.printAllForClient);
 router.post('/print/selected', ctrl.printSelected);
 
 module.exports = router;
