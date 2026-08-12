@@ -15,10 +15,12 @@ function accessMapFromUser(user) {
     if (id && (level === 'read' || level === 'edit')) map.set(id, level);
   }
 
+  // Backward compatibility for older tokens that only carried client_ids.
+  // Missing an explicit access level must fail closed to read-only, never edit.
   if (map.size === 0 && Array.isArray(user?.client_ids)) {
     for (const value of user.client_ids) {
       const id = parseClientId(value);
-      if (id) map.set(id, 'edit');
+      if (id) map.set(id, 'read');
     }
   }
 
@@ -60,5 +62,7 @@ function requireClientPermission(required = 'read') {
     },
   ];
 }
+
+requireClientPermission._test = { accessMapFromUser, parseClientId };
 
 module.exports = requireClientPermission;
