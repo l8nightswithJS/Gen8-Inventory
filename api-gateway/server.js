@@ -5,7 +5,7 @@ import cors from 'cors';
 import { Readable } from 'stream';
 
 const {
-  PORT: RENDER_PORT,
+  PORT: APP_PORT,
   CORS_ORIGIN = '',
   AUTH_URL,
   INVENTORY_URL,
@@ -21,13 +21,12 @@ for (const [key, value] of Object.entries(requiredUrls)) {
   }
 }
 
-const PORT = Number(RENDER_PORT) || 8080;
+const PORT = Number(APP_PORT) || 8080;
 const app = express();
 const allowlist = CORS_ORIGIN.split(',')
   .map((s) => s.trim())
   .filter(Boolean);
 
-// ✅ FIX: Update the CORS options to be more explicit
 const corsOptions = {
   origin(origin, cb) {
     if (!origin || allowlist.length === 0 || allowlist.includes(origin)) {
@@ -36,15 +35,13 @@ const corsOptions = {
     return cb(new Error('Not allowed by CORS'));
   },
   credentials: true,
-  allowedHeaders: ['Content-Type', 'Authorization'], // Explicitly allow the Authorization header
+  allowedHeaders: ['Content-Type', 'Authorization'],
 };
 
 app.use(cors(corsOptions));
-
 app.use(express.json());
 app.use(morgan('tiny'));
 
-// ... The rest of your server file (proxyRequest function, routes, etc.) remains the same ...
 const proxyRequest = (targetUrl) => async (req, res) => {
   try {
     const target = new URL(req.originalUrl, targetUrl);
