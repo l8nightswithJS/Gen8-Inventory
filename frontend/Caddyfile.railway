@@ -12,6 +12,15 @@
   @health path /healthz
   respond @health "ok" 200
 
+  header {
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Permissions-Policy "camera=(self), geolocation=(), microphone=()"
+    Strict-Transport-Security "max-age=31536000"
+    Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https: http://127.0.0.1:31991; font-src 'self' data:; media-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+  }
+
   root * /srv
   encode gzip
   try_files {path} /index.html
