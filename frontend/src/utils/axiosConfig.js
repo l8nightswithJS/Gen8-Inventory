@@ -1,31 +1,29 @@
 // frontend/src/utils/axiosConfig.js (Corrected)
 import axios from 'axios';
-import { getToken } from './auth'; // ✅ MOVED TO THE TOP
+import { getToken } from './auth';
 
-// 1. DYNAMIC BASE URL: point to the GATEWAY (not the auth service).
-// Uses env in prod; falls back to localhost gateway in dev.
+// Point to the API gateway. Use the deployment environment in production
+// and the local gateway during development.
 const baseURL =
   process.env.REACT_APP_API_BASE_URL ||
   (process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : null);
 
-// ✅ Add a debug log to confirm which baseURL is being used
 console.log('🔎 Axios Base URL:', baseURL);
 console.log('🔎 NODE_ENV:', process.env.NODE_ENV);
 console.log('🔎 REACT_APP_API_BASE_URL:', process.env.REACT_APP_API_BASE_URL);
 
 if (!baseURL) {
   throw new Error(
-    '❌ Missing REACT_APP_API_BASE_URL. Define it in Vercel → Environment Variables.',
+    '❌ Missing REACT_APP_API_BASE_URL. Define it in the frontend environment.',
   );
 }
 
 const api = axios.create({
   baseURL,
   timeout: 30000,
-  withCredentials: false, // we're using Bearer tokens, not cookies
+  withCredentials: false,
 });
 
-// Response interceptor for error logging
 api.interceptors.response.use(
   (resp) => resp,
   (error) => {
@@ -45,7 +43,6 @@ api.interceptors.response.use(
   },
 );
 
-// Unified token handler
 api.interceptors.request.use((config) => {
   const token = getToken();
   if (token) {
