@@ -15,6 +15,10 @@ function getClientId(req) {
   return Number(req.params?.clientId ?? req.params?.id);
 }
 
+function wantsArchivedClients(req) {
+  return req.user?.role === 'admin' && req.query?.include_archived === 'true';
+}
+
 async function uploadLogoToSupabase(fileBuffer, originalName, fileType) {
   const fileName = `${Date.now()}_${originalName}`;
   const { data, error } = await supabase.storage
@@ -34,12 +38,16 @@ exports.getAllClients = async (req, res, next) => {
     if (!userId) return res.status(401).json({ message: 'Authentication error' });
 
     if (req.user?.role === 'admin') {
+      const archivedClause = wantsArchivedClients(req)
+        ? ''
+        : 'WHERE client.archived_at IS NULL';
       const result = await pool.query(
         `SELECT client.*, COALESCE(settings.profile_key, 'general') AS inventory_profile,
                 'edit'::text AS access_level
          FROM clients AS client
          LEFT JOIN client_inventory_settings AS settings ON settings.client_id = client.id
-         ORDER BY client.name ASC`,
+         ${archivedClause}
+         ORDER BY client.archived_at NULLS FIRST, client.name ASC`,
       );
       return res.json(result.rows || []);
     }
@@ -51,6 +59,7 @@ exports.getAllClients = async (req, res, next) => {
        JOIN user_clients AS user_client ON client.id = user_client.client_id
        LEFT JOIN client_inventory_settings AS settings ON settings.client_id = client.id
        WHERE user_client.user_id = $1
+         AND client.archived_at IS NULL
        ORDER BY client.name ASC`,
       [userId],
     );
@@ -154,10 +163,10 @@ exports.updateClient = async (req, res, next) => {
     const setClauses = Object.keys(fields).map((key, idx) => `"${key}" = $${idx + 1}`).join(', ');
     const values = Object.values(fields);
     const result = await pool.query(
-      `UPDATE clients SET ${setClauses} WHERE id = $${values.length + 1} RETURNING *`,
+      `UPDATE clients SET ${setClauses} WHERE id = $${values.length + 1} AND archived_at IS NULL RETURNING *`,
       [...values, id],
     );
-    if (result.rows.length === 0) return res.status(404).json({ message: 'Client not found' });
+    if (result.rows.length === 0) return res.status(404).json({ message: 'Active client not found' });
     return res.json(result.rows[0]);
   } catch (err) {
     return next(err);
@@ -188,7 +197,10 @@ exports.getClientById = async (req, res, next) => {
        FROM clients AS client
        JOIN user_clients AS user_client ON user_client.client_id = client.id
        LEFT JOIN client_inventory_settings AS settings ON settings.client_id = client.id
-       WHERE client.id = $1 AND user_client.user_id = $2 LIMIT 1`,
+       WHERE client.id = $1
+         AND user_client.user_id = $2
+         AND client.archived_at IS NULL
+       LIMIT 1`,
       [id, req.user?.id],
     );
     if (!result.rows.length) return res.status(404).json({ message: 'Client not found' });
@@ -202,10 +214,92 @@ exports.deleteClient = async (req, res, next) => {
   try {
     const id = getClientId(req);
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ message: 'Invalid id' });
-    const result = await pool.query('DELETE FROM clients WHERE id = $1 RETURNING *', [id]);
+
+    const result = await pool.query(
+      `UPDATE clients
+       SET archived_at = COALESCE(archived_at, now())
+       WHERE id = $1
+       RETURNING *`,
+      [id],
+    );
     if (!result.rowCount) return res.status(404).json({ message: 'Client not found' });
-    return res.json({ message: 'Client deleted successfully.' });
+    return res.json({ message: 'Client archived successfully.', client: result.rows[0] });
   } catch (err) {
     return next(err);
+  }
+};
+
+exports.restoreClient = async (req, res, next) => {
+  try {
+    const id = getClientId(req);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ message: 'Invalid id' });
+
+    const result = await pool.query(
+      `UPDATE clients
+       SET archived_at = NULL
+       WHERE id = $1
+       RETURNING *`,
+      [id],
+    );
+    if (!result.rowCount) return res.status(404).json({ message: 'Client not found' });
+    return res.json({ message: 'Client restored successfully.', client: result.rows[0] });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+exports.permanentlyDeleteClient = async (req, res, next) => {
+  const id = getClientId(req);
+  const confirmation = typeof req.body?.confirm_name === 'string'
+    ? req.body.confirm_name.trim()
+    : '';
+
+  if (!Number.isInteger(id) || id < 1) return res.status(400).json({ message: 'Invalid id' });
+
+  let dbClient;
+  try {
+    dbClient = await pool.connect();
+    await dbClient.query('BEGIN');
+
+    const clientResult = await dbClient.query(
+      'SELECT id, name, archived_at FROM clients WHERE id = $1 FOR UPDATE',
+      [id],
+    );
+    if (!clientResult.rowCount) {
+      await dbClient.query('ROLLBACK');
+      return res.status(404).json({ message: 'Client not found' });
+    }
+
+    const client = clientResult.rows[0];
+    if (!client.archived_at) {
+      await dbClient.query('ROLLBACK');
+      return res.status(409).json({ message: 'Archive the client before permanently deleting it.' });
+    }
+    if (confirmation !== client.name) {
+      await dbClient.query('ROLLBACK');
+      return res.status(400).json({ message: 'Permanent delete confirmation does not match the client name.' });
+    }
+
+    const movementResult = await dbClient.query(
+      `DELETE FROM inventory_movements
+       WHERE item_id IN (SELECT id FROM items WHERE client_id = $1)`,
+      [id],
+    );
+
+    await dbClient.query('DELETE FROM clients WHERE id = $1', [id]);
+    await dbClient.query('COMMIT');
+
+    return res.json({
+      message: 'Client permanently deleted.',
+      deleted_client_id: id,
+      deleted_movement_count: movementResult.rowCount,
+    });
+  } catch (err) {
+    if (dbClient) {
+      try { await dbClient.query('ROLLBACK'); } catch {}
+    }
+    return next(err);
+  } finally {
+    if (dbClient) dbClient.release();
   }
 };

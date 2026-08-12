@@ -5,7 +5,7 @@ import cors from 'cors';
 import { Readable } from 'stream';
 
 const {
-  PORT: RENDER_PORT,
+  PORT: APP_PORT,
   CORS_ORIGIN = '',
   AUTH_URL,
   INVENTORY_URL,
@@ -21,7 +21,7 @@ for (const [key, value] of Object.entries(requiredUrls)) {
   }
 }
 
-const PORT = Number(RENDER_PORT) || 8080;
+const PORT = Number(APP_PORT) || 8080;
 const app = express();
 const allowlist = CORS_ORIGIN.split(',')
   .map((value) => value.trim())
