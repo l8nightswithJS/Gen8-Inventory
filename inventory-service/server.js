@@ -1,8 +1,6 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
-const fs = require('fs');
 
 const {
   authMiddleware,
@@ -20,8 +18,7 @@ const receivingRouter = require('./routes/receiving');
 const app = express();
 app.set('etag', false);
 
-// CORS must be enabled before public health routes so the browser can wake
-// sleeping Render services directly during login.
+// Enable CORS before health routes so browser clients can reach the service consistently.
 app.use(cors({ origin: process.env.CORS_ORIGIN || '*', credentials: true }));
 
 app.get('/healthz', (_req, res) =>
@@ -30,11 +27,6 @@ app.get('/healthz', (_req, res) =>
 
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
-
-const uploadDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-
-app.use('/api/uploads', requireClientMatch, express.static(uploadDir));
 app.use(authMiddleware);
 
 // Warehouse-wide master view is admin-only and intentionally not client-scoped.

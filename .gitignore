@@ -35,5 +35,8 @@ pnpm-debug.log*
 coverage/
 **/coverage/
 
+# Runtime uploads belong in managed storage, not Git
+inventory-service/uploads/
+
 # Misc
 .idea/
