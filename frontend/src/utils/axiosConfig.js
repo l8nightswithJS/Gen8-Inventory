@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { getToken, isTokenValid, setToken } from './auth';
+import { printLocalZebraJobs } from './localZebraPrint';
 
 const baseURL =
   process.env.REACT_APP_API_BASE_URL ||
@@ -63,7 +64,28 @@ async function refreshSessionToken() {
 }
 
 api.interceptors.response.use(
-  (response) => response,
+  async (response) => {
+    if (response?.data?.print_mode === 'local_windows_spooler') {
+      try {
+        const localResult = await printLocalZebraJobs(response.data);
+        response.data.local_print = localResult;
+        if (localResult.count > 0) {
+          response.data.message = localResult.printer_name
+            ? `${localResult.count} label(s) printed on ${localResult.printer_name}.`
+            : `${localResult.count} label(s) printed on the local Zebra printer.`;
+        }
+      } catch (localError) {
+        const wrapped = new Error(localError?.message || 'Local Zebra printing failed.');
+        wrapped.config = response.config;
+        wrapped.response = {
+          status: 503,
+          data: { message: wrapped.message },
+        };
+        throw wrapped;
+      }
+    }
+    return response;
+  },
   async (error) => {
     const config = error?.config || {};
     const status = error?.response?.status;
