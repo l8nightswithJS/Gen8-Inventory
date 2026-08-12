@@ -9,9 +9,23 @@ const {
 const controller = require('../controllers/smartReceivingController');
 
 const router = express.Router();
+const allowedDocumentTypes = new Set([
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+]);
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 },
+  limits: { fileSize: 20 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, callback) => {
+    if (!allowedDocumentTypes.has(file.mimetype)) {
+      const error = new Error('Document must be a PDF, PNG, JPEG, or WebP file.');
+      error.status = 415;
+      return callback(error);
+    }
+    return callback(null, true);
+  },
 });
 
 router.use(requireRole('admin', 'inventory_staff'));
