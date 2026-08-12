@@ -1,18 +1,29 @@
 const jwt = require('jsonwebtoken');
-const { sbAuth, sbAdmin } = require('../lib/supabaseClient');
+const { sbAuth } = require('../lib/supabaseClient');
 const { verifyJwt } = require('shared-auth');
+const {
+  buildSessionPayload,
+  SessionLoadError,
+} = require('../lib/sessionPayload');
 
 const {
   JWT_SECRET,
   JWT_ISSUER = 'gen8-inventory-auth',
-  JWT_TTL = '12h',
+  JWT_TTL = '1h',
 } = process.env;
 
-if (!JWT_SECRET) console.error('[AUTH] Missing JWT_SECRET');
+function signApplicationToken(payload) {
+  if (!JWT_SECRET) throw new Error('JWT signing is not configured');
+  return jwt.sign(payload, JWT_SECRET, {
+    algorithm: 'HS256',
+    expiresIn: JWT_TTL,
+    issuer: JWT_ISSUER,
+  });
+}
 
 function getBearer(req) {
-  const h = req.headers.authorization || '';
-  const [scheme, token] = h.split(' ');
+  const header = req.headers.authorization || '';
+  const [scheme, token] = header.split(' ');
   return scheme === 'Bearer' && token ? token : null;
 }
 
@@ -30,74 +41,29 @@ async function login(req, res) {
     }
 
     const normalizedEmail = String(email).trim().toLowerCase();
-    const { data, error: signInError } = await sbAuth.auth.signInWithPassword({
+    const { data, error } = await sbAuth.auth.signInWithPassword({
       email: normalizedEmail,
       password,
     });
 
-    if (signInError || !data?.user) {
+    if (error || !data?.user) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
-    const authUser = data.user;
-    const { data: profile, error: profileError } = await sbAdmin
-      .from('users')
-      .select('id, role, approved, first_name, last_name')
-      .eq('id', authUser.id)
-      .single();
-
-    if (profileError || !profile) {
-      return res.status(403).json({
-        message:
-          'Account is not provisioned for this application. Contact an administrator.',
-      });
-    }
-
-    if (profile.approved !== true) {
-      return res.status(403).json({ message: 'Account pending approval' });
-    }
-
-    const { data: clientLinks, error: clientLinksError } = await sbAdmin
-      .from('user_clients')
-      .select('client_id, access_level')
-      .eq('user_id', profile.id);
-
-    if (clientLinksError) {
-      console.error('[AUTH] Failed to fetch client links:', clientLinksError);
-      return res.status(500).json({ message: 'Login failed' });
-    }
-
-    const clientAccess = (clientLinks || []).map((link) => ({
-      client_id: Number(link.client_id),
-      access_level: link.access_level === 'read' ? 'read' : 'edit',
-    }));
-
-    const firstName = String(profile.first_name || '').trim();
-    const lastName = String(profile.last_name || '').trim();
-    const fullName = [firstName, lastName].filter(Boolean).join(' ');
-
-    const payload = {
-      id: profile.id,
-      role: profile.role,
-      email: authUser.email || normalizedEmail,
-      first_name: firstName,
-      last_name: lastName,
-      display_name: firstName,
-      full_name: fullName,
-      approved: profile.approved,
-      client_ids: clientAccess.map((entry) => entry.client_id),
-      client_access: clientAccess,
-    };
-
-    const token = jwt.sign(payload, JWT_SECRET, {
-      algorithm: 'HS256',
-      expiresIn: JWT_TTL,
-      issuer: JWT_ISSUER,
-    });
-
+    const payload = await buildSessionPayload(
+      data.user.id,
+      data.user.email || normalizedEmail,
+    );
+    const token = signApplicationToken(payload);
     return res.json({ token, user: payload });
-  } catch (err) {
-    console.error('[AUTH] Unexpected login error:', err);
+  } catch (error) {
+    if (error instanceof SessionLoadError) {
+      return res.status(error.status).json({ message: error.message });
+    }
+    console.error('[AUTH] Login failed:', {
+      name: error?.name,
+      message: error?.message,
+    });
     return res.status(500).json({ message: 'Login failed' });
   }
 }
@@ -106,30 +72,28 @@ async function verifyToken(req, res) {
   try {
     const token = req.body?.token || getBearer(req);
     if (!token) return res.status(401).json({ message: 'Missing token' });
-    const decoded = verifyJwt(token);
-    return res.json({ ok: true, user: decoded });
+    return res.json({ ok: true, user: verifyJwt(token) });
   } catch {
     return res.status(401).json({ message: 'Invalid token' });
   }
 }
 
 async function me(req, res) {
-  try {
-    if (req.user) return res.json({ user: req.user });
-    const token = getBearer(req);
-    if (!token) return res.status(401).json({ message: 'Missing token' });
-    const decoded = verifyJwt(token);
-    return res.json({ user: decoded });
-  } catch {
-    return res.status(401).json({ message: 'Invalid token' });
-  }
+  if (!req.user) return res.status(401).json({ message: 'Invalid token' });
+  return res.json({ user: req.user });
 }
 
 async function logout(_req, res) {
-  try {
-    await sbAuth.auth.signOut();
-  } catch {}
+  // Application JWTs are stateless. The browser removes its local token.
+  // Server-side revocation can be added later with token/session versioning.
   return res.json({ ok: true });
 }
 
-module.exports = { register, login, verifyToken, me, logout };
+module.exports = {
+  register,
+  login,
+  verifyToken,
+  me,
+  logout,
+  _test: { signApplicationToken },
+};
