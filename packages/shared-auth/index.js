@@ -3,6 +3,7 @@ const authMiddleware = require('./authMiddleware');
 const requireRole = require('./requireRole');
 const requireClientMatch = require('./requireClientMatch');
 const requireClientPermission = require('./requireClientPermission');
+const requireInternalGateway = require('./requireInternalGateway');
 const { handleValidation } = require('./validationMiddleware');
 const errorHandler = require('./errorHandler');
 
@@ -12,6 +13,7 @@ module.exports = {
   requireRole,
   requireClientMatch,
   requireClientPermission,
+  requireInternalGateway,
   handleValidation,
   errorHandler,
 };
