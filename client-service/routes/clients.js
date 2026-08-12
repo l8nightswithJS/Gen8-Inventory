@@ -74,6 +74,24 @@ router.put(
   controller.updateClient,
 );
 
+router.post(
+  '/:clientId/restore',
+  requireRole('admin'),
+  param('clientId').isInt({ min: 1 }).toInt(),
+  handleValidation,
+  controller.restoreClient,
+);
+
+router.delete(
+  '/:clientId/permanent',
+  requireRole('admin'),
+  param('clientId').isInt({ min: 1 }).toInt(),
+  body('confirm_name').isString().trim().notEmpty(),
+  handleValidation,
+  controller.permanentlyDeleteClient,
+);
+
+// Default delete behavior is intentionally non-destructive: archive first.
 router.delete(
   '/:clientId',
   requireRole('admin'),
