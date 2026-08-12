@@ -5,6 +5,7 @@ const {
   cleanText,
   extractReceivingDocument,
   integerOrNull,
+  normalizeDate,
   numberOrNull,
 } = require('./_receivingDocument');
 const { storeReceivingDocument } = require('./_receivingStorage');
@@ -169,6 +170,14 @@ exports.createReceipt = async (req, res, next) => {
     return res.status(400).json({ message: 'At least one confirmed receiving line is required.' });
   }
 
+  const receivedDateInput = cleanText(req.body?.received_date);
+  const receivedDate = receivedDateInput ? normalizeDate(receivedDateInput) : null;
+  if (receivedDateInput && !receivedDate) {
+    return res.status(400).json({
+      message: 'Received Date must be an unambiguous valid date in YYYY-MM-DD format.',
+    });
+  }
+
   let db;
   try {
     db = await pool.connect();
@@ -199,7 +208,7 @@ exports.createReceipt = async (req, res, next) => {
         cleanText(req.body?.po_number),
         cleanText(req.body?.packing_slip_number),
         cleanText(req.body?.coc_number),
-        cleanText(req.body?.received_date),
+        receivedDate,
         actor.actorUserId,
         actor.actorEmail,
         cleanText(req.body?.notes),
@@ -231,8 +240,8 @@ exports.createReceipt = async (req, res, next) => {
       if (cleanText(line.batch_number)) attributes.batch_number = cleanText(line.batch_number);
       if (cleanText(line.color)) attributes.color = cleanText(line.color);
       if (cleanText(line.additive)) attributes.additive = cleanText(line.additive);
-      if (cleanText(line.manufacture_date)) attributes.manufacture_date = cleanText(line.manufacture_date);
-      if (cleanText(line.expiration_date)) attributes.expiration_date = cleanText(line.expiration_date);
+      if (normalizeDate(line.manufacture_date)) attributes.manufacture_date = normalizeDate(line.manufacture_date);
+      if (normalizeDate(line.expiration_date)) attributes.expiration_date = normalizeDate(line.expiration_date);
 
       const receiptLineResult = await db.query(
         `INSERT INTO receipt_lines (
