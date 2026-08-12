@@ -5,10 +5,12 @@ const ACCESS_LEVELS = ['read', 'edit'];
 const USER_SELECT = 'id, email, first_name, last_name, role, approved';
 
 const handleSupabaseError = (res, error, context) => {
-  console.error(`Error in ${context}:`, error);
+  console.error(`[AUTH] ${context} failed:`, {
+    code: error?.code,
+    message: error?.message,
+  });
   return res.status(500).json({
-    message: `Internal server error during ${context}`,
-    details: error.message,
+    message: `Unable to complete ${context}.`,
   });
 };
 
@@ -67,7 +69,7 @@ exports.getAllUsers = async (_req, res) => {
     .from('users')
     .select(USER_SELECT)
     .order('email', { ascending: true });
-  if (error) return handleSupabaseError(res, error, 'getAllUsers');
+  if (error) return handleSupabaseError(res, error, 'load users');
   return res.json(data || []);
 };
 
@@ -77,7 +79,7 @@ exports.getPendingUsers = async (_req, res) => {
     .select(USER_SELECT)
     .eq('approved', false)
     .order('email', { ascending: true });
-  if (error) return handleSupabaseError(res, error, 'getPendingUsers');
+  if (error) return handleSupabaseError(res, error, 'load pending users');
   return res.json(data || []);
 };
 
@@ -88,7 +90,7 @@ exports.getUserClients = async (req, res) => {
     .select('client_id, access_level')
     .eq('user_id', id)
     .order('client_id', { ascending: true });
-  if (error) return handleSupabaseError(res, error, 'getUserClients');
+  if (error) return handleSupabaseError(res, error, 'load user project access');
   return res.json(data || []);
 };
 
@@ -156,7 +158,7 @@ exports.createUser = async (req, res) => {
         await sbAdmin.auth.admin.deleteUser(createdAuthUser.id);
       } catch {}
     }
-    return handleSupabaseError(res, error, 'createUser');
+    return handleSupabaseError(res, error, 'create user');
   }
 };
 
@@ -167,7 +169,7 @@ exports.approveUser = async (req, res) => {
     .update({ approved: true })
     .eq('id', id)
     .select(USER_SELECT);
-  if (error) return handleSupabaseError(res, error, 'approveUser');
+  if (error) return handleSupabaseError(res, error, 'approve user');
   return res.json({ message: 'User approved successfully', user: data[0] });
 };
 
@@ -270,7 +272,7 @@ exports.updateUser = async (req, res) => {
 
     return res.json({ message: 'User updated successfully', user: updatedUser });
   } catch (error) {
-    return handleSupabaseError(res, error, 'updateUser');
+    return handleSupabaseError(res, error, 'update user');
   }
 };
 
@@ -282,7 +284,7 @@ exports.updateUserClients = async (req, res) => {
     await replaceUserAssignments(id, assignments);
     return res.json({ message: "User's project access updated successfully." });
   } catch (error) {
-    return handleSupabaseError(res, error, 'updateUserClients');
+    return handleSupabaseError(res, error, 'update user project access');
   }
 };
 
@@ -293,6 +295,6 @@ exports.deleteUser = async (req, res) => {
   }
 
   const { error } = await sbAdmin.auth.admin.deleteUser(id);
-  if (error) return handleSupabaseError(res, error, 'deleteUser');
+  if (error) return handleSupabaseError(res, error, 'delete user');
   return res.status(204).send();
 };
