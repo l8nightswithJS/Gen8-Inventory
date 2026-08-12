@@ -19,8 +19,36 @@ function wantsArchivedClients(req) {
   return req.user?.role === 'admin' && req.query?.include_archived === 'true';
 }
 
-async function uploadLogoToSupabase(fileBuffer, originalName, fileType) {
-  const fileName = `${Date.now()}_${originalName}`;
+function sanitizeStorageFileName(originalName) {
+  const sanitized = String(originalName || 'logo')
+    .replace(/[^a-zA-Z0-9._-]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return sanitized.slice(-120) || 'logo';
+}
+
+function getLogoStoragePath(logoUrl) {
+  if (typeof logoUrl !== 'string' || !logoUrl) return null;
+
+  const marker = `/storage/v1/object/public/${LOGO_BUCKET}/`;
+  const markerIndex = logoUrl.indexOf(marker);
+  if (markerIndex === -1) return null;
+
+  const encodedPath = logoUrl
+    .slice(markerIndex + marker.length)
+    .split('?')[0];
+  if (!encodedPath) return null;
+
+  try {
+    return decodeURIComponent(encodedPath);
+  } catch {
+    return encodedPath;
+  }
+}
+
+async function uploadLogoToSupabase(fileBuffer, originalName, fileType, clientId) {
+  const safeName = sanitizeStorageFileName(originalName);
+  const folder = Number.isInteger(Number(clientId)) ? `${Number(clientId)}/` : '';
+  const fileName = `${folder}${Date.now()}_${safeName}`;
   const { data, error } = await supabase.storage
     .from(LOGO_BUCKET)
     .upload(fileName, fileBuffer, {
@@ -29,7 +57,47 @@ async function uploadLogoToSupabase(fileBuffer, originalName, fileType) {
       contentType: fileType,
     });
   if (error) throw error;
-  return supabase.storage.from(LOGO_BUCKET).getPublicUrl(data.path).data.publicUrl;
+
+  return {
+    path: data.path,
+    publicUrl: supabase.storage.from(LOGO_BUCKET).getPublicUrl(data.path).data.publicUrl,
+  };
+}
+
+async function removeLogoPathFromSupabase(path) {
+  if (!path) return false;
+  const { error } = await supabase.storage.from(LOGO_BUCKET).remove([path]);
+  if (error) throw error;
+  return true;
+}
+
+async function removeLogoFromSupabase(logoUrl) {
+  const path = getLogoStoragePath(logoUrl);
+  return removeLogoPathFromSupabase(path);
+}
+
+async function removeClientLogoObjects(clientId, currentLogoUrl) {
+  const paths = new Set();
+  const currentPath = getLogoStoragePath(currentLogoUrl);
+  if (currentPath) paths.add(currentPath);
+
+  const folder = String(clientId);
+  const { data: folderObjects, error: listError } = await supabase.storage
+    .from(LOGO_BUCKET)
+    .list(folder, { limit: 1000 });
+  if (listError) throw listError;
+
+  for (const object of folderObjects || []) {
+    if (object?.name) paths.add(`${folder}/${object.name}`);
+  }
+
+  if (paths.size === 0) return 0;
+
+  const { error: removeError } = await supabase.storage
+    .from(LOGO_BUCKET)
+    .remove([...paths]);
+  if (removeError) throw removeError;
+  return paths.size;
 }
 
 exports.getAllClients = async (req, res, next) => {
@@ -74,7 +142,8 @@ exports.createClient = async (req, res, next) => {
   const userId = req.user?.id;
   const profileKey = normalizeProfileKey(req.body?.profile_key);
   const preset = getProfilePreset(profileKey);
-  let logo_url = null;
+  let logoUrl = null;
+  let uploadedLogo = null;
   let dbClient = null;
   let transactionStarted = false;
 
@@ -83,21 +152,28 @@ exports.createClient = async (req, res, next) => {
 
   try {
     dbClient = await pool.connect();
+    await dbClient.query('BEGIN');
+    transactionStarted = true;
+
+    const clientResult = await dbClient.query(
+      'INSERT INTO clients (name, logo_url, user_id) VALUES ($1, NULL, $2) RETURNING id',
+      [name, userId],
+    );
+    const newClientId = clientResult.rows[0].id;
+
     if (req.file) {
-      logo_url = await uploadLogoToSupabase(
+      uploadedLogo = await uploadLogoToSupabase(
         req.file.buffer,
         req.file.originalname,
         req.file.mimetype,
+        newClientId,
+      );
+      logoUrl = uploadedLogo.publicUrl;
+      await dbClient.query(
+        'UPDATE clients SET logo_url = $1 WHERE id = $2',
+        [logoUrl, newClientId],
       );
     }
-
-    await dbClient.query('BEGIN');
-    transactionStarted = true;
-    const clientResult = await dbClient.query(
-      'INSERT INTO clients (name, logo_url, user_id) VALUES ($1, $2, $3) RETURNING id',
-      [name, logo_url, userId],
-    );
-    const newClientId = clientResult.rows[0].id;
 
     await dbClient.query(
       `INSERT INTO user_clients (user_id, client_id, access_level)
@@ -135,6 +211,13 @@ exports.createClient = async (req, res, next) => {
     if (dbClient && transactionStarted) {
       try { await dbClient.query('ROLLBACK'); } catch {}
     }
+    if (uploadedLogo?.path) {
+      try {
+        await removeLogoPathFromSupabase(uploadedLogo.path);
+      } catch (cleanupError) {
+        console.error('Failed to clean up client logo after create failure:', cleanupError);
+      }
+    }
     if (error.code === '28P01') {
       return res.status(503).json({ message: 'Client database credentials are invalid.' });
     }
@@ -145,15 +228,31 @@ exports.createClient = async (req, res, next) => {
 };
 
 exports.updateClient = async (req, res, next) => {
+  let uploadedLogo = null;
+  let updateSucceeded = false;
+
   try {
     const id = getClientId(req);
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ message: 'Invalid id' });
+
+    const existingResult = await pool.query(
+      'SELECT logo_url FROM clients WHERE id = $1 AND archived_at IS NULL LIMIT 1',
+      [id],
+    );
+    if (!existingResult.rowCount) return res.status(404).json({ message: 'Active client not found' });
+    const previousLogoUrl = existingResult.rows[0].logo_url;
 
     const fields = {};
     if (typeof req.body.name === 'string') fields.name = req.body.name.trim();
     if (Object.prototype.hasOwnProperty.call(req.body, 'barcode')) fields.barcode = req.body.barcode?.trim() || null;
     if (req.file) {
-      fields.logo_url = await uploadLogoToSupabase(req.file.buffer, req.file.originalname, req.file.mimetype);
+      uploadedLogo = await uploadLogoToSupabase(
+        req.file.buffer,
+        req.file.originalname,
+        req.file.mimetype,
+        id,
+      );
+      fields.logo_url = uploadedLogo.publicUrl;
     } else if (Object.prototype.hasOwnProperty.call(req.body, 'logo_url')) {
       fields.logo_url = req.body.logo_url || null;
     }
@@ -167,8 +266,30 @@ exports.updateClient = async (req, res, next) => {
       [...values, id],
     );
     if (result.rows.length === 0) return res.status(404).json({ message: 'Active client not found' });
+    updateSucceeded = true;
+
+    let logoCleanupWarning = null;
+    if (previousLogoUrl && previousLogoUrl !== result.rows[0].logo_url) {
+      try {
+        await removeLogoFromSupabase(previousLogoUrl);
+      } catch (cleanupError) {
+        console.error('Failed to remove replaced client logo:', cleanupError);
+        logoCleanupWarning = 'Client was updated, but the previous logo could not be removed from storage.';
+      }
+    }
+
+    if (logoCleanupWarning) {
+      return res.json({ ...result.rows[0], logo_cleanup_warning: logoCleanupWarning });
+    }
     return res.json(result.rows[0]);
   } catch (err) {
+    if (uploadedLogo?.path && !updateSucceeded) {
+      try {
+        await removeLogoPathFromSupabase(uploadedLogo.path);
+      } catch (cleanupError) {
+        console.error('Failed to clean up client logo after update failure:', cleanupError);
+      }
+    }
     return next(err);
   }
 };
@@ -262,7 +383,7 @@ exports.permanentlyDeleteClient = async (req, res, next) => {
     await dbClient.query('BEGIN');
 
     const clientResult = await dbClient.query(
-      'SELECT id, name, archived_at FROM clients WHERE id = $1 FOR UPDATE',
+      'SELECT id, name, archived_at, logo_url FROM clients WHERE id = $1 FOR UPDATE',
       [id],
     );
     if (!clientResult.rowCount) {
@@ -289,10 +410,21 @@ exports.permanentlyDeleteClient = async (req, res, next) => {
     await dbClient.query('DELETE FROM clients WHERE id = $1', [id]);
     await dbClient.query('COMMIT');
 
+    let deletedLogoCount = 0;
+    let logoCleanupWarning = null;
+    try {
+      deletedLogoCount = await removeClientLogoObjects(id, client.logo_url);
+    } catch (cleanupError) {
+      console.error('Failed to remove permanently deleted client logo:', cleanupError);
+      logoCleanupWarning = 'Client data was deleted, but one or more logo files could not be removed from storage.';
+    }
+
     return res.json({
       message: 'Client permanently deleted.',
       deleted_client_id: id,
       deleted_movement_count: movementResult.rowCount,
+      deleted_logo_count: deletedLogoCount,
+      ...(logoCleanupWarning ? { logo_cleanup_warning: logoCleanupWarning } : {}),
     });
   } catch (err) {
     if (dbClient) {
@@ -302,4 +434,9 @@ exports.permanentlyDeleteClient = async (req, res, next) => {
   } finally {
     if (dbClient) dbClient.release();
   }
+};
+
+exports._test = {
+  getLogoStoragePath,
+  sanitizeStorageFileName,
 };
