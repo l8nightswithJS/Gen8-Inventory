@@ -1,47 +1,47 @@
-// barcode-service/routes/barcodes.js
 const express = require('express');
 const { query, body, param } = require('express-validator');
-const { handleValidation, requireRole } = require('shared-auth');
+const {
+  handleValidation,
+  requireClientPermission,
+  requireRole,
+} = require('shared-auth');
 const ctrl = require('../controllers/barcodesController');
 
 const router = express.Router();
 
-// All barcode routes require auth
-
-// Lookup by barcode
 router.get(
   '/lookup',
-  query('code').isString().notEmpty(),
-  query('client_id').optional().isInt().toInt(),
+  query('code').isString().trim().notEmpty().isLength({ max: 255 }),
+  query('client_id').isInt({ min: 1 }).toInt(),
   handleValidation,
+  ...requireClientPermission('read'),
   ctrl.lookup,
 );
 
-// Assign barcode to item (admin only)
 router.post(
   '/',
   requireRole('admin'),
-  body('client_id').isInt().toInt(),
-  body('item_id').isInt().toInt(),
-  body('barcode').isString().notEmpty(),
-  body('symbology').optional().isString(),
+  body('client_id').isInt({ min: 1 }).toInt(),
+  body('item_id').isInt({ min: 1 }).toInt(),
+  body('barcode').isString().trim().notEmpty().isLength({ max: 255 }),
+  body('symbology').optional({ nullable: true }).isString().trim().isLength({ max: 80 }),
   handleValidation,
   ctrl.assign,
 );
 
-// List barcodes for an item
 router.get(
   '/items/:id',
-  param('id').isInt().toInt(),
+  param('id').isInt({ min: 1 }).toInt(),
+  query('client_id').isInt({ min: 1 }).toInt(),
   handleValidation,
+  ...requireClientPermission('read'),
   ctrl.listForItem,
 );
 
-// Delete a mapping (admin only)
 router.delete(
   '/:id',
   requireRole('admin'),
-  param('id').isInt().toInt(),
+  param('id').isInt({ min: 1 }).toInt(),
   handleValidation,
   ctrl.remove,
 );
