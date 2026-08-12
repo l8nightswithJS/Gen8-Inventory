@@ -11,7 +11,19 @@ const {
 
 const router = express.Router();
 const storage = multer.memoryStorage();
-const upload = multer({ storage });
+const allowedLogoTypes = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, callback) => {
+    if (!allowedLogoTypes.has(file.mimetype)) {
+      const error = new Error('Logo must be a PNG, JPEG, or WebP image.');
+      error.status = 415;
+      return callback(error);
+    }
+    return callback(null, true);
+  },
+});
 
 router.get('/inventory-profiles', inventorySettingsController.listProfiles);
 router.get('/', controller.getAllClients);
@@ -59,7 +71,7 @@ router.post(
   '/add',
   requireRole('admin'),
   upload.single('logo'),
-  body('name').isString().trim().notEmpty(),
+  body('name').isString().trim().notEmpty().isLength({ max: 160 }),
   body('profile_key').optional().isIn(['general', 'resin', 'molded_parts', 'genmark_components']),
   handleValidation,
   controller.createClient,
@@ -70,6 +82,8 @@ router.put(
   requireRole('admin'),
   upload.single('logo'),
   param('clientId').isInt({ min: 1 }).toInt(),
+  body('name').optional().isString().trim().notEmpty().isLength({ max: 160 }),
+  body('barcode').optional({ nullable: true }).isString().trim().isLength({ max: 160 }),
   handleValidation,
   controller.updateClient,
 );
@@ -91,7 +105,6 @@ router.delete(
   controller.permanentlyDeleteClient,
 );
 
-// Default delete behavior is intentionally non-destructive: archive first.
 router.delete(
   '/:clientId',
   requireRole('admin'),
