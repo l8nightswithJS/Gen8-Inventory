@@ -1,14 +1,9 @@
-const net = require('net');
 const pool = require('../db/pool');
 
-const PRINTER_HOST = process.env.ZEBRA_HOST || process.env.PRINTER_HOST;
-const PRINTER_PORT = Number(
-  process.env.ZEBRA_PORT || process.env.PRINTER_PORT || 9100,
-);
 const LABEL_WIDTH = Number(process.env.ZPL_LABEL_WIDTH || 812);
 const LABEL_HEIGHT = Number(process.env.ZPL_LABEL_HEIGHT || 406);
 const COPIES = Math.max(1, Number(process.env.ZPL_COPIES || 1));
-const BATCH_SIZE = Number(process.env.PRINT_BATCH_SIZE || 100);
+const BATCH_SIZE = Math.max(1, Number(process.env.PRINT_BATCH_SIZE || 100));
 
 function escapeZpl(value = '') {
   return String(value).replace(/[\^~\\]/g, ' ');
@@ -78,51 +73,26 @@ function buildLocationLabelZpl(location) {
   ].join('');
 }
 
-function sendZplRaw(zpl, { host, port }) {
-  return new Promise((resolve, reject) => {
-    const socket = new net.Socket();
-    let settled = false;
-    socket.setTimeout(10000);
-    socket.on('connect', () => {
-      socket.write(zpl, 'utf8', () => socket.end());
-    });
-    socket.on('timeout', () => {
-      if (!settled) {
-        settled = true;
-        socket.destroy();
-        reject(new Error('Printer connection timed out'));
-      }
-    });
-    socket.on('error', (error) => {
-      if (!settled) {
-        settled = true;
-        reject(error);
-      }
-    });
-    socket.on('close', () => {
-      if (!settled) {
-        settled = true;
-        resolve();
-      }
-    });
-    socket.connect(port, host);
-  });
+function buildLocalPrintJob(labels) {
+  const zpl = labels
+    .flatMap((label) => Array.from({ length: COPIES }, () => label))
+    .join('');
+  return {
+    zpl,
+    label_count: labels.length,
+    copy_count: labels.length * COPIES,
+  };
 }
 
-async function sendLabels(labels) {
-  if (!PRINTER_HOST || !PRINTER_PORT) {
-    const error = new Error(
-      'Printer not configured. Set ZEBRA_HOST and ZEBRA_PORT.',
-    );
-    error.status = 500;
-    throw error;
-  }
-  const payload = labels
-    .flatMap((label) =>
-      Array.from({ length: COPIES }, () => label),
-    )
-    .join('');
-  if (payload) await sendZplRaw(payload, { host: PRINTER_HOST, port: PRINTER_PORT });
+function localPrintResponse(jobs, totalLabels, message) {
+  return {
+    ok: true,
+    print_mode: 'local_windows_spooler',
+    count: totalLabels,
+    copies: COPIES,
+    jobs,
+    message,
+  };
 }
 
 async function fetchContainerRows({ clientId = null, ids = null, offset = 0, limit = BATCH_SIZE }) {
@@ -177,28 +147,29 @@ exports.printAllForClient = async (req, res, next) => {
     }
 
     let offset = 0;
-    let totalPrinted = 0;
+    let totalLabels = 0;
+    const jobs = [];
     while (true) {
       const result = await fetchContainerRows({ clientId, offset });
       if (!result.rows.length) break;
-      await sendLabels(
-        result.rows.map((item) =>
-          buildContainerLabelZpl({
-            clientName: item.client_name,
-            item,
-          }),
-        ),
+      const labels = result.rows.map((item) =>
+        buildContainerLabelZpl({
+          clientName: item.client_name,
+          item,
+        }),
       );
-      totalPrinted += result.rows.length;
+      jobs.push(buildLocalPrintJob(labels));
+      totalLabels += labels.length;
       offset += result.rows.length;
     }
 
-    return res.json({
-      ok: true,
-      count: totalPrinted,
-      copies: COPIES,
-      message: totalPrinted ? 'Container labels printed.' : 'No active containers to print.',
-    });
+    return res.json(localPrintResponse(
+      jobs,
+      totalLabels,
+      totalLabels
+        ? 'Container labels are ready for the local Zebra printer.'
+        : 'No active containers to print.',
+    ));
   } catch (error) {
     return next(error);
   }
@@ -215,27 +186,28 @@ exports.printSelected = async (req, res, next) => {
       return res.status(400).json({ message: 'item_ids array is required' });
     }
 
-    let totalPrinted = 0;
+    let totalLabels = 0;
+    const jobs = [];
     for (let index = 0; index < ids.length; index += BATCH_SIZE) {
       const batch = ids.slice(index, index + BATCH_SIZE);
       const result = await fetchContainerRows({ ids: batch, offset: 0, limit: batch.length });
-      await sendLabels(
-        result.rows.map((item) =>
-          buildContainerLabelZpl({
-            clientName: item.client_name,
-            item,
-          }),
-        ),
+      const labels = result.rows.map((item) =>
+        buildContainerLabelZpl({
+          clientName: item.client_name,
+          item,
+        }),
       );
-      totalPrinted += result.rows.length;
+      if (labels.length) jobs.push(buildLocalPrintJob(labels));
+      totalLabels += labels.length;
     }
 
-    return res.json({
-      ok: true,
-      count: totalPrinted,
-      copies: COPIES,
-      message: totalPrinted ? 'Selected container labels printed.' : 'No active containers found.',
-    });
+    return res.json(localPrintResponse(
+      jobs,
+      totalLabels,
+      totalLabels
+        ? 'Selected labels are ready for the local Zebra printer.'
+        : 'No active containers found.',
+    ));
   } catch (error) {
     return next(error);
   }
@@ -254,13 +226,12 @@ exports.printLocation = async (req, res, next) => {
     if (!result.rows[0]) {
       return res.status(404).json({ message: 'Location not found.' });
     }
-    await sendLabels([buildLocationLabelZpl(result.rows[0])]);
-    return res.json({
-      ok: true,
-      count: 1,
-      copies: COPIES,
-      message: `Location label ${result.rows[0].code} printed.`,
-    });
+    const job = buildLocalPrintJob([buildLocationLabelZpl(result.rows[0])]);
+    return res.json(localPrintResponse(
+      [job],
+      1,
+      `Location label ${result.rows[0].code} is ready for the local Zebra printer.`,
+    ));
   } catch (error) {
     return next(error);
   }
@@ -268,6 +239,7 @@ exports.printLocation = async (req, res, next) => {
 
 module.exports._test = {
   buildContainerLabelZpl,
+  buildLocalPrintJob,
   buildLocationLabelZpl,
   escapeZpl,
 };
