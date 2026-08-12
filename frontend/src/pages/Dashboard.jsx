@@ -18,6 +18,7 @@ export default function Dashboard() {
   const [clients, setClients] = useState([]);
   const [error, setError] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const navigate = useNavigate();
   const role = localStorage.getItem('role') || '';
   const isAdmin = role === 'admin';
@@ -32,32 +33,60 @@ export default function Dashboard() {
 
   const fetchClients = useCallback(async () => {
     try {
-      const res = await api.get('/api/clients', { meta: { silent: true } });
+      const res = await api.get('/api/clients', {
+        params: isAdmin ? { include_archived: true } : undefined,
+        meta: { silent: true },
+      });
       setClients(normalizeToArray(res.data));
       setError('');
     } catch {
       setError('Could not load your authorized projects.');
       setClients([]);
     }
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
     fetchClients();
   }, [fetchClients]);
 
-  useEffect(() => {
-    if (role === 'external_viewer' && clients.length === 1) {
-      navigate(`/clients/${clients[0].id}`, { replace: true });
-    }
-  }, [clients, navigate, role]);
+  const activeClients = clients.filter((client) => !client.archived_at);
+  const archivedClients = clients.filter((client) => Boolean(client.archived_at));
 
-  const handleDelete = async (id) => {
-    if (!isAdmin || !window.confirm('Delete this client?')) return;
+  useEffect(() => {
+    if (role === 'external_viewer' && activeClients.length === 1) {
+      navigate(`/clients/${activeClients[0].id}`, { replace: true });
+    }
+  }, [activeClients, navigate, role]);
+
+  const handleArchive = async (id) => {
+    if (!isAdmin) return;
     try {
       await api.delete(`/api/clients/${id}`);
-      fetchClients();
-    } catch {
-      setError('Failed to delete client.');
+      await fetchClients();
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Failed to archive client.');
+    }
+  };
+
+  const handleRestore = async (id) => {
+    if (!isAdmin) return;
+    try {
+      await api.post(`/api/clients/${id}/restore`);
+      await fetchClients();
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Failed to restore client.');
+    }
+  };
+
+  const handlePermanentDelete = async (id, clientName) => {
+    if (!isAdmin) return;
+    try {
+      await api.delete(`/api/clients/${id}/permanent`, {
+        data: { confirm_name: clientName },
+      });
+      await fetchClients();
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Failed to permanently delete client.');
     }
   };
 
@@ -108,10 +137,31 @@ export default function Dashboard() {
       )}
 
       <ClientCarousel
-        clients={clients}
-        onClientDeleted={handleDelete}
+        clients={activeClients}
+        onClientArchived={handleArchive}
+        onClientRestored={handleRestore}
+        onClientPermanentlyDeleted={handlePermanentDelete}
         onClientUpdated={fetchClients}
       />
+
+      {isAdmin && archivedClients.length > 0 && (
+        <section className="mt-8 border-t border-slate-200 pt-6 dark:border-slate-800">
+          <Button variant="ghost" onClick={() => setShowArchived((value) => !value)}>
+            {showArchived ? 'Hide' : 'Show'} Archived Clients ({archivedClients.length})
+          </Button>
+          {showArchived && (
+            <div className="mt-4">
+              <ClientCarousel
+                clients={archivedClients}
+                onClientArchived={handleArchive}
+                onClientRestored={handleRestore}
+                onClientPermanentlyDeleted={handlePermanentDelete}
+                onClientUpdated={fetchClients}
+              />
+            </div>
+          )}
+        </section>
+      )}
 
       {isAdmin && showAddModal && (
         <AddClientModal
