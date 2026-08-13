@@ -166,7 +166,7 @@ describe('inventory controller item contract', () => {
       body: {
         client_id: 7,
         part_number: 'P-1',
-        reorder_level: '1.5',
+        reorder_level: '1.2345',
       },
     };
     const res = createResponseRecorder();

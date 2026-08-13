@@ -45,9 +45,15 @@ function parseQuantities(text) {
 }
 
 export default function RepackContainerModal({ item, onClose, onRepacked }) {
-  const balances = Array.isArray(item?.inventory_levels)
-    ? item.inventory_levels.filter((balance) => Number(balance.quantity) > 0)
-    : [];
+  const balances = useMemo(() => {
+    const inventoryLevels = item?.inventory_levels;
+
+    return Array.isArray(inventoryLevels)
+      ? inventoryLevels.filter(
+        (balance) => Number(balance.quantity) > 0,
+      )
+      : [];
+  }, [item?.inventory_levels]);
   const [sourceLocationId, setSourceLocationId] = useState(
     balances.length === 1 ? String(balances[0].location_id) : '',
   );
@@ -111,7 +117,7 @@ export default function RepackContainerModal({ item, onClose, onRepacked }) {
     } catch (requestError) {
       setError(
         requestError?.response?.data?.message ||
-          'Containers were created, but the printer could not be reached.',
+        'Containers were created, but the printer could not be reached.',
       );
     } finally {
       setPrinting(false);

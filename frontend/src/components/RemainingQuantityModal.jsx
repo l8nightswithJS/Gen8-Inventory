@@ -9,9 +9,15 @@ export default function RemainingQuantityModal({
   onClose,
   onUpdated,
 }) {
-  const balances = Array.isArray(item?.inventory_levels)
-    ? item.inventory_levels.filter((balance) => Number(balance.quantity) > 0)
-    : [];
+  const balances = useMemo(() => {
+    const inventoryLevels = item?.inventory_levels;
+
+    return Array.isArray(inventoryLevels)
+      ? inventoryLevels.filter(
+        (balance) => Number(balance.quantity) > 0,
+      )
+      : [];
+  }, [item?.inventory_levels]);
   const initialLocationId =
     preferredLocation && balances.some(
       (balance) => Number(balance.location_id) === Number(preferredLocation.id),
@@ -67,7 +73,7 @@ export default function RemainingQuantityModal({
     } catch (requestError) {
       setError(
         requestError?.response?.data?.message ||
-          'Failed to update remaining quantity.',
+        'Failed to update remaining quantity.',
       );
     } finally {
       setSubmitting(false);

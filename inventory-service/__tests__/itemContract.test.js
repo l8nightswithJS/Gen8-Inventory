@@ -12,7 +12,7 @@ describe('item payload contract', () => {
       lot_number: '  LOT-2  ',
       name: '  Sample Cap  ',
       description: '',
-      barcode: '  ABC123  ',
+      vendor_barcode: '  ABC123  ',
       reorder_level: '25',
       low_stock_threshold: 10,
       alert_enabled: true,
@@ -29,7 +29,7 @@ describe('item payload contract', () => {
         lot_number: 'LOT-2',
         name: 'Sample Cap',
         description: null,
-        barcode: 'ABC123',
+        vendor_barcode: 'ABC123',
         reorder_level: 25,
         low_stock_threshold: 10,
         alert_enabled: true,
@@ -94,14 +94,14 @@ describe('item payload contract', () => {
   test('converts blank optional values to null', () => {
     const result = normalizeUpdateItemPayload({
       lot_number: '',
-      barcode: '   ',
+      vendor_barcode: '   ',
       reorder_level: '',
       low_stock_threshold: null,
     });
 
     expect(result.coreData).toEqual({
       lot_number: null,
-      barcode: null,
+      vendor_barcode: null,
       reorder_level: null,
       low_stock_threshold: null,
     });
@@ -109,7 +109,7 @@ describe('item payload contract', () => {
 
   test.each([
     ['-1', 'reorder_level'],
-    ['1.5', 'reorder_level'],
+    ['1.2345', 'reorder_level'],
     ['abc', 'low_stock_threshold'],
   ])('rejects invalid non-negative integer value %s', (value, field) => {
     expect(() =>

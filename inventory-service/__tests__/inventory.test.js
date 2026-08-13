@@ -3,6 +3,11 @@ const express = require('express');
 
 jest.mock('shared-auth', () => ({
   requireRole: jest.fn(() => (_req, _res, next) => next()),
+
+  requireClientPermission: jest.fn(() => [
+    (_req, _res, next) => next(),
+  ]),
+
   handleValidation: (_req, _res, next) => next(),
 }));
 

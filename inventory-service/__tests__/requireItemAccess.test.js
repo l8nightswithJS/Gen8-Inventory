@@ -30,21 +30,31 @@ describe('inventory item authorization middleware', () => {
     jest.clearAllMocks();
   });
 
-  test('rejects tokens without a client scope array', async () => {
+  test('hides an item when the token has no usable client scope', async () => {
+    pool.query.mockResolvedValue({
+      rows: [{ id: '10', client_id: '7' }],
+    });
+
     const req = {
       user: { id: 'user-1' },
       params: { id: '10' },
     };
+
     const res = createResponseRecorder();
     const next = jest.fn();
 
     await requireItemAccess()(req, res, next);
 
-    expect(res.statusCode).toBe(403);
+    expect(pool.query).toHaveBeenCalledWith(
+      'SELECT id, client_id FROM items WHERE id = $1',
+      [10],
+    );
+
+    expect(res.statusCode).toBe(404);
     expect(res.body).toEqual({
-      message: 'Forbidden: Missing client scope in token.',
+      message: 'Item not found',
     });
-    expect(pool.query).not.toHaveBeenCalled();
+
     expect(next).not.toHaveBeenCalled();
   });
 

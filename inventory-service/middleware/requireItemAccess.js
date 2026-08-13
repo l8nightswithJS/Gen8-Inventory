@@ -19,7 +19,7 @@ function getAccessMap(req) {
   if (map.size === 0 && Array.isArray(req.user?.client_ids)) {
     for (const value of req.user.client_ids) {
       const id = parsePositiveInteger(value);
-      if (Number.isSafeInteger(id)) map.set(id, 'edit');
+      if (Number.isSafeInteger(id)) map.set(id, 'read');
     }
   }
   return map;

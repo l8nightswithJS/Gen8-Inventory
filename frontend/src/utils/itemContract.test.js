@@ -14,7 +14,8 @@ describe('frontend item contract', () => {
         lot_number: '',
         name: ' Sample Cap ',
         description: ' Clear cap ',
-        barcode: ' ABC123 ',
+        vendor_barcode: ' ABC123 ',
+        uom: '',
         reorder_level: '25',
         low_stock_threshold: '10',
         alert_enabled: true,
@@ -29,11 +30,14 @@ describe('frontend item contract', () => {
       lot_number: null,
       name: 'Sample Cap',
       description: 'Clear cap',
-      barcode: 'ABC123',
+      vendor_barcode: 'ABC123',
+      uom: null,
       reorder_level: 25,
       low_stock_threshold: 10,
       alert_enabled: true,
-      attributes: { color: 'clear' },
+      attributes: {
+        color: 'clear',
+      },
     });
   });
 
@@ -43,7 +47,9 @@ describe('frontend item contract', () => {
         part_number: 'P-1',
         lot_number: null,
         alert_enabled: false,
-        attributes: { cavity: 4 },
+        attributes: {
+          cavity: 4,
+        },
       }),
     ).toMatchObject({
       part_number: 'P-1',
@@ -53,14 +59,22 @@ describe('frontend item contract', () => {
     });
   });
 
-  test('combines schema and existing attributes while filtering reserved fields', () => {
-    expect(
-      getCustomAttributeKeys(
-        ['color', 'barcode', 'total_quantity'],
-        { attributes: { cavity: 8, color: 'black' } },
-      ),
-    ).toEqual(['color', 'cavity']);
-  });
+  test(
+    'combines schema and existing attributes while filtering reserved fields',
+    () => {
+      expect(
+        getCustomAttributeKeys(
+          ['color', 'barcode', 'total_quantity'],
+          {
+            attributes: {
+              cavity: 8,
+              color: 'black',
+            },
+          },
+        ),
+      ).toEqual(['color', 'cavity']);
+    },
+  );
 
   test('omits blank custom attribute values so edits can remove them', () => {
     const payload = buildItemPayload({
@@ -73,21 +87,42 @@ describe('frontend item contract', () => {
       },
     });
 
-    expect(payload.attributes).toEqual({ cavity: 8 });
+    expect(payload.attributes).toEqual({
+      cavity: 8,
+    });
   });
 
-  test('rejects missing part numbers and fractional thresholds', () => {
+  test('rejects missing part numbers and invalid decimal thresholds', () => {
     expect(() =>
-      buildItemPayload({ form: { part_number: '   ' } }),
+      buildItemPayload({
+        form: {
+          part_number: '   ',
+        },
+      }),
     ).toThrow('Part Number is required.');
 
     expect(() =>
       buildItemPayload({
         form: {
           part_number: 'P-1',
-          reorder_level: '1.5',
+          reorder_level: '1.2345',
         },
       }),
-    ).toThrow('Reorder Level must be a non-negative whole number.');
+    ).toThrow(
+      'Reorder Level must be a non-negative number with no more than 3 decimal places.',
+    );
+  });
+
+  test('accepts fractional thresholds up to three decimal places', () => {
+    const payload = buildItemPayload({
+      form: {
+        part_number: 'P-1',
+        reorder_level: '1.5',
+        low_stock_threshold: '0.125',
+      },
+    });
+
+    expect(payload.reorder_level).toBe(1.5);
+    expect(payload.low_stock_threshold).toBe(0.125);
   });
 });
