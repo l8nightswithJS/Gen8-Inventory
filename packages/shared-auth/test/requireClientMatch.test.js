@@ -7,10 +7,12 @@ function createResponseRecorder() {
   return {
     statusCode: 200,
     body: undefined,
+
     status(code) {
       this.statusCode = code;
       return this;
     },
+
     json(payload) {
       this.body = payload;
       return this;
@@ -29,20 +31,38 @@ function runMiddleware(req) {
   return { res, nextCalls };
 }
 
-test('rejects tokens without a client scope array', () => {
-  const { res, nextCalls } = runMiddleware({
-    user: { id: 'user-1' },
-    params: {},
-    query: {},
-    body: {},
-  });
+test(
+  'allows requests with no explicit client identifier for resource-level authorization',
+  () => {
+    const { res, nextCalls } = runMiddleware({
+      user: { id: 'user-1' },
+      params: {},
+      query: {},
+      body: {},
+    });
 
-  assert.equal(nextCalls, 0);
-  assert.equal(res.statusCode, 403);
-  assert.deepEqual(res.body, {
-    error: 'Forbidden: Missing client scope in token.',
-  });
-});
+    assert.equal(nextCalls, 1);
+    assert.equal(res.statusCode, 200);
+  },
+);
+
+test(
+  'rejects an explicit client identifier when the token has no client scope array',
+  () => {
+    const { res, nextCalls } = runMiddleware({
+      user: { id: 'user-1' },
+      params: {},
+      query: { client_id: '12' },
+      body: {},
+    });
+
+    assert.equal(nextCalls, 0);
+    assert.equal(res.statusCode, 403);
+    assert.deepEqual(res.body, {
+      error: 'Forbidden: Missing client scope in token.',
+    });
+  },
+);
 
 test('allows a matching explicit client_id from query parameters', () => {
   const req = {
@@ -73,7 +93,7 @@ test('normalizes numeric client IDs stored as strings in the token', () => {
   assert.equal(req.clientId, 7);
 });
 
-test('rejects an explicit client outside the token scope', () => {
+test('hides an explicit client outside the token scope as not found', () => {
   const { res, nextCalls } = runMiddleware({
     user: { client_ids: [10] },
     params: {},
@@ -82,9 +102,9 @@ test('rejects an explicit client outside the token scope', () => {
   });
 
   assert.equal(nextCalls, 0);
-  assert.equal(res.statusCode, 403);
+  assert.equal(res.statusCode, 404);
   assert.deepEqual(res.body, {
-    error: 'Forbidden: You do not have access to this client.',
+    error: 'Resource not found.',
   });
 });
 
@@ -161,14 +181,17 @@ test('does not treat generic resource :id as a client ID', () => {
   assert.equal(req.clientId, undefined);
 });
 
-test('allows routes with no explicit client identifier for resource-level checks', () => {
-  const { res, nextCalls } = runMiddleware({
-    user: { client_ids: [] },
-    params: {},
-    query: {},
-    body: {},
-  });
+test(
+  'allows routes with no explicit client identifier for resource-level checks',
+  () => {
+    const { res, nextCalls } = runMiddleware({
+      user: { client_ids: [] },
+      params: {},
+      query: {},
+      body: {},
+    });
 
-  assert.equal(nextCalls, 1);
-  assert.equal(res.statusCode, 200);
-});
+    assert.equal(nextCalls, 1);
+    assert.equal(res.statusCode, 200);
+  },
+);

@@ -19,36 +19,44 @@ export default function BarcodeAssignModal({
   const symId = useId();
 
   useEffect(() => {
-    if (!isOpen || !item?.id) return;
+    if (!isOpen || !item?.id || !item?.client_id) return;
     let isMounted = true;
     (async () => {
       try {
-        const { data } = await api.get(`/api/barcodes/items/${item.id}`);
+        const { data } = await api.get(`/api/barcodes/items/${item.id}`, {
+          params: { client_id: item.client_id },
+        });
         if (isMounted) setList(data || []);
-      } catch (e) {
-        console.error('Failed to load item barcodes', e);
+      } catch (error) {
+        console.error('Failed to load item barcodes', error);
         if (isMounted) setMsg('Failed to load existing barcodes.');
       }
     })();
     return () => {
       isMounted = false;
     };
-  }, [isOpen, item?.id]);
+  }, [isOpen, item?.id, item?.client_id]);
 
   const doSave = async () => {
+    if (!item?.client_id) {
+      setMsg('Client information is missing for this item.');
+      return;
+    }
+
     setBusy(true);
     setMsg('');
     try {
       const { data } = await api.post('/api/barcodes', {
+        client_id: item.client_id,
         item_id: item.id,
         barcode: scanned.code,
         symbology: scanned.symbology,
       });
-      setList((prev) => [data, ...prev]);
+      setList((previous) => [data, ...previous]);
       setScanned({ code: '', symbology: '' });
       onAssigned?.(data);
-    } catch (e) {
-      setMsg(e?.response?.data?.message || 'Failed to assign barcode.');
+    } catch (error) {
+      setMsg(error?.response?.data?.message || 'Failed to assign barcode.');
     } finally {
       setBusy(false);
     }
@@ -58,9 +66,9 @@ export default function BarcodeAssignModal({
     if (!window.confirm('Remove this barcode?')) return;
     try {
       await api.delete(`/api/barcodes/${barcodeId}`);
-      setList((prev) => prev.filter((b) => b.id !== barcodeId));
-    } catch (e) {
-      setMsg(e?.response?.data?.message || 'Failed to remove barcode.');
+      setList((previous) => previous.filter((barcode) => barcode.id !== barcodeId));
+    } catch (error) {
+      setMsg(error?.response?.data?.message || 'Failed to remove barcode.');
     }
   };
 
@@ -75,7 +83,6 @@ export default function BarcodeAssignModal({
       size="max-w-4xl"
     >
       <div className="grid md:grid-cols-2 gap-6">
-        {/* Left: Scanner & Form */}
         <div className="space-y-4">
           <div className="bg-slate-800 rounded-lg overflow-hidden aspect-video">
             <BarcodeScannerComponent
@@ -130,7 +137,6 @@ export default function BarcodeAssignModal({
           </div>
         </div>
 
-        {/* Right: Existing Barcodes List */}
         <div className="border dark:border-slate-700 rounded-lg p-3 space-y-2">
           <h3 className="font-semibold text-gray-800 dark:text-white">
             Existing Barcodes
@@ -141,22 +147,22 @@ export default function BarcodeAssignModal({
             </p>
           ) : (
             <ul className="space-y-2 max-h-[60vh] overflow-y-auto">
-              {list.map((b) => (
+              {list.map((barcode) => (
                 <li
-                  key={b.id}
+                  key={barcode.id}
                   className="flex items-center justify-between border border-slate-200 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-800"
                 >
                   <div>
                     <div className="font-mono font-medium text-slate-800 dark:text-slate-200">
-                      {b.barcode}
+                      {barcode.barcode}
                     </div>
                     <div className="text-xs text-gray-500 dark:text-slate-400">
-                      {b.symbology || 'N/A'}
+                      {barcode.symbology || 'N/A'}
                     </div>
                   </div>
                   <button
                     className="text-red-600 text-sm hover:underline font-semibold"
-                    onClick={() => doDelete(b.id)}
+                    onClick={() => doDelete(barcode.id)}
                   >
                     Remove
                   </button>

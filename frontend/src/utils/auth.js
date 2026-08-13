@@ -16,15 +16,40 @@ export function clearToken() {
 
 export function decodeJwtPayload(token) {
   if (typeof token !== 'string') return null;
+
   const parts = token.split('.');
   if (parts.length !== 3 || !parts[1]) return null;
 
   try {
-    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
+    const base64 = parts[1]
+      .replace(/-/g, '+')
+      .replace(/_/g, '/');
+
+    const padded = base64.padEnd(
+      Math.ceil(base64.length / 4) * 4,
+      '=',
+    );
+
     const binary = atob(padded);
-    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-    return JSON.parse(new TextDecoder().decode(bytes));
+
+    let json;
+
+    if (typeof TextDecoder !== 'undefined') {
+      const bytes = Uint8Array.from(
+        binary,
+        (char) => char.charCodeAt(0),
+      );
+
+      json = new TextDecoder('utf-8').decode(bytes);
+    } else {
+      const percentEncoded = Array.from(binary, (char) =>
+        `%${char.charCodeAt(0).toString(16).padStart(2, '0')}`
+      ).join('');
+
+      json = decodeURIComponent(percentEncoded);
+    }
+
+    return JSON.parse(json);
   } catch {
     return null;
   }

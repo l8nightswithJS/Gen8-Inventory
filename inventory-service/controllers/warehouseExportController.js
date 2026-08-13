@@ -1,8 +1,13 @@
 const pool = require('../db/pool');
 const { loadClientSettings } = require('./_profileSettings');
 
+function spreadsheetSafe(value) {
+  const text = String(value ?? '');
+  return /^[=+\-@]/.test(text) ? `'${text}` : text;
+}
+
 function csv(value) {
-  return `"${String(value ?? '').replace(/"/g, '""')}"`;
+  return `"${spreadsheetSafe(value).replace(/"/g, '""')}"`;
 }
 
 exports.exportItems = async (req, res, next) => {
@@ -68,3 +73,5 @@ exports.exportItems = async (req, res, next) => {
     return next(error);
   }
 };
+
+module.exports._test = { csv, spreadsheetSafe };

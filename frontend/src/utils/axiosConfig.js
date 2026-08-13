@@ -6,19 +6,15 @@ const baseURL =
   process.env.REACT_APP_API_BASE_URL ||
   (process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : null);
 
-console.log('🔎 Axios Base URL:', baseURL);
-console.log('🔎 NODE_ENV:', process.env.NODE_ENV);
-console.log('🔎 REACT_APP_API_BASE_URL:', process.env.REACT_APP_API_BASE_URL);
-
 if (!baseURL) {
   throw new Error(
-    '❌ Missing REACT_APP_API_BASE_URL. Define it in the frontend environment.',
+    'Missing REACT_APP_API_BASE_URL. Define it in the frontend environment.',
   );
 }
 
 const api = axios.create({
   baseURL,
-  timeout: 90000,
+  timeout: 30000,
   withCredentials: false,
 });
 
@@ -36,7 +32,7 @@ async function refreshSessionToken() {
         `${baseURL}/api/auth/refresh`,
         {},
         {
-          timeout: 90000,
+          timeout: 30000,
           withCredentials: false,
           headers: {
             Authorization: currentToken.startsWith('Bearer ')
@@ -101,9 +97,7 @@ api.interceptors.response.use(
         .filter(Boolean)
         .join(' ');
 
-      if (validationMessage) {
-        responseData.message = validationMessage;
-      }
+      if (validationMessage) responseData.message = validationMessage;
     }
 
     const responseMessage =
@@ -124,22 +118,17 @@ api.interceptors.response.use(
         config.headers = config.headers || {};
         config.headers.Authorization = `Bearer ${refreshedToken}`;
         return api.request(config);
-      } catch (refreshError) {
-        console.error('❌ Session scope refresh failed:', {
-          status: refreshError?.response?.status,
-          responseData: refreshError?.response?.data,
-          message: refreshError?.message,
-        });
+      } catch {
+        // The original request error is returned below; callers decide how to surface it.
       }
     }
 
     const silent = config.meta && config.meta.silent;
-    if (!silent) {
-      console.error('❌ API error:', {
+    if (!silent && process.env.NODE_ENV === 'development') {
+      console.error('API request failed:', {
         url: config.url,
         method: config.method,
         status,
-        responseData: error?.response?.data,
       });
     }
 

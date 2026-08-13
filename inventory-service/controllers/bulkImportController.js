@@ -89,16 +89,29 @@ function isBlankOrNa(value) {
 
 function buildAliasLookup(settings = {}) {
   const aliases = new Map();
+
   for (const [canonical, sourceAliases] of Object.entries(IMPORT_ALIASES)) {
     aliases.set(normalizeKey(canonical), canonical);
+
     for (const alias of sourceAliases) {
       aliases.set(normalizeKey(alias), canonical);
     }
   }
 
+  // A generic spreadsheet column named "Barcode" is treated as the
+  // vendor/manufacturer barcode. Internal inventory barcodes must be
+  // explicitly identified as internal/container/inventory barcodes.
+  aliases.set('barcode', 'vendor_barcode');
+
+  // Client-specific mappings are applied last so they can intentionally
+  // override the application's default import mappings.
   for (const [source, target] of Object.entries(settings.import_aliases || {})) {
-    aliases.set(normalizeKey(source), target == null ? null : normalizeKey(target));
+    aliases.set(
+      normalizeKey(source),
+      target == null ? null : normalizeKey(target),
+    );
   }
+
   return aliases;
 }
 
@@ -545,10 +558,10 @@ exports.bulkImportItems = async (req, res, next) => {
       if (canCreateImportedLocationBalance || canCreateDefaultLocationBalance) {
         const locationId = canCreateImportedLocationBalance
           ? await findOrCreateLocation(
-              dbClient,
-              locationCache,
-              parsedLocation.codes[0],
-            )
+            dbClient,
+            locationCache,
+            parsedLocation.codes[0],
+          )
           : defaultLocationId;
 
         await dbClient.query(

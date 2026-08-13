@@ -1,34 +1,31 @@
-// In auth-service/server.js
 require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
-const { authMiddleware, requireClientMatch } = require('shared-auth');
+const {
+  authMiddleware,
+  errorHandler,
+  requireInternalGateway,
+} = require('shared-auth');
 
 const authRouter = require('./routes/authRoutes');
 const usersRouter = require('./routes/users');
 
 const app = express();
 app.set('etag', false);
+app.disable('x-powered-by');
+app.use(express.json({ limit: '64kb' }));
 
-app.use(cors());
-app.use(express.json());
-
-// --- Public Routes ---
-// Health check and public authentication routes (login, register) are mounted FIRST.
+// Railway health checks stay directly reachable; application APIs do not.
 app.get('/healthz', (_req, res) => {
-  res.json({ service: 'auth', ok: true, timestamp: Date.now() });
+  res.json({ service: 'auth', ok: true });
 });
+
+app.use(requireInternalGateway);
 app.use('/api/auth', authRouter);
-
-// --- Security Middleware ---
-// Any router mounted AFTER these lines will be protected.
 app.use(authMiddleware);
-
-// --- Protected Routes ---
-// The usersRouter is mounted at the /users path and inherits the security.
 app.use('/api/users', usersRouter);
+app.use(errorHandler);
 
 const PORT = Number(process.env.PORT) || 8001;
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✅ Auth service listening on :${PORT}`);
+  console.log(`Auth service listening on :${PORT}`);
 });
