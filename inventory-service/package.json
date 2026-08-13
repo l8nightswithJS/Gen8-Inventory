@@ -28,7 +28,7 @@
     "pg-format": "^1.0.4",
     "postgres": "^3.4.7",
     "shared-auth": "file:../packages/shared-auth",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "cross-env": "^10.0.0",
