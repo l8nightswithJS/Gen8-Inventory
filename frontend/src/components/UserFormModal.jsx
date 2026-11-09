@@ -10,7 +10,7 @@ export default function UserFormModal({
   api, // The authApi instance passed from UsersPage.jsx
 }) {
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState('staff');
+  const [role, setRole] = useState('project_user');
   const [password, setPassword] = useState('');
   const [feedback, setFeedback] = useState({ type: '', message: '' });
   const [loading, setLoading] = useState(false);
@@ -25,10 +25,10 @@ export default function UserFormModal({
 
       if (userToEdit) {
         setEmail(userToEdit.email || '');
-        setRole(userToEdit.role || 'staff');
+        setRole(userToEdit.role || 'project_user');
       } else {
         setEmail('');
-        setRole('staff');
+        setRole('project_user');
       }
 
       const fetchInitialData = async () => {
@@ -200,8 +200,10 @@ export default function UserFormModal({
             className={inputStyles}
             disabled={loading}
           >
-            <option value="admin">Admin</option>
-            <option value="staff">Staff</option>
+            <option value="admin">Administrator</option>
+            <option value="inventory_staff">Inventory Staff</option>
+            <option value="project_user">Project User</option>
+            <option value="external_viewer">External Viewer</option>
           </select>
         </div>
         <fieldset>
