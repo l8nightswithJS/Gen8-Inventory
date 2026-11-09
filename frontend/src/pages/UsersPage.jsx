@@ -5,6 +5,15 @@ import UserFormModal from '../components/UserFormModal';
 import Button from '../components/ui/Button';
 import { FiEdit2, FiTrash2 } from 'react-icons/fi';
 
+const ROLE_LABELS = {
+  admin: 'Administrator',
+  inventory_staff: 'Inventory Staff',
+  project_user: 'Project User',
+  external_viewer: 'External Viewer',
+};
+
+const roleLabel = (role) => ROLE_LABELS[role] || role || 'Unknown';
+
 const normalizeUser = (u) => ({
   ...u,
   email: u.email || u.username,
@@ -24,7 +33,7 @@ const UserCard = ({ user, onApprove, onDeny, onEdit, onDelete, isPending }) => (
           {user.email}
         </p>
         <p className="text-sm font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 inline-block px-2 py-0.5 rounded-full mt-1 capitalize">
-          {user.role}
+          {roleLabel(user.role)}
         </p>
       </div>
       {isPending ? (
@@ -165,7 +174,7 @@ export default function UsersPage() {
                 </span>
               </td>
               <td className="px-4 py-3 capitalize text-slate-600 dark:text-slate-400">
-                {u.role}
+                {roleLabel(u.role)}
               </td>
               <td className="px-4 py-3 text-center">
                 <div className="flex items-center justify-center gap-2">
