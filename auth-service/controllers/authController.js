@@ -26,7 +26,8 @@ async function ensureUserProfile(authUser, defaults = {}) {
 
   // Public user metadata is user-editable and must never determine privileges.
   const email = authUser.email || '';
-  const role = 'staff';
+  // New, unapproved registrations receive the least-privileged project role.
+  const role = 'project_user';
   const approved =
     typeof defaults.approved === 'boolean' ? defaults.approved : false;
 
