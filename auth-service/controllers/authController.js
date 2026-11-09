@@ -30,6 +30,16 @@ async function ensureUserProfile(authUser, defaults = {}) {
   const approved =
     typeof defaults.approved === 'boolean' ? defaults.approved : false;
 
+  // Preserve an existing profile (including administrator-approved accounts).
+  // Some deployments create profiles through a database trigger at sign-up.
+  const { data: existing, error: lookupError } = await sbAdmin
+    .from('users')
+    .select('id, role, approved')
+    .eq('id', id)
+    .maybeSingle();
+  if (lookupError) throw lookupError;
+  if (existing) return existing;
+
   const { data, error } = await sbAdmin
     .from('users')
     .insert({ id, email, role, approved })
