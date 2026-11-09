@@ -24,15 +24,15 @@ async function ensureUserProfile(authUser, defaults = {}) {
   const id = authUser?.id;
   if (!id) throw new Error('ensureUserProfile: missing authUser.id');
 
-  const meta = authUser.user_metadata || authUser.raw_user_meta_data || {};
-  const email = authUser.email || meta.email || '';
-  const role = meta.role || defaults.role || 'staff';
+  // Public user metadata is user-editable and must never determine privileges.
+  const email = authUser.email || '';
+  const role = 'staff';
   const approved =
     typeof defaults.approved === 'boolean' ? defaults.approved : false;
 
   const { data, error } = await sbAdmin
     .from('users')
-    .upsert({ id, email, role, approved }, { onConflict: 'id' })
+    .insert({ id, email, role, approved })
     .select('id, role, approved')
     .single();
 
@@ -45,7 +45,7 @@ async function ensureUserProfile(authUser, defaults = {}) {
  */
 async function register(req, res) {
   try {
-    const { email, password, role = 'staff' } = req.body || {};
+    const { email, password } = req.body || {};
     if (!email || !password)
       return res
         .status(400)
@@ -56,12 +56,7 @@ async function register(req, res) {
     const { data, error } = await sbAuth.auth.signUp({
       email: normalizedEmail,
       password,
-      options: {
-        data: {
-          email: normalizedEmail,
-          role,
-        },
-      },
+      // Do not write role or approval information into user-controlled metadata.
     });
 
     if (error) {
@@ -70,11 +65,11 @@ async function register(req, res) {
     }
     if (!data?.user) return res.status(500).json({ message: 'Sign up failed' });
 
-    // Always create a profile, default approved
-    await ensureUserProfile(data.user, { role, approved: true });
+    // New accounts must be explicitly approved by an existing administrator.
+    await ensureUserProfile(data.user, { approved: false });
 
     return res.status(201).json({
-      message: 'Registered successfully',
+      message: 'Access requested. An administrator must approve your account before sign-in.',
       userId: data.user.id,
     });
   } catch (err) {
@@ -145,14 +140,12 @@ async function login(req, res) {
       console.log(
         `[${new Date().toISOString()}] LOGIN: Profile not found, creating one...`,
       );
-      profile = await ensureUserProfile(authUser, {
-        role: 'staff',
-        approved: true,
-      });
+      // Never approve an account simply because its profile is missing.
+      profile = await ensureUserProfile(authUser, { approved: false });
       console.log(`[${new Date().toISOString()}] LOGIN: Profile created.`);
     }
 
-    if (profile.approved === false) {
+    if (profile.approved !== true) {
       return res.status(403).json({ message: 'Account pending approval' });
     }
 
@@ -162,10 +155,12 @@ async function login(req, res) {
     );
 
     // Fetch all client IDs associated with this user from the new join table
-    const { data: clientLinks } = await sbAdmin
+    const { data: clientLinks, error: clientLinksError } = await sbAdmin
       .from('user_clients')
       .select('client_id')
       .eq('user_id', profile.id);
+
+    if (clientLinksError) throw clientLinksError;
 
     // --- LOG #7 ---
     console.log(
