@@ -40,7 +40,7 @@ router.put(
 router.put(
   '/:id',
   param('id').isUUID(),
-  body('role').isIn(['admin', 'staff']),
+  body('role').isIn(['admin', 'inventory_staff', 'project_user', 'external_viewer']),
   handleValidation,
   userController.updateUser,
 );

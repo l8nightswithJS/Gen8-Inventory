@@ -7,7 +7,6 @@ export default function SignupModal({ onClose }) {
   const [form, setForm] = useState({
     email: '',
     password: '',
-    role: 'staff',
   });
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(false);
@@ -102,16 +101,6 @@ export default function SignupModal({ onClose }) {
           autoComplete="new-password"
           disabled={loading}
         />
-        <select
-          name="role"
-          value={form.role}
-          onChange={handleChange}
-          className={inputStyles}
-          disabled={loading}
-        >
-          <option value="staff">Staff</option>
-          <option value="admin">Admin</option>
-        </select>
       </form>
     </BaseModal>
   );

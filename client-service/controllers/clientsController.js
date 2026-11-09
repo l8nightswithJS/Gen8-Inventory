@@ -178,12 +178,12 @@ exports.getClientById = async (req, res, next) => {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ message: 'Invalid id' });
 
-    // Note: You may want to add a permission check here as well
-    // For now, it allows any authenticated user to see any client by ID
+    const allowed = req.user?.client_ids;
+    if (!Array.isArray(allowed) || !allowed.map(Number).includes(id)) {
+      return res.status(403).json({ message: 'Forbidden: Project not assigned.' });
+    }
 
-    const result = await pool.query('SELECT * FROM clients WHERE id = $1', [
-      id,
-    ]);
+    const result = await pool.query('SELECT * FROM clients WHERE id = $1', [id]);
     if (result.rows.length === 0)
       return res.status(404).json({ message: 'Not found' });
     res.json(result.rows[0]);

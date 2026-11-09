@@ -32,7 +32,13 @@ for (const canonicalKey in ALIAS_MAP) {
  */
 function computeLowState(item, total_quantity) {
   const { alert_enabled, low_stock_threshold, reorder_level } = item;
-  const qty = total_quantity;
+  // Database queries supply an aggregated total; normalize missing or invalid totals.
+  const numericQuantity =
+    total_quantity == null ? null : Number(total_quantity);
+  const qty =
+    numericQuantity !== null && Number.isFinite(numericQuantity)
+      ? numericQuantity
+      : null;
 
   if (alert_enabled === false)
     return { low: false, reason: null, threshold: null, qty };
@@ -54,7 +60,7 @@ function computeLowState(item, total_quantity) {
     reason = 'reorder_level';
   }
 
-  if (threshold == null)
+  if (threshold == null || qty === null)
     return { low: false, reason: null, threshold: null, qty };
 
   return { low: qty <= threshold, reason, threshold, qty };
@@ -78,8 +84,12 @@ function calculateStockLevels(items) {
       });
     }
 
+    // listItems supplies total_quantity from SUM(inventory.quantity).
+    // Fall back to quantity for other callers supplying non-aggregated rows.
+    const rawQuantity = item.total_quantity ?? item.quantity;
+    const quantity = rawQuantity == null ? 0 : Number(rawQuantity);
     stockByPartNumber.get(item.part_number).total_quantity +=
-      item.quantity || 0;
+      Number.isFinite(quantity) ? quantity : 0;
   }
 
   // Step 2: Determine the final stock status for each part number.
@@ -101,10 +111,29 @@ function calculateStockLevels(items) {
   }
 
   // Step 3: Map the correct status back to each individual item.
-  return items.map((item) => ({
-    ...item,
-    status: statusByPartNumber.get(item.part_number) || 'in_stock',
-  }));
+  return items.map((item) => {
+    if (!item.part_number) {
+      // R&D materials may not have part numbers; calculate status per item.
+      const rawQuantity = item.total_quantity ?? item.quantity;
+      if (rawQuantity != null) {
+        const qty = Number(rawQuantity);
+        if (Number.isFinite(qty)) {
+          const status =
+            qty <= 0
+              ? 'out_of_stock'
+              : computeLowState(item, qty).low
+                ? 'low_stock'
+                : 'in_stock';
+          return { ...item, status };
+        }
+      }
+      return { ...item, status: 'in_stock' };
+    }
+    return {
+      ...item,
+      status: statusByPartNumber.get(item.part_number) || 'in_stock',
+    };
+  });
 }
 
 function cleanAttributes(input = {}) {

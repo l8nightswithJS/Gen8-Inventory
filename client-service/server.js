@@ -2,7 +2,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { authMiddleware, requireClientMatch } = require('shared-auth');
+const { authMiddleware, denyViewerWrites } = require('shared-auth');
 
 const clientsRouter = require('./routes/clients');
 
@@ -22,7 +22,7 @@ app.use(authMiddleware);
 // but for now we assume it's configured correctly.
 
 // --- Protected Routes ---
-app.use('/api/clients', clientsRouter);
+app.use('/api/clients', denyViewerWrites, clientsRouter);
 
 const PORT = Number(process.env.PORT) || 8003;
 app.listen(PORT, '0.0.0.0', () => {

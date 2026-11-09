@@ -20,6 +20,7 @@ import LocationsPage from './pages/LocationsPage';
 import PrivateRoute from './components/PrivateRoute';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
+import IdleLogout from './components/IdleLogout';
 
 export default function App() {
   useTheme();
@@ -50,6 +51,7 @@ export default function App() {
 function PrivateLayout() {
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 dark:bg-slate-900">
+      <IdleLogout />
       <Navbar />
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
         <Routes>

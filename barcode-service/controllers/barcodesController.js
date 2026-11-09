@@ -25,11 +25,19 @@ exports.lookup = async (req, res, next) => {
       ? parseInt(req.query.client_id, 10)
       : null;
 
-    let query =
-      'SELECT id, client_id, item_id, barcode, symbology, created_at FROM item_barcodes WHERE barcode = $1';
-    const params = [code];
-    if (!isNaN(clientId)) {
-      query += ' AND client_id = $2';
+    const allowed = req.user?.client_ids;
+    if (!Array.isArray(allowed) || !allowed.length) {
+      return res.status(403).json({ message: 'No project access.' });
+    }
+    const scopes = allowed.map(Number);
+    if (clientId !== null && (!Number.isSafeInteger(clientId) || !scopes.includes(clientId))) {
+      return res.status(403).json({ message: 'Project not assigned.' });
+    }
+
+    let query = 'SELECT id, client_id, item_id, barcode, symbology, created_at FROM item_barcodes WHERE barcode = $1 AND client_id = ANY($2::int[])';
+    const params = [code, scopes];
+    if (clientId !== null) {
+      query += ' AND client_id = $3';
       params.push(clientId);
     }
     query += ' LIMIT 1';
