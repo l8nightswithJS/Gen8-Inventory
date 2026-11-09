@@ -5,6 +5,7 @@ const { authMiddleware, requireClientMatch } = require('shared-auth');
 
 const barcodes = require('./routes/barcodes');
 const scan = require('./routes/scan');
+const authorizeBarcode = require('./middleware/authorizeBarcode');
 
 const app = express();
 
@@ -16,6 +17,8 @@ app.get('/healthz', (_req, res) => res.json({ service: 'barcode', ok: true }));
 
 app.use(authMiddleware);
 app.use(requireClientMatch);
+// Mounted at /api so req.path starts with /barcodes/...
+app.use('/api', authorizeBarcode);
 
 // Routes
 app.use('/api/barcodes', barcodes);
