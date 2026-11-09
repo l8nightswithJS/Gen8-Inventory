@@ -35,9 +35,10 @@ const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
 // --- Protected Routes ---
-app.use('/api/uploads', requireClientMatch, express.static(uploadDir));
-// All routes in this service require the user to be logged in.
+// All resources, including uploaded files, require an authenticated account.
 app.use(authMiddleware);
+// Uploaded files lack a reliable client association, so limit them to admins.
+app.use('/api/uploads', requireRole('admin'), express.static(uploadDir));
 
 // The Master View is special: it's admin-only but does NOT get a client match check.
 app.get(
