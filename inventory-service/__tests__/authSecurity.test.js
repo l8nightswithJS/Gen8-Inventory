@@ -51,6 +51,10 @@ describe('registration and approval boundaries', () => {
       password: 'secret123',
     });
     expect(res.status).toHaveBeenCalledWith(201);
+    const insertProfile = sbAdmin.from.mock.results.at(-1).value.insert;
+    expect(insertProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ role: 'project_user', approved: false }),
+    );
     expect(res.json.mock.calls[0][0].message).toMatch(/approve/i);
   });
 
