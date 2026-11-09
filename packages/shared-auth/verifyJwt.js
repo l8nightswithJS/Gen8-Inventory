@@ -2,14 +2,19 @@ const jwt = require('jsonwebtoken');
 
 function verifyJwt(token) {
   const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error('JWT_SECRET not set in environment');
-  }
+  if (!secret) throw new Error('JWT_SECRET not set in environment');
 
   try {
-    return jwt.verify(token, secret) || console.log(token, secret); // returns decoded payload
-  } catch (err) {
-    throw new Error('Invalid or expired token');
+    const payload = jwt.verify(token, secret, {
+      algorithms: ['HS256'],
+      issuer: process.env.JWT_ISSUER || 'gen8-inventory-auth',
+    });
+    if (!payload || payload.approved !== true || !payload.id) {
+      throw new Error('Account is not approved');
+    }
+    return payload;
+  } catch {
+    throw new Error('Invalid, expired, or unapproved token');
   }
 }
 
