@@ -1,51 +1,25 @@
-// In packages/shared-auth/requireClientMatch.js (Final Version)
-
+// Authorization for routes that explicitly identify a project/client.
+// Object-ID routes also need a database ownership lookup (see service middleware).
 function requireClientMatch(req, res, next) {
-  // --- ADD THIS WHITELIST CHECK ---
-  // If the request path is for a known global route, skip the client check.
-  if (req.path === '/inventory/by-location') {
-    return next();
-  }
-  // --- END OF ADDITION ---
-
-  // Get the list of client IDs the user is allowed to see from their token.
-  const allowedClients = req.user?.client_ids;
-
-  if (!Array.isArray(allowedClients)) {
-    return res
-      .status(403)
-      .json({ error: 'Forbidden: Missing client scope in token.' });
+  const allowed = req.user?.client_ids;
+  if (!Array.isArray(allowed)) {
+    return res.status(403).json({ error: 'Forbidden: Missing client scope in token.' });
   }
 
-  // Find the client ID from the request, whether it's in the URL path, query, or body.
-  const requestedClientIdStr =
-    req.params.clientId ||
-    req.params.id ||
-    req.query.client_id ||
-    req.body.client_id;
-
-  // If the request isn't for a specific client, let it pass.
-  if (!requestedClientIdStr) {
+  const clientId = req.params?.clientId ?? req.query?.client_id ?? req.body?.client_id;
+  if (clientId === undefined || clientId === null || clientId === '') {
     return next();
   }
 
-  const requestedClientId = parseInt(requestedClientIdStr, 10);
-
-  if (isNaN(requestedClientId)) {
-    return res
-      .status(400)
-      .json({ error: 'Invalid client ID format in request.' });
+  const numeric = Number(clientId);
+  if (!Number.isSafeInteger(numeric) || numeric <= 0) {
+    return res.status(400).json({ error: 'Invalid client ID.' });
   }
 
-  // This is the core security check.
-  if (allowedClients.includes(requestedClientId)) {
-    return next(); // Success: The user is authorized for this client.
-  } else {
-    // Failure: The user is trying to access a client they are not assigned to.
-    return res
-      .status(403)
-      .json({ error: 'Forbidden: You do not have access to this client.' });
+  if (!allowed.map(Number).includes(numeric)) {
+    return res.status(403).json({ error: 'Forbidden: You do not have access to this client.' });
   }
+  return next();
 }
 
 module.exports = requireClientMatch;
