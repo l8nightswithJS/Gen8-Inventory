@@ -72,7 +72,7 @@ export default function IdleLogout() {
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [expireIfNeeded]);
+  }, [expireIfNeeded, navigate]);
 
   return null;
 }
