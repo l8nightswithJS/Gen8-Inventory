@@ -36,6 +36,14 @@ router.post(
   inventoryController.acknowledgeAlert, // Use the correct reference
 );
 
+// ---------- Export (CSV) ----------
+router.get(
+  '/export',
+  query('client_id').isInt().withMessage('client_id is required').toInt(),
+  handleValidation,
+  inventoryController.exportItems, // Use the correct reference
+);
+
 // ---------- Items list / CRUD ----------
 router.get(
   '/',
@@ -108,14 +116,6 @@ router.post(
   requireRole('admin'),
   bulkValidators,
   inventoryController.bulkImportItems, // Use the correct reference
-);
-
-// ---------- Export (CSV) ----------
-router.get(
-  '/export',
-  query('client_id').isInt().withMessage('client_id is required').toInt(),
-  handleValidation,
-  inventoryController.exportItems, // Use the correct reference
 );
 
 module.exports = router;
