@@ -7,8 +7,8 @@ const authorizeLabels = require('../middleware/authorizeLabels');
 
 // === SECURE ALL LABEL ROUTES ===
 // 1. User must be logged in.
-// 2. User must be an 'admin' or 'staff'.
-router.use(requireRole('admin', 'staff'));
+// 2. Only administrators and inventory staff may print labels.
+router.use(requireRole('admin', 'inventory_staff'));
 router.use(authorizeLabels);
 
 // Print ALL labels for a client { client_id }
