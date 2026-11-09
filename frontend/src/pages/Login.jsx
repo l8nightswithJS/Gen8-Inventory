@@ -1,31 +1,21 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../utils/axiosConfig';
 import logoSvg from '../assets/logo.svg';
 import SignupModal from '../components/SignupModal';
 import { FiMail, FiLock } from 'react-icons/fi';
-import { clearToken } from '../utils/auth';
-
-function isTokenValid(token) {
-  if (!token) return false;
-  try {
-    const { exp } = JSON.parse(atob(token.split('.')[1]));
-    return typeof exp === 'number' && Date.now() < exp * 1000;
-  } catch {
-    return false;
-  }
-}
+import { clearToken, isSessionExpired, setToken } from '../utils/auth';
 
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [showSignup, setShowSignup] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (isTokenValid(token)) {
+    if (!isSessionExpired()) {
       navigate('/dashboard', { replace: true });
     } else {
       clearToken();
@@ -40,8 +30,7 @@ export default function Login() {
         email: email.trim().toLowerCase(),
         password,
       });
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('role', data.user?.role || '');
+      setToken(data.token, data.user?.role || '');
       navigate('/dashboard');
     } catch (err) {
       setError(err?.response?.data?.message || 'Invalid email or password.');
@@ -78,6 +67,12 @@ export default function Login() {
             <p className="text-center text-slate-500 dark:text-slate-400 mt-2">
               Sign in to continue
             </p>
+
+            {searchParams.get('reason') === 'expired' && !error && (
+              <p role="status" className="mt-6 text-center text-sm text-amber-700 dark:text-amber-400">
+                Your session expired due to inactivity or token expiration. Please sign in again.
+              </p>
+            )}
 
             {error && (
               <div className="bg-red-100 border border-red-300 text-red-800 px-4 py-3 rounded-lg my-6 text-center text-sm dark:bg-red-900/20 dark:border-red-500/30 dark:text-red-400">
