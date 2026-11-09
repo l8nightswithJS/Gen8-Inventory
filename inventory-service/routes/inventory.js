@@ -8,6 +8,10 @@ const inventoryController = require('../controllers/inventoryController');
 const { requireRole, handleValidation } = require('shared-auth');
 
 const router = express.Router();
+const authorizeInventory = require('../middleware/authorizeInventory');
+
+// Resolve each item ID to its owning project before controller operations.
+router.use(authorizeInventory);
 
 // This line will now work correctly because 'authenticate' is the function itself.
 router.get(
